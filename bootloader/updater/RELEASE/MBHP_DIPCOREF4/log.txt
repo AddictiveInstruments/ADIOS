@@ -1,0 +1,2 @@
+rm -f project.hex
+Creating object file for app.c

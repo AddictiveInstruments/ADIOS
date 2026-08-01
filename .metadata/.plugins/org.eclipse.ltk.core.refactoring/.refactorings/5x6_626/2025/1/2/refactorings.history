@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;5x6_display/etc/ld/STM32G0xx/STM32G050T8.ld&apos; to &apos;STM32G050K8.ld&apos;" description="Rename resource &apos;STM32G050T8.ld&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="etc/ld/STM32G0xx/STM32G050T8.ld" name="STM32G050K8.ld" stamp="1736412682464" updateReferences="true"/>
+</session>

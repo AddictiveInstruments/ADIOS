@@ -1,0 +1,266 @@
+23:02:15 **** Incremental Build of configuration Default for project bootloader.src ****
+make all 
+rm -f project.hex
+Creating object file for main.c
+Creating object file for bsl_sysex.c
+Creating object file for mios32_srio.c
+Creating object file for mios32_din.c
+Creating object file for mios32_dout.c
+Creating object file for mios32_enc.c
+Creating object file for mios32_lcd.c
+Creating object file for mios32_midi.c
+D:/mios32/trunk/mios32/common/mios32_midi.c: In function 'MIOS32_MIDI_ReceivePackage':
+D:/mios32/trunk/mios32/common/mios32_midi.c:1160:8: warning: unused variable 'filter_sysex' [-Wunused-variable]
+ 1160 |     u8 filter_sysex = 0;
+      |        ^~~~~~~~~~~~
+D:/mios32/trunk/mios32/common/mios32_midi.c: In function 'MIOS32_MIDI_SYSEX_Cmd_Debug':
+D:/mios32/trunk/mios32/common/mios32_midi.c:1994:1: warning: no return statement in function returning non-void [-Wreturn-type]
+ 1994 | }
+      | ^
+Creating object file for mios32_osc.c
+Creating object file for mios32_com.c
+Creating object file for mios32_uart_midi.c
+Creating object file for mios32_spi_midi.c
+Creating object file for mios32_iic_midi.c
+Creating object file for mios32_can_midi.c
+Creating object file for mios32_iic_bs.c
+D:/mios32/trunk/mios32/common/mios32_iic_bs.c:30:18: warning: 'bs_size' defined but not used [-Wunused-const-variable=]
+   30 | static const s32 bs_size[8] = {
+      |                  ^~~~~~~
+Creating object file for mios32_mf.c
+Creating object file for mios32_sdcard.c
+Creating object file for mios32_enc28j60.c
+Creating object file for mios32_timestamp.c
+Creating object file for mios32_bsl.c
+Creating object file for mios32_sys.c
+Creating object file for mios32_irq.c
+Creating object file for mios32_spi.c
+Creating object file for mios32_i2s.c
+Creating object file for mios32_board.c
+Creating object file for mios32_timer.c
+Creating object file for mios32_stopwatch.c
+Creating object file for mios32_delay.c
+Creating object file for mios32_ain.c
+Creating object file for mios32_usb.c
+D:/mios32/trunk/mios32/STM32F4xx/mios32_usb.c:1829:3: warning: excess elements in struct initializer
+ 1829 |   MIOS32_USB_CLASS_GetUsrStrDesc,
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+D:/mios32/trunk/mios32/STM32F4xx/mios32_usb.c:1829:3: note: (near initialization for 'MIOS32_USB_CLASS_cb')
+D:/mios32/trunk/mios32/STM32F4xx/mios32_usb.c:1394:34: warning: 'USBH_USR_Callbacks' defined but not used [-Wunused-const-variable=]
+ 1394 | static const USBH_Usr_cb_TypeDef USBH_USR_Callbacks =
+      |                                  ^~~~~~~~~~~~~~~~~~
+Creating object file for mios32_usb_midi.c
+D:/mios32/trunk/mios32/STM32F4xx/mios32_usb_midi.c:84:3: warning: #warning "USB FS Host not supported" [-Wcpp]
+   84 | # warning "USB FS Host not supported"
+      |   ^~~~~~~
+D:/mios32/trunk/mios32/STM32F4xx/mios32_usb_midi.c:105:3: warning: #warning "USB FS Host not supported" [-Wcpp]
+  105 | # warning "USB FS Host not supported"
+      |   ^~~~~~~
+Creating object file for mios32_usb_com.c
+Creating object file for mios32_usb_hid.c
+Creating object file for mios32_uart.c
+Creating object file for mios32_iic.c
+Creating object file for mios32_can.c
+Creating object file for printf-stdarg.c
+Creating object file for usbd_core.c
+Creating object file for usbd_ioreq.c
+Creating object file for usbd_req.c
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_Device_Library/Core/src/usbd_req.c: In function 'USBD_GetString':
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_Device_Library/Core/src/usbd_req.c:845:18: warning: comparison between pointer and integer
+  845 |     while (*desc != NULL)
+      |                  ^~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_Device_Library/Core/src/usbd_req.c: In function 'USBD_GetLen':
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_Device_Library/Core/src/usbd_req.c:863:17: warning: comparison between pointer and integer
+  863 |     while (*buf != NULL)
+      |                 ^~
+Creating object file for usbh_core.c
+Creating object file for usbh_hcs.c
+Creating object file for usbh_ioreq.c
+Creating object file for usbh_stdreq.c
+Creating object file for usb_core.c
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_core.c: In function 'USB_OTG_WritePacket':
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_core.c:183:7: warning: 'packed' attribute ignored for type 'uint32_t *' {aka 'long unsigned int *'} [-Wattributes]
+  183 |       USB_OTG_WRITE_REG32( fifo, *((__packed uint32_t *)src) );
+      |       ^~~~~~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_core.c: In function 'USB_OTG_ReadPacket':
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_core.c:208:5: warning: 'packed' attribute ignored for type 'uint32_t *' {aka 'long unsigned int *'} [-Wattributes]
+  208 |     *(__packed uint32_t *)dest = USB_OTG_READ_REG32(fifo);
+      |     ^
+Creating object file for usb_dcd.c
+Creating object file for usb_dcd_int.c
+Creating object file for usb_hcd.c
+Creating object file for usb_hcd_int.c
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c: In function 'USB_OTG_USBH_handle_nptxfempty_ISR':
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:332:49: warning: 'hnptxsts.b.nptxqtop.chnum' is used uninitialized [-Wuninitialized]
+  332 |   len_words = (pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len + 3) / 4;
+      |                              ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:340:48: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  340 |     if (len > pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len)
+      |                             ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:343:46: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  343 |       len = pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len;
+      |                           ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:350:51: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  350 |     len_words = (pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len + 3) / 4;
+      |                                ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:352:66: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  352 |     USB_OTG_WritePacket (pdev , pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_buff, hnptxsts.b.nptxqtop.chnum, len);
+      |                                               ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:352:104: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  352 |     USB_OTG_WritePacket (pdev , pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_buff, hnptxsts.b.nptxqtop.chnum, len);
+      |                                                                                     ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:354:38: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  354 |     pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_buff  += len;
+      |                   ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:354:38: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  354 |     pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_buff  += len;
+      |                   ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:355:38: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  355 |     pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len   -= len;
+      |                   ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:355:38: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  355 |     pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len   -= len;
+      |                   ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:356:38: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  356 |     pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_count  += len;
+      |                   ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:356:38: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  356 |     pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_count  += len;
+      |                   ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:335:44: warning: 'hnptxsts.b.nptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  335 |          (pdev->host.hc[hnptxsts.b.nptxqtop.chnum].xfer_len != 0))
+      |                         ~~~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:327:32: note: 'hnptxsts' declared here
+  327 |   USB_OTG_HNPTXSTS_TypeDef     hnptxsts;
+      |                                ^~~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c: In function 'USB_OTG_USBH_handle_ptxfempty_ISR':
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:380:47: warning: 'hptxsts.b.ptxqtop.chnum' is used uninitialized [-Wuninitialized]
+  380 |   len_words = (pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_len + 3) / 4;
+      |                              ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:388:46: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  388 |     if (len > pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_len)
+      |                             ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:390:44: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  390 |       len = pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_len;
+      |                           ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:397:49: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  397 |     len_words = (pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_len + 3) / 4;
+      |                                ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:399:64: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  399 |     USB_OTG_WritePacket (pdev , pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_buff, hptxsts.b.ptxqtop.chnum, len);
+      |                                               ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:399:100: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  399 |     USB_OTG_WritePacket (pdev , pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_buff, hptxsts.b.ptxqtop.chnum, len);
+      |                                                                                   ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:401:36: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  401 |     pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_buff  += len;
+      |                   ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:401:36: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  401 |     pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_buff  += len;
+      |                   ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:402:36: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  402 |     pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_len   -= len;
+      |                   ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:402:36: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  402 |     pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_len   -= len;
+      |                   ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:403:36: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  403 |     pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_count  += len;
+      |                   ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:403:36: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  403 |     pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_count  += len;
+      |                   ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:383:42: warning: 'hptxsts.b.ptxqtop.chnum' may be used uninitialized [-Wmaybe-uninitialized]
+  383 |          (pdev->host.hc[hptxsts.b.ptxqtop.chnum].xfer_len != 0))
+      |                         ~~~~~~~~~~~~~~~~~^~~~~~
+D:/mios32/trunk/drivers/STM32F4xx/v1.1.0/STM32_USB_OTG_Driver/src/usb_hcd_int.c:375:32: note: 'hptxsts' declared here
+  375 |   USB_OTG_HPTXSTS_TypeDef      hptxsts;
+      |                                ^~~~~~~
+Creating object file for usb_otg.c
+-------------------------------------------------------------------------------
+Application successfully built for:
+Processor: STM32F405RG
+Family:    STM32F4xx
+Board:     MBHP_DIPCOREF4
+LCD:       Universal
+-------------------------------------------------------------------------------
+arm-none-eabi-size project_build/project.elf
+   text	   data	    bss	    dec	    hex	filename
+      0	      0	    256	    256	    100	project_build/project.elf
+20000000 D __ram_start
+20000100 B __ram_end
+
+23:02:39 Build Finished. 0 errors, 37 warnings. (took 23s.543ms)
+

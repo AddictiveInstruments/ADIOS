@@ -1,0 +1,7 @@
+15:03:36 **** Incremental Build of configuration Debug for project app_skeleton ****
+make all 
+/d/mios32/trunk/mios32/STM32G0xx/mios32_family.mk:23: *** recipe commences before first target.  Stop.
+"make all" terminated with exit code 2. Build might be incomplete.
+
+15:03:36 Build Failed. 1 errors, 0 warnings. (took 207ms)
+

@@ -1,0 +1,179 @@
+/*
+ * ili9488 driver
+ *
+ *
+ *
+ */
+
+
+#include "5x6_decod.h"
+
+#define DECOD_SOFT_SPI
+#define DECOD_CS_PORT 	GPIOA
+#define DECOD_CS 	 	LL_GPIO_PIN_15
+#define DECOD_CS_IRQn 	EXTI4_15_IRQn
+#define DECOD_CLK_PORT 	GPIOB
+#define DECOD_CLK 	 	LL_GPIO_PIN_3
+#define DECOD_CLK_IRQn 	EXTI2_3_IRQn
+#define DECOD_MOSI_PORT GPIOB
+#define DECOD_MOSI 	 	LL_GPIO_PIN_5
+
+#define DECOD_SPI		0
+#define DECOD_CS_IRQHANDLER_FUNC void EXTI4_15_IRQHandler(void)
+#define DECOD_CLK_IRQHANDLER_FUNC void EXTI2_3_IRQHandler(void)
+
+void decod_dummy_func(void);
+u8 segment=0;
+u8 cs_active=0;
+u8 seg_bit=0;
+u32 decod_cnt=0;
+u8 decod_segments[32];
+u8 decod_segments_shadow[32];
+// Digits
+u8 decod_digits[6];
+u8 decod_digits_old[6]={0xff,0xff,0xff,0xff,0xff,0xff};
+const u16 decod_digits_pos[6]={15,73,113,153,253,293};
+u8 decod_digits_flags= 0x00;
+// Step Dots
+u16 decod_step_dots;
+u16 decod_step_dots_old= 0x0000;
+u16 decod_step_dots_flags= 0x0000;
+
+void DECOD_Init()
+{
+
+	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+	LL_EXTI_InitTypeDef EXTI_InitStruct = {0};
+	/* GPIO Ports Clock Enable */
+	LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOA);
+	LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOB);
+	/**/
+	GPIO_InitStruct.Pin = DECOD_CS;
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_HIGH;
+	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	LL_GPIO_Init(DECOD_CS_PORT, &GPIO_InitStruct);
+#ifdef DECOD_SOFT_SPI
+	GPIO_InitStruct.Pin = DECOD_CLK;
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_HIGH;
+	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	LL_GPIO_Init(DECOD_CLK_PORT, &GPIO_InitStruct);
+
+	GPIO_InitStruct.Pin = DECOD_MOSI;
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_HIGH;
+	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	LL_GPIO_Init(DECOD_MOSI_PORT, &GPIO_InitStruct);
+#endif
+	LL_EXTI_SetEXTISource(LL_EXTI_CONFIG_PORTA, LL_EXTI_CONFIG_LINE15);
+	EXTI_InitStruct.Line_0_31 = LL_EXTI_LINE_15;
+	EXTI_InitStruct.LineCommand = ENABLE;
+	EXTI_InitStruct.Mode = LL_EXTI_MODE_IT;
+	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_FALLING;
+	LL_EXTI_Init(&EXTI_InitStruct);
+#ifdef DECOD_SOFT_SPI
+	LL_EXTI_SetEXTISource(LL_EXTI_CONFIG_PORTB, LL_EXTI_CONFIG_LINE3);
+	EXTI_InitStruct.Line_0_31 = LL_EXTI_LINE_3;
+	EXTI_InitStruct.LineCommand = ENABLE;
+	EXTI_InitStruct.Mode = LL_EXTI_MODE_IT;
+	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_RISING;
+	LL_EXTI_Init(&EXTI_InitStruct);
+#endif
+	/* EXTI interrupt init*/
+	NVIC_SetPriority(EXTI4_15_IRQn, 1);
+	NVIC_EnableIRQ(EXTI4_15_IRQn);
+#ifdef DECOD_SOFT_SPI
+	NVIC_SetPriority(EXTI2_3_IRQn, 1);
+	NVIC_EnableIRQ(EXTI2_3_IRQn);
+#else
+	// initialize SPI interface
+	// ensure that fast pin drivers are activated
+	MIOS32_SPI_IO_Init(DECOD_SPI, MIOS32_SPI_PIN_SLAVE_DRIVER_STRONG);
+	// init SPI port
+	MIOS32_SPI_TransferModeInit(DECOD_SPI, MIOS32_SPI_MODE_SLAVE_CLK1_PHASE1, MIOS32_SPI_PRESCALER_64);
+#endif
+	//temp
+	decod_segments[0]=0;
+}
+
+DECOD_CS_IRQHANDLER_FUNC
+{
+
+  if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_15) != RESET)
+  {
+    LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_15);
+#ifdef DECOD_SOFT_SPI
+    if(segment>31)return;
+    cs_active=1;
+    segment=0;
+    seg_bit=0;
+#else
+    MIOS32_SPI_TransferBlock(DECOD_SPI, NULL, decod_segments, 32, decod_dummy_func);
+#endif
+  }
+}
+
+DECOD_CLK_IRQHANDLER_FUNC
+{
+#ifdef DECOD_SOFT_SPI
+  if (LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_3) != RESET)
+  {
+    LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_3);
+    decod_cnt++;
+    if(segment>31 || !cs_active)return;
+    if(MIOS32_SYS_STM_PINGET(DECOD_MOSI_PORT, DECOD_MOSI))
+    	decod_segments[segment] |= (0x80>>seg_bit);
+    else
+    	decod_segments[segment] &= ~(0x80>>seg_bit);
+    seg_bit++;
+    if(seg_bit>=8){
+    	seg_bit = 0;
+    	segment++;
+    }
+    decod_dummy_func();
+  }
+#endif
+}
+void decod_dummy_func(void){
+#ifdef DECOD_SOFT_SPI
+	if(segment<32)return;
+	cs_active=0;
+#endif
+//	 u8 consecutive = 1;
+//	 for(int i=0;i<32;i++){
+//		 if(decod_segments_shadow[i]!=decod_segments[i])consecutive = 0;
+//		 decod_segments_shadow[i]=decod_segments[i];
+//	 }
+//	 if(!consecutive)return;
+	 decod_cnt++;		//temp
+	 // All digits
+	 if((decod_segments[0]&decod_segments[1]&0xf0)==0xd0)decod_digits[0]= ((decod_segments[0]&0xf)<<3) | ((decod_segments[1]&0xe)>>1);
+	 if((decod_segments[2]&decod_segments[3]&0xf0)==0xd0)decod_digits[1]= ((decod_segments[2]&0xf)<<3) | ((decod_segments[3]&0xe)>>1);
+	 if((decod_segments[4]&decod_segments[5]&0xf0)==0xd0)decod_digits[2]= ((decod_segments[4]&0xf)<<3) | ((decod_segments[5]&0xe)>>1);
+	 if((decod_segments[6]&decod_segments[7]&0xf0)==0xd0)decod_digits[3]= ((decod_segments[6]&0xf)<<3) | ((decod_segments[7]&0xe)>>1);
+	 if((decod_segments[10]&decod_segments[11]&0xf0)==0xd0)decod_digits[4]= ((decod_segments[10]&0xf)<<3) | ((decod_segments[11]&0xe)>>1);
+	 if((decod_segments[12]&decod_segments[13]&0xf0)==0xd0)decod_digits[5]= ((decod_segments[12]&0xf)<<3) | ((decod_segments[13]&0xe)>>1);
+	 for(int i=0;i<6;i++){
+		 if(decod_digits[i]!=decod_digits_old[i]){
+			 decod_digits_old[i]=decod_digits[i];
+			 decod_digits_flags |= (1<<i);
+		 }
+	 }
+	 // Step Dots
+	 if((decod_segments[19]&decod_segments[20]&decod_segments[22]&decod_segments[23]&0xf0)==0xd0){
+		 decod_step_dots= ((decod_segments[19]&0x1)<<8) | ((decod_segments[19]&0x2)<<9) | ((decod_segments[19]&0x4)<<10) | ((decod_segments[19]&0x8)<<11)
+				 	 	| ((decod_segments[20]&0x1)<<9) | ((decod_segments[20]&0x2)<<10) | ((decod_segments[20]&0x4)<<11) | ((decod_segments[20]&0x8)<<12)
+						| ((decod_segments[22]&0x1)<<6) | ((decod_segments[22]&0x2)<<3) | (decod_segments[22]&0x4) | ((decod_segments[22]&0x8)>>3)
+						| ((decod_segments[23]&0x1)<<7) | ((decod_segments[23]&0x2)<<4) | ((decod_segments[23]&0x4)<<1) | ((decod_segments[23]&0x8)>>2);
+		 decod_step_dots_flags = decod_step_dots ^ decod_step_dots_old;
+		 decod_step_dots_old = decod_step_dots;
+	 }
+#ifdef DECOD_SOFT_SPI
+	 segment=0;
+#endif
+}
+

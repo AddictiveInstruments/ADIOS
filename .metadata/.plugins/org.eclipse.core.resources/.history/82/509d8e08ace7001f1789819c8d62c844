@@ -1,0 +1,541 @@
+/*
+
+ */
+
+/* Includes -----------------------------------------------------------------*/
+#include "tr5x6_decod.h"
+
+/* Defines ------------------------------------------------------------------*/
+#define TR5X6_DECOD_CS_PORT 	GPIOC
+#define TR5X6_DECOD_CS 	 		LL_GPIO_PIN_13
+#define TR5X6_DECOD_CS_IRQn 	EXTI4_15_IRQn
+#define TR5X6_DECOD_CLK_PORT 	GPIOC
+#define TR5X6_DECOD_CLK 	 	LL_GPIO_PIN_15
+#define TR5X6_DECOD_CLK_IRQn 	EXTI4_15_IRQn
+#define TR5X6_DECOD_MOSI_PORT 	GPIOC
+#define TR5X6_DECOD_MOSI 	 	LL_GPIO_PIN_14
+
+#define TR5X6_DECOD_BUTT_COM_PORT 	GPIOB
+#define TR5X6_DECOD_BUTT_COM 	 	LL_GPIO_PIN_3
+#define TR5X6_DECOD_BUTT_PORT 		GPIOD
+#define TR5X6_DECOD_BUTT_LAST 	 	LL_GPIO_PIN_3
+#define TR5X6_DECOD_BUTT_INST 	 	LL_GPIO_PIN_2
+#define TR5X6_DECOD_BUTT_DEC 	 	LL_GPIO_PIN_0
+#define TR5X6_DECOD_BUTT_INC 	 	LL_GPIO_PIN_1
+//#define TR5X6_DECOD_CS_IRQHANDLER_FUNC void EXTI4_15_IRQHandler(void)
+//#define TR5X6_DECOD_CLK_IRQHANDLER_FUNC void EXTI2_3_IRQHandler(void)
+
+/* Prototypes -----------------------------------------------------------------*/
+void TR5X6_DECOD_segments_func(void);
+#if TR5X6_UNIT_SELECT==626
+void TR5X6_DECOD_blinks_func(void);
+#endif
+
+/* Variables ------------------------------------------------------------------*/
+u8 segment=0;
+u8 cs_active=0;
+u8 decoding=0;
+u8 seg_bit=0;
+u8 tr5x6_decod_blinks[15];
+u8 tr5x6_decod_blinks_shadow[15];
+u8 tr5x6_decod_segments[32];
+u8 tr5x6_decod_segments_shadow[32];
+u8* decod_reg = NULL;
+//u8 tr5x6_decod_segments_shadow[32];
+
+#if TR5X6_UNIT_SELECT==505
+// Digits
+u8 tr5x6_decod_digits[6];
+u8 tr5x6_decod_digits_old[6]={0xff,0xff,0xff,0xff,0xff,0xff};
+const u16 tr5x6_decod_digits_pos[6]={16,67,107,147,245,285};
+u8 tr5x6_decod_digits_flags= 0x00;
+u8 tr5x6_decod_inst_acc;
+u8 tr5x6_decod_inst_acc_old= 0x00;
+u8 tr5x6_decod_inst_acc_flags= 0x00;
+
+#else //TR5X6_UNIT_SELECT==626
+// Digits
+u8 tr5x6_decod_digits[7];
+u8 tr5x6_decod_digits_old[7]={0xff,0xff,0xff,0xff,0xff,0xff,0xff};
+const u16 tr5x6_decod_digits_pos[7]={16,68,124,157,190,272,305};
+u8 tr5x6_decod_digits_flags= 0x00;
+// Instruments select
+u16 tr5x6_decod_inst_blk;
+u16 tr5x6_decod_inst_blk_old= 0x0000;
+u16 tr5x6_decod_inst_blk_flags= 0x0000;
+#endif
+// Instruments select
+u16 tr5x6_decod_inst_sel;
+u16 tr5x6_decod_inst_sel_old= 0x0000;
+u16 tr5x6_decod_inst_sel_flags= 0x0000;
+// Step Dots
+u16 tr5x6_decod_step_dots;
+u16 tr5x6_decod_step_dots_old= 0x0000;
+u16 tr5x6_decod_step_dots_flags= 0x0000;
+// Step Dots
+u16 tr5x6_decod_last_step;
+u16 tr5x6_decod_last_step_old= 0x0000;
+u16 tr5x6_decod_last_step_flags= 0x0000;
+// Scale
+u8 tr5x6_decod_scale;
+u8 tr5x6_decod_scale_old=0xff;
+u8 tr5x6_decod_scale_flag=0;
+// Mode
+u8 tr5x6_decod_mode;
+u8 tr5x6_decod_mode_old=0x00;
+u8 tr5x6_decod_mode_flag;
+// Group
+u8 tr5x6_decod_group;
+u8 tr5x6_decod_group_old=0x00;
+u8 tr5x6_decod_group_flag;
+// Labels
+tr5x6_decod_labels_t tr5x6_decod_labels;
+u16 tr5x6_decod_labels_old=0x00;
+tr5x6_decod_labels_t tr5x6_decod_labels_flags;
+
+tr5x6_decod_buttons_t tr5x6_decod_buttons;
+tr5x6_decod_buttons_t tr5x6_decod_buttons_old;
+tr5x6_decod_buttons_t tr5x6_decod_buttons_flags;
+
+//temp flag for testing purpose
+u8 blink_test_flag=0;
+u8 segment_test_flag=0;
+
+/* ********* */
+void TR5X6_DECOD_Init()
+{
+
+	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+	LL_EXTI_InitTypeDef EXTI_InitStruct = {0};
+	/* GPIO Ports Clock Enable */
+	LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOB);
+	LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOC);
+	LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOD);
+
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_HIGH;
+	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	/**/
+	GPIO_InitStruct.Pin = TR5X6_DECOD_BUTT_INST | TR5X6_DECOD_BUTT_LAST | TR5X6_DECOD_BUTT_DEC | TR5X6_DECOD_BUTT_INC;
+	LL_GPIO_Init(TR5X6_DECOD_BUTT_PORT, &GPIO_InitStruct);
+	/**/
+	GPIO_InitStruct.Pin = TR5X6_DECOD_BUTT_COM;
+	LL_GPIO_Init(TR5X6_DECOD_BUTT_COM_PORT, &GPIO_InitStruct);
+	// EXTI TR5X6_DECOD_BUTT_COM
+	LL_EXTI_SetEXTISource(LL_EXTI_CONFIG_PORTB, LL_EXTI_CONFIG_LINE3);
+	EXTI_InitStruct.Line_0_31 = LL_EXTI_LINE_3;
+	EXTI_InitStruct.LineCommand = ENABLE;
+	EXTI_InitStruct.Mode = LL_EXTI_MODE_IT;
+	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_RISING;
+	LL_EXTI_Init(&EXTI_InitStruct);
+
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	/**/
+	GPIO_InitStruct.Pin = TR5X6_DECOD_CS;
+	LL_GPIO_Init(TR5X6_DECOD_CS_PORT, &GPIO_InitStruct);
+	/**/
+	GPIO_InitStruct.Pin = TR5X6_DECOD_CLK;
+	LL_GPIO_Init(TR5X6_DECOD_CLK_PORT, &GPIO_InitStruct);
+	/**/
+	GPIO_InitStruct.Pin = TR5X6_DECOD_MOSI;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	LL_GPIO_Init(TR5X6_DECOD_MOSI_PORT, &GPIO_InitStruct);
+	// EXTI TR5X6_DECOD_CS
+	LL_EXTI_SetEXTISource(LL_EXTI_CONFIG_PORTC, LL_EXTI_CONFIG_LINE13);
+	EXTI_InitStruct.Line_0_31 = LL_EXTI_LINE_13;
+	EXTI_InitStruct.LineCommand = ENABLE;
+	EXTI_InitStruct.Mode = LL_EXTI_MODE_IT;
+#if TR5X6_UNIT_SELECT==505
+	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_FALLING;
+#else
+	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_RISING_FALLING;
+#endif
+	LL_EXTI_Init(&EXTI_InitStruct);
+	// EXTI TR5X6_DECOD_CLK
+	LL_EXTI_SetEXTISource(LL_EXTI_CONFIG_PORTC, LL_EXTI_CONFIG_LINE15);
+	EXTI_InitStruct.Line_0_31 = LL_EXTI_LINE_15;
+	EXTI_InitStruct.LineCommand = ENABLE;
+	EXTI_InitStruct.Mode = LL_EXTI_MODE_IT;
+	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_RISING;
+	LL_EXTI_Init(&EXTI_InitStruct);
+
+	/* EXTI interrupt init*/
+	MIOS32_IRQ_Install(EXTI4_15_IRQn, 2);
+	MIOS32_IRQ_Install(EXTI2_3_IRQn, 2);
+
+	//temp
+	tr5x6_decod_segments[0]=0;
+	decoding =0;
+}
+
+/* ********* */
+tr5x6_decod_buttons_t TR5X6_DECOD_BUTT_Handler(void)
+{
+	if(tr5x6_decod_buttons_old.ALL != tr5x6_decod_buttons.ALL){
+		tr5x6_decod_buttons_flags.ALL = tr5x6_decod_buttons.ALL ^ tr5x6_decod_buttons_old.ALL;
+		tr5x6_decod_buttons_old.ALL = tr5x6_decod_buttons.ALL;
+	}
+	return tr5x6_decod_buttons_flags;
+}
+
+/* ********* */
+void TR5X6_DECOD_EXTI_LCD_Callback(void)
+{
+	// CLK/MISO lines
+	if (LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_15) != RESET)
+	{
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_15);
+#if TR5X6_UNIT_SELECT==505
+		if(segment>31 || !cs_active)return;
+		//MIOS32_IRQ_Disable();
+		if(MIOS32_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
+			tr5x6_decod_segments[segment] |= (0x80>>seg_bit);
+		else
+			tr5x6_decod_segments[segment] &= ~(0x80>>seg_bit);
+		seg_bit++;
+		if(seg_bit>=8){
+			seg_bit = 0;
+			segment++;
+			if(segment>31){
+				cs_active=0;
+
+				TR5X6_DECOD_segments_func();
+			}
+		}
+#else
+		if(!cs_active)return;
+		//MIOS32_IRQ_Disable();
+		if(decod_reg!=NULL){
+			if(MIOS32_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
+				*decod_reg |= (0x80>>seg_bit);
+			else
+				*decod_reg &= ~(0x80>>seg_bit);
+		}
+		seg_bit++;
+		if(seg_bit>=8){
+			seg_bit = 0;
+			segment++;
+			if(decod_reg!=NULL)decod_reg++;
+		}
+#endif
+	}
+	// CS line
+	if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_13) != RESET)
+	{
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_13);
+#if TR5X6_UNIT_SELECT==505
+		if(segment>31)return;
+		cs_active=1;
+		segment=0;
+		seg_bit=0;
+#else
+		if(decoding)decod_reg = NULL;
+		else if((segment==32) && (seg_bit==0))decod_reg = &tr5x6_decod_blinks[0];
+		else if((segment==15) && (seg_bit==0))decod_reg = &tr5x6_decod_segments[0];
+		cs_active=1;
+		segment=0;
+		seg_bit=0;
+#endif
+	}
+#if TR5X6_UNIT_SELECT==626
+	if (LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_13) != RESET)
+	{
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_13);
+
+		cs_active=0;
+		if(decoding)return;
+		 if((segment==32) && (seg_bit==0)){
+			//decoding |=1;
+			TR5X6_DECOD_segments_func();
+
+		}else if((segment==15) && (seg_bit==0)){
+			//decoding |=2;
+			TR5X6_DECOD_blinks_func();
+		}
+	}
+#endif
+
+}
+
+/* ********* */
+void TR5X6_DECOD_EXTI_BUTT_Callback(void)
+{
+	if (LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_3) != RESET)
+	{
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_3);
+		tr5x6_decod_buttons.last = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_LAST);
+		tr5x6_decod_buttons.inst = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INST);
+		tr5x6_decod_buttons.inc = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INC);
+		tr5x6_decod_buttons.dec = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_DEC);
+		s32 led =  MIOS32_BOARD_LED_Get(1);
+		MIOS32_BOARD_LED_Set(1, ~led);
+	}
+
+}
+
+#if TR5X6_UNIT_SELECT==626
+void TR5X6_DECOD_blinks_func(void){
+	//if(!(decoding & 2))return;
+	decoding=1;
+	MIOS32_IRQ_DeInstall(EXTI4_15_IRQn);
+	decod_reg = NULL;
+	if(tr5x6_decod_blinks[0]!=0xf2){
+		//decoding &=0xfd;
+		MIOS32_IRQ_Install(EXTI4_15_IRQn, 2);
+		decoding=0;
+		return;
+	}
+//	for(int i=1;i<14;i++){
+//		if((tr5x6_decod_segments[0]&0xf0)!=0xd0){
+//			decoding=0;
+//			return;
+//		}
+//	}
+	// Instruments select
+	tr5x6_decod_inst_blk= (((tr5x6_decod_blinks[1]&0xe)<<12) | ((tr5x6_decod_blinks[2]&0xf)<<4)
+			| ((tr5x6_decod_blinks[12]&0x1)<<3) | ((tr5x6_decod_blinks[12]&0x2)<<1) | ((tr5x6_decod_blinks[12]&0x4)>>1) | ((tr5x6_decod_blinks[12]&0x8)>>3)
+			| ((tr5x6_decod_blinks[13]&0x1)<<11) | ((tr5x6_decod_blinks[13]&0x2)<<9) | ((tr5x6_decod_blinks[13]&0x4)<<7) | ((tr5x6_decod_blinks[13]&0x8)<<5)
+			| ((tr5x6_decod_blinks[14]&0x1)<<12));
+	for(int i=0;i<16;i++){
+		if((tr5x6_decod_inst_blk &(1<<i)) != (tr5x6_decod_inst_blk_old  &(1<<i))){
+			tr5x6_decod_inst_blk_flags |= (1<<i);
+		}
+	}
+	tr5x6_decod_inst_blk_old = tr5x6_decod_inst_blk;
+
+	for(int i=0; i<15;i++){
+		if(tr5x6_decod_blinks[i]!=tr5x6_decod_blinks_shadow[i])blink_test_flag=1;
+		tr5x6_decod_blinks_shadow[i]=tr5x6_decod_blinks[i];
+	}
+
+	MIOS32_IRQ_Install(EXTI4_15_IRQn, 2);
+	//decoding &=0xfd;
+	decoding=0;
+}
+#endif
+
+/* ********* */
+void TR5X6_DECOD_segments_func(void){
+#if TR5X6_UNIT_SELECT==505
+	if(cs_active)return;
+
+	// All digits
+	tr5x6_decod_digits[0]= ((tr5x6_decod_segments[0]&0xf)<<3) | ((tr5x6_decod_segments[1]&0xe)>>1);
+	tr5x6_decod_digits[1]= ((tr5x6_decod_segments[2]&0xf)<<3) | ((tr5x6_decod_segments[3]&0xe)>>1);
+	tr5x6_decod_digits[2]= ((tr5x6_decod_segments[4]&0xf)<<3) | ((tr5x6_decod_segments[5]&0xe)>>1);
+	tr5x6_decod_digits[3]= ((tr5x6_decod_segments[6]&0xf)<<3) | ((tr5x6_decod_segments[7]&0xe)>>1);
+	tr5x6_decod_digits[4]= ((tr5x6_decod_segments[10]&0xf)<<3) | ((tr5x6_decod_segments[11]&0xe)>>1);
+	tr5x6_decod_digits[5]= ((tr5x6_decod_segments[12]&0xf)<<3) | ((tr5x6_decod_segments[13]&0xe)>>1);
+#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+					if((tr5x6_decod_digits[0]!= 0x03)){
+						tft_ready=0;
+//						for(int i =0;i<15;i++)
+//						MIOS32_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_blinks[i]);
+						for(int i =0;i<32;i++)
+						MIOS32_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_segments[i]);
+					}
+#endif
+	for(int i=0;i<6;i++){
+		if(tr5x6_decod_digits[i]!=tr5x6_decod_digits_old[i]){
+			tr5x6_decod_digits_old[i]=tr5x6_decod_digits[i];
+			tr5x6_decod_digits_flags |= (1<<i);
+		}
+	}
+
+	// Instruments select
+	tr5x6_decod_inst_acc = (tr5x6_decod_segments[28]>>2)&3;
+	for(int i=0;i<2;i++){
+		if((tr5x6_decod_inst_acc &(1<<i)) != (tr5x6_decod_inst_acc_old  &(1<<i)))
+			tr5x6_decod_inst_acc_flags|= (1<<i);
+	}
+	tr5x6_decod_inst_acc_old=tr5x6_decod_inst_acc;
+	tr5x6_decod_inst_sel= (((tr5x6_decod_segments[15]&0xe)<<12) | ((tr5x6_decod_segments[16]&0xf)<<4)
+			| ((tr5x6_decod_segments[26]&0x1)<<3) | ((tr5x6_decod_segments[26]&0x2)<<1) | ((tr5x6_decod_segments[26]&0x4)>>1) | ((tr5x6_decod_segments[26]&0x8)>>3)
+			| ((tr5x6_decod_segments[27]&0x1)<<11) | ((tr5x6_decod_segments[27]&0x2)<<9) | ((tr5x6_decod_segments[27]&0x4)<<7) | ((tr5x6_decod_segments[27]&0x8)<<5)
+			| ((tr5x6_decod_segments[28]&0x1)<<12));
+	for(int i=0;i<16;i++){
+		if((tr5x6_decod_inst_sel &(1<<i)) != (tr5x6_decod_inst_sel_old  &(1<<i))){
+			tr5x6_decod_inst_sel_flags |= (1<<i);
+		}
+	}
+	tr5x6_decod_inst_sel_old = tr5x6_decod_inst_sel;
+	// Step Dots
+	tr5x6_decod_step_dots= ((tr5x6_decod_segments[19]&0x1)<<8) | ((tr5x6_decod_segments[19]&0x2)<<9) | ((tr5x6_decod_segments[19]&0x4)<<10) | ((tr5x6_decod_segments[19]&0x8)<<11)
+				 	 					| ((tr5x6_decod_segments[20]&0x1)<<9) | ((tr5x6_decod_segments[20]&0x2)<<10) | ((tr5x6_decod_segments[20]&0x4)<<11) | ((tr5x6_decod_segments[20]&0x8)<<12)
+										| ((tr5x6_decod_segments[22]&0x1)<<6) | ((tr5x6_decod_segments[22]&0x2)<<3) | (tr5x6_decod_segments[22]&0x4) | ((tr5x6_decod_segments[22]&0x8)>>3)
+										| ((tr5x6_decod_segments[23]&0x1)<<7) | ((tr5x6_decod_segments[23]&0x2)<<4) | ((tr5x6_decod_segments[23]&0x4)<<1) | ((tr5x6_decod_segments[23]&0x8)>>2);
+	for(int i=0;i<16;i++){
+		if((tr5x6_decod_step_dots &(1<<i)) != (tr5x6_decod_step_dots_old  &(1<<i))){
+			tr5x6_decod_step_dots_flags |= (1<<i);
+		}
+	}
+	tr5x6_decod_step_dots_old = tr5x6_decod_step_dots;
+
+	// Last step
+	tr5x6_decod_last_step= ((tr5x6_decod_segments[17]&0x1)<<8) | ((tr5x6_decod_segments[17]&0x2)<<9) | ((tr5x6_decod_segments[17]&0x4)<<10) | ((tr5x6_decod_segments[17]&0x8)<<11)
+				 	 					| ((tr5x6_decod_segments[18]&0x1)<<9) | ((tr5x6_decod_segments[18]&0x2)<<10) | ((tr5x6_decod_segments[18]&0x4)<<11) | ((tr5x6_decod_segments[18]&0x8)<<12)
+										| ((tr5x6_decod_segments[24]&0x1)<<6) | ((tr5x6_decod_segments[24]&0x2)<<3) | (tr5x6_decod_segments[24]&0x4) | ((tr5x6_decod_segments[24]&0x8)>>3)
+										| ((tr5x6_decod_segments[25]&0x1)<<7) | ((tr5x6_decod_segments[25]&0x2)<<4) | ((tr5x6_decod_segments[25]&0x4)<<1) | ((tr5x6_decod_segments[25]&0x8)>>2);
+	for(int i=0;i<16;i++){
+		if((tr5x6_decod_last_step &(1<<i)) != (tr5x6_decod_last_step_old  &(1<<i))){
+			tr5x6_decod_last_step_flags |= (1<<i);
+		}
+	}
+	tr5x6_decod_last_step_old = tr5x6_decod_last_step;
+	// Scale
+	tr5x6_decod_scale=tr5x6_decod_segments[21] & 0xf;
+	if(tr5x6_decod_scale_old != tr5x6_decod_scale){
+		tr5x6_decod_scale_flag=1;
+	}
+	tr5x6_decod_scale_old = tr5x6_decod_scale;
+	// Mode
+	tr5x6_decod_mode=((tr5x6_decod_segments[13]&0x1) | ((tr5x6_decod_segments[14]&0xf)<<1));
+	if(tr5x6_decod_mode_old != tr5x6_decod_mode){
+		tr5x6_decod_mode_flag=1;
+	}
+	tr5x6_decod_mode_old = tr5x6_decod_mode;
+	// Group
+	tr5x6_decod_group=(((tr5x6_decod_segments[8]&0xe)>>1) | ((tr5x6_decod_segments[9]&0xe)<<2));
+	if(tr5x6_decod_group_old != tr5x6_decod_group){
+		tr5x6_decod_group_flag=1;
+	}
+	tr5x6_decod_group_old = tr5x6_decod_group;
+	// Labels
+	tr5x6_decod_labels.tempo = tr5x6_decod_segments[1]&0x1;
+	tr5x6_decod_labels.measure = tr5x6_decod_segments[3]&0x1;
+	tr5x6_decod_labels.sync = tr5x6_decod_segments[5]&0x1;
+	tr5x6_decod_labels.grp_pat = tr5x6_decod_segments[7]&0x1;
+	tr5x6_decod_labels.chain = tr5x6_decod_segments[8]&0x1;
+	tr5x6_decod_labels.level = tr5x6_decod_segments[9]&0x1;
+	tr5x6_decod_labels.block = tr5x6_decod_segments[11]&0x1;
+	for(int i=0;i<16;i++){
+		if((tr5x6_decod_labels.ALL &(1<<i)) != (tr5x6_decod_labels_old  &(1<<i))){
+			tr5x6_decod_labels_flags.ALL |= (1<<i);
+		}
+	}
+	tr5x6_decod_labels_old = tr5x6_decod_labels.ALL;
+
+	segment=0;
+#else
+	//if(!(decoding & 1))return;
+	decoding=1;
+	MIOS32_IRQ_DeInstall(EXTI4_15_IRQn);
+	decod_reg = NULL;
+	for(int i=0;i<32;i++){
+		if((tr5x6_decod_segments[0]&0xf0)!=0xd0){
+			//decoding &=0xfe;
+			MIOS32_IRQ_Install(EXTI4_15_IRQn, 2);
+			decoding =0;
+			return;
+		}
+	}
+	// All digits
+	tr5x6_decod_digits[0]= ((tr5x6_decod_segments[0]&0xf)<<3) | ((tr5x6_decod_segments[1]&0xe)>>1);
+	tr5x6_decod_digits[1]= ((tr5x6_decod_segments[2]&0xf)<<3) | ((tr5x6_decod_segments[3]&0xe)>>1);
+	tr5x6_decod_digits[2]= ((tr5x6_decod_segments[4]&0xf)<<3) | ((tr5x6_decod_segments[5]&0xe)>>1);
+	tr5x6_decod_digits[3]= ((tr5x6_decod_segments[6]&0xf)<<3) | ((tr5x6_decod_segments[7]&0xe)>>1);
+	tr5x6_decod_digits[4]= ((tr5x6_decod_segments[9]&0xf)<<3) | ((tr5x6_decod_segments[10]&0xe)>>1);
+	tr5x6_decod_digits[5]= ((tr5x6_decod_segments[13]&0xf)<<3) | ((tr5x6_decod_segments[14]&0xe)>>1);
+	tr5x6_decod_digits[6]= ((tr5x6_decod_segments[15]&0xf)<<3) | ((tr5x6_decod_segments[16]&0xe)>>1);
+	for(int i=0;i<7;i++){
+		if(tr5x6_decod_digits[i]!=tr5x6_decod_digits_old[i]){
+			tr5x6_decod_digits_old[i]=tr5x6_decod_digits[i];
+			tr5x6_decod_digits_flags |= (1<<i);
+		}
+	}
+	// Instruments select
+	tr5x6_decod_inst_sel= (((tr5x6_decod_segments[18]&0xe)<<12) | ((tr5x6_decod_segments[19]&0xf)<<4)
+			| ((tr5x6_decod_segments[29]&0x1)<<3) | ((tr5x6_decod_segments[29]&0x2)<<1) | ((tr5x6_decod_segments[29]&0x4)>>1) | ((tr5x6_decod_segments[29]&0x8)>>3)
+			| ((tr5x6_decod_segments[30]&0x1)<<11) | ((tr5x6_decod_segments[30]&0x2)<<9) | ((tr5x6_decod_segments[30]&0x4)<<7) | ((tr5x6_decod_segments[30]&0x8)<<5)
+			| ((tr5x6_decod_segments[31]&0x1)<<12));
+	for(int i=0;i<16;i++){
+		if((tr5x6_decod_inst_sel &(1<<i)) != (tr5x6_decod_inst_sel_old  &(1<<i))){
+			tr5x6_decod_inst_sel_flags |= (1<<i);
+		}
+	}
+	tr5x6_decod_inst_sel_old = tr5x6_decod_inst_sel;
+
+	// Step Dots
+	tr5x6_decod_step_dots= ((tr5x6_decod_segments[22]&0x1)<<8) | ((tr5x6_decod_segments[22]&0x2)<<9) | ((tr5x6_decod_segments[22]&0x4)<<10) | ((tr5x6_decod_segments[22]&0x8)<<11)
+				 	 					| ((tr5x6_decod_segments[23]&0x1)<<9) | ((tr5x6_decod_segments[23]&0x2)<<10) | ((tr5x6_decod_segments[23]&0x4)<<11) | ((tr5x6_decod_segments[23]&0x8)<<12)
+										| ((tr5x6_decod_segments[25]&0x1)<<6) | ((tr5x6_decod_segments[25]&0x2)<<3) | (tr5x6_decod_segments[25]&0x4) | ((tr5x6_decod_segments[25]&0x8)>>3)
+										| ((tr5x6_decod_segments[26]&0x1)<<7) | ((tr5x6_decod_segments[26]&0x2)<<4) | ((tr5x6_decod_segments[26]&0x4)<<1) | ((tr5x6_decod_segments[26]&0x8)>>2);
+	for(int i=0;i<16;i++){
+		if((tr5x6_decod_step_dots &(1<<i)) != (tr5x6_decod_step_dots_old  &(1<<i))){
+			tr5x6_decod_step_dots_flags |= (1<<i);
+		}
+	}
+	tr5x6_decod_step_dots_old = tr5x6_decod_step_dots;
+
+	// Last step
+	tr5x6_decod_last_step= ((tr5x6_decod_segments[20]&0x1)<<8) | ((tr5x6_decod_segments[20]&0x2)<<9) | ((tr5x6_decod_segments[20]&0x4)<<10) | ((tr5x6_decod_segments[20]&0x8)<<11)
+				 	 					| ((tr5x6_decod_segments[21]&0x1)<<9) | ((tr5x6_decod_segments[21]&0x2)<<10) | ((tr5x6_decod_segments[21]&0x4)<<11) | ((tr5x6_decod_segments[21]&0x8)<<12)
+										| ((tr5x6_decod_segments[27]&0x1)<<6) | ((tr5x6_decod_segments[27]&0x2)<<3) | (tr5x6_decod_segments[27]&0x4) | ((tr5x6_decod_segments[27]&0x8)>>3)
+										| ((tr5x6_decod_segments[28]&0x1)<<7) | ((tr5x6_decod_segments[28]&0x2)<<4) | ((tr5x6_decod_segments[28]&0x4)<<1) | ((tr5x6_decod_segments[28]&0x8)>>2);
+	for(int i=0;i<16;i++){
+		if((tr5x6_decod_last_step &(1<<i)) != (tr5x6_decod_last_step_old  &(1<<i))){
+			tr5x6_decod_last_step_flags |= (1<<i);
+		}
+	}
+	tr5x6_decod_last_step_old = tr5x6_decod_last_step;
+
+	// Scale
+	tr5x6_decod_scale=tr5x6_decod_segments[24] & 0xf;
+	if(tr5x6_decod_scale_old != tr5x6_decod_scale){
+		tr5x6_decod_scale_flag=1;
+	}
+	tr5x6_decod_scale_old = tr5x6_decod_scale;
+	// Mode
+	tr5x6_decod_mode=((tr5x6_decod_segments[18]&0x1) | ((tr5x6_decod_segments[17]&0x7)<<2) | ((tr5x6_decod_segments[16]&0x1)<<1));
+	if(tr5x6_decod_mode_old != tr5x6_decod_mode){
+		tr5x6_decod_mode_flag=1;
+	}
+	tr5x6_decod_mode_old = tr5x6_decod_mode;
+	// Group
+	tr5x6_decod_group=(((tr5x6_decod_segments[11]&0xe)>>1) | ((tr5x6_decod_segments[12]&0xe)<<2));
+	if(tr5x6_decod_group_old != tr5x6_decod_group){
+		tr5x6_decod_group_flag=1;
+	}
+	tr5x6_decod_group_old = tr5x6_decod_group;
+
+	// Labels
+	tr5x6_decod_labels.card = tr5x6_decod_segments[1]&0x1;
+	tr5x6_decod_labels.tempo = tr5x6_decod_segments[3]&0x1;
+	tr5x6_decod_labels.measure = tr5x6_decod_segments[5]&0x1;
+	tr5x6_decod_labels.sync = (tr5x6_decod_segments[17]&0x8)?1:0;
+	tr5x6_decod_labels.pitch = tr5x6_decod_segments[7]&0x1;
+	tr5x6_decod_labels.level = tr5x6_decod_segments[10]&0x1;
+	tr5x6_decod_labels.shuffle = (tr5x6_decod_segments[8]&0x8)?1:0;
+	tr5x6_decod_labels.flam = tr5x6_decod_segments[8]&0x1;
+	tr5x6_decod_labels.accent = (tr5x6_decod_segments[31]&0x4)?1:0;
+	tr5x6_decod_labels.chain = tr5x6_decod_segments[11]&0x1;
+	tr5x6_decod_labels.block = tr5x6_decod_segments[14]&0x1;
+	for(int i=0;i<16;i++){
+		if((tr5x6_decod_labels.ALL &(1<<i)) != (tr5x6_decod_labels_old  &(1<<i))){
+			tr5x6_decod_labels_flags.ALL |= (1<<i);
+		}
+	}
+	tr5x6_decod_labels_old = tr5x6_decod_labels.ALL;
+
+
+	for(int i=0; i<32;i++){
+		if(tr5x6_decod_segments[i]!=tr5x6_decod_segments_shadow[i])segment_test_flag=1;
+		tr5x6_decod_segments_shadow[i]=tr5x6_decod_segments[i];
+	}
+	MIOS32_IRQ_Install(EXTI4_15_IRQn, 2);
+	//decoding &=0xfe;
+	decoding=0;
+#endif
+//	for(int i=0;i<32;i++){
+//		if((tr5x6_decod_segments[i]&0xf0)!=0xd0){
+//			decoding=0;
+//			return;
+//		}
+//	}
+
+}
+

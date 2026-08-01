@@ -1,0 +1,990 @@
+23:19:21 **** Incremental Build of configuration Default for project 5x6_505 ****
+make all 
+rm -f project.hex
+Creating object file for app.c
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_system.h:43,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:65,
+                 from D:/mios32/trunk/include/mios32/mios32.h:35,
+                 from app.c:18:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_bus.h:44,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:66:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_rcc.h:27,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:67:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_pwr.h:28,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:68:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_rtc.h:28,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:69:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_gpio.h:28,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:70:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_dac.h:28,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:71:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_tim.h:28,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:72:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_usart.h:28,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:73:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_exti.h:28,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:74:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_utils.h:41,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:75:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_flash.h:32,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:76:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_spi.h:28,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:77:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_dma.h:28,
+                 from D:/mios32/trunk/programming_models/traditional/stm32g0xx_conf.h:78:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_dmamux.h:28,
+                 from D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/STM32G0xx_HAL_Driver/inc/stm32g0xx_ll_dma.h:29:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+In file included from D:/mios32/trunk/include/mios32/mios32.h:36:
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: error: redeclaration of enumerator 'RESET'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:146:3: note: previous definition of 'RESET' with type 'enum <anonymous>'
+  146 |   RESET = 0,
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: error: redeclaration of enumerator 'SET'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:147:3: note: previous definition of 'SET' with type 'enum <anonymous>'
+  147 |   SET = !RESET
+      |   ^~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: error: conflicting types for 'FlagStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:3: note: previous declaration of 'FlagStatus' with type 'FlagStatus'
+  148 | } FlagStatus, ITStatus;
+      |   ^~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: error: conflicting types for 'ITStatus'; have 'enum <anonymous>'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:148:15: note: previous declaration of 'ITStatus' with type 'ITStatus'
+  148 | } FlagStatus, ITStatus;
+      |               ^~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: error: redeclaration of enumerator 'DISABLE'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:152:3: note: previous definition of 'DISABLE' with type 'enum <anonymous>'
+  152 |   DISABLE = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: error: redeclaration of enumerator 'ENABLE'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:153:3: note: previous definition of 'ENABLE' with type 'enum <anonymous>'
+  153 |   ENABLE = !DISABLE
+      |   ^~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: error: conflicting types for 'FunctionalState'; have 'enum <anonymous>'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:154:3: note: previous declaration of 'FunctionalState' with type 'FunctionalState'
+  154 | } FunctionalState;
+      |   ^~~~~~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: error: redeclaration of enumerator 'SUCCESS'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:159:3: note: previous definition of 'SUCCESS' with type 'enum <anonymous>'
+  159 |   SUCCESS = 0,
+      |   ^~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: error: redeclaration of enumerator 'ERROR'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:160:3: note: previous definition of 'ERROR' with type 'enum <anonymous>'
+  160 |   ERROR = !SUCCESS
+      |   ^~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: error: conflicting types for 'ErrorStatus'; have 'enum <anonymous>'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:161:3: note: previous declaration of 'ErrorStatus' with type 'ErrorStatus'
+  161 | } ErrorStatus;
+      |   ^~~~~~~~~~~
+D:/mios32/trunk/drivers/STM32G0xx/LL_HAL/CMSIS/Device/ST/STM32G0xx/Include/stm32g0xx.h:238:2: error: #endif without #if
+  238 | #endif /* STM32G0xx_H */
+      |  ^~~~~
+make: *** [/d/mios32/trunk/include/makefile/common.mk:170: project_build/app.o] Error 1
+"make all" terminated with exit code 2. Build might be incomplete.
+
+23:19:23 Build Failed. 167 errors, 0 warnings. (took 1s.929ms)
+

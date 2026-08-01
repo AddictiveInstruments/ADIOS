@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
+		<item key="wrap" value="false"/>
+		<item key="casesensitive" value="true"/>
+		<item key="wholeword" value="false"/>
+		<item key="incremental" value="false"/>
+		<item key="isRegEx" value="false"/>
+		<item key="selection" value="delay_us"/>
+		<list key="findhistory">
+			<item value="delay_us"/>
+			<item value="FLASH"/>
+			<item value="LL_SYSCFG_UCPD1_STROBE"/>
+			<item value="STM32G070xx"/>
+			<item value="stm32g031xx.h"/>
+			<item value="DMA1_Channel1_IRQn"/>
+			<item value="DMA1_Ch4_7_DMAMUX1_OVR_IRQn"/>
+			<item value="DMAMUX"/>
+			<item value="LL_AHB1_GRP1_PERIPH_DMA1"/>
+			<item value="TIM1_CC_IRQHandler"/>
+			<item value=" "/>
+			<item value="TIM1_CC_IRQn"/>
+			<item value="TIM1_BRK_UP_TRG_COM_IRQHandler"/>
+			<item value="stm32g0xx.h"/>
+			<item value="LL_EXTI_CONFIG_LINE9"/>
+		</list>
+		<list key="replacehistory">
+			<item value="newCH_flag"/>
+			<item value="newCH_old"/>
+			<item value="newCH_cnt"/>
+			<item value="tr5x6_rom_bank_refresh"/>
+			<item value="tft_bank_refresh"/>
+			<item value="xfer_bmp_slot_height"/>
+			<item value="TFT_XferSlotInfoReceived"/>
+			<item value="TFT_XferSlotProgress"/>
+			<item value="MIDIO_SYSEX_Send_Info"/>
+			<item value="MIDIO_SYSEX_Send_Block"/>
+			<item value="MIDIO_SYSEX_Send_UploadReq"/>
+			<item value="MIOS32_MIDI_Send_SysEx"/>
+			<item value="MIDIO_SYSEX_Send_Footer"/>
+			<item value="MIDIO_SYSEX_Send_Ack"/>
+			<item value=""/>
+		</list>
+	</section>
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog_dialogBounds">
+		<item key="DIALOG_X_ORIGIN" value="2093"/>
+		<item key="DIALOG_Y_ORIGIN" value="660"/>
+		<item key="DIALOG_WIDTH" value="414"/>
+		<item key="DIALOG_HEIGHT" value="440"/>
+		<item key="DIALOG_FONT_NAME" value="1|Segoe UI|9.0|0|WINDOWS|1|-15|0|0|0|400|0|0|0|1|0|0|0|0|Segoe UI"/>
+	</section>
+</section>

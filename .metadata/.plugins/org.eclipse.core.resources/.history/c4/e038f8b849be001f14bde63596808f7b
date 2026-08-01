@@ -1,0 +1,535 @@
+// $Id: app.c 1920 2014-01-08 19:29:35Z tk $
+/*
+ * MIOS32 Application Template
+ *
+ * ==========================================================================
+ *
+ *  Copyright (C) <year> <your name> (<your email address>)
+ *  Licensed for personal non-commercial use only.
+ *  All other rights reserved.
+ * 
+ * ==========================================================================
+ */
+
+/////////////////////////////////////////////////////////////////////////////
+// Include files
+/////////////////////////////////////////////////////////////////////////////
+
+#include <mios32.h>
+#include "app.h"
+#include "app_lcd.h"
+#include "glcd_font.h"
+#include "5x6_decod.h"
+#include "5x6_rom.h"
+
+#include <FreeRTOS.h>
+#include <portmacro.h>
+#include <task.h>
+#include <queue.h>
+#include <semphr.h>
+
+// define priority level for SPI Handler task:
+// use same priority as MIOS32 specific tasks (3)
+#define PRIORITY_TASK_TFT_HANDLER	( tskIDLE_PRIORITY + 3 )
+#define x_offset	8
+#define y_offset	20
+#define w_max		464
+#define h_max		280
+// local prototype of the task function
+
+static void TASK_TFT_DelayedInit(void *pvParameters);
+static void TASK_TFT_Periodic(void *pvParameters);
+static void APP_TFT_Background(void);
+TaskHandle_t xTFTInit = NULL;
+TaskHandle_t xTFTRefresh = NULL;
+static u8 tft_ready = 0;
+u32 old_count;
+u8 old_segments[40];
+
+
+//temp
+static int address=ROM_SECTOR_SIZE;
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called after startup to initialize the application
+/////////////////////////////////////////////////////////////////////////////
+void APP_Init(void)
+{
+	// initialize all LEDs
+	MIOS32_BOARD_LED_Init(0xffffffff);
+	DECOD_Init();
+	ROM_Init();
+
+    APP_LCD_Clear();
+    APP_TFT_Background();
+    tft_ready = 1;
+    APP_LCD_Lite(1);
+
+	// start screen printing task
+	//xTaskCreate(TASK_TFT_DelayedInit, "TFT_DelayedInit", (configMINIMAL_STACK_SIZE), NULL, PRIORITY_TASK_TFT_HANDLER, &xTFTInit);
+
+	xTaskCreate(TASK_TFT_Periodic, "TFT_Handler", (configMINIMAL_STACK_SIZE), NULL, PRIORITY_TASK_TFT_HANDLER, &xTFTRefresh);
+
+	// Enables MIDI TX bypass for UART0
+	MIOS32_UART_TX_Bypass(0, 1);
+//	ROM_Status errorcode = ROM_OK;
+//	if((errorcode=ROM_Sector_Erase(0x00000000, 1000))==ROM_OK){
+//		MIOS32_MIDI_SendDebugMessage("ROM sector erased");
+//		for(int b=0x0000;b<ROM_SECTOR_SIZE;b++){
+//			if((errorcode=ROM_Write((u32)b, (u8)b, 1000))==ROM_OK)
+//				MIOS32_MIDI_SendDebugMessage("ROM address %08x written.", b);
+//			else MIOS32_MIDI_SendDebugMessage("ROM write error#%d!", errorcode);
+//		}
+//	}else MIOS32_MIDI_SendDebugMessage("ROM sector erase error#%d!", errorcode);
+
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This task is running endless in background
+/////////////////////////////////////////////////////////////////////////////
+void APP_Background(void)
+{
+
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called each mS from the main task which also handles DIN, ENC
+// and AIN events. You could add more jobs here, but they shouldn't consume
+// more than 300 uS to ensure the responsiveness of buttons, encoders, pots.
+// Alternatively you could create a dedicated task for application specific
+// jobs as explained in $MIOS32_PATH/apps/tutorials/006_rtos_tasks
+/////////////////////////////////////////////////////////////////////////////
+void APP_Tick(void)
+{
+	//	count++;
+	//	if(count<1000){
+	//		MIOS32_BOARD_LED_Set(1, 1);
+	//
+	//	}else{
+	//		MIOS32_BOARD_LED_Set(1, 0);
+	//		if(count>2000)count=0;
+	//	}
+	// PWM modulate the status LED (this is a sign of life)
+	//u32 timestamp = MIOS32_TIMESTAMP_Get();
+	//MIOS32_BOARD_LED_Set(1, (timestamp % 20) <= ((timestamp / 100) % 10));
+	//         APP_LCD_Digits_draw(decod_cnt/100, 10, 10, 1, APP_LCD_WHITE, APP_LCD_BLACK);	// temp
+	//         APP_LCD_Digits_draw(decod_cnt/10, 30, 10, 1, APP_LCD_WHITE, APP_LCD_BLACK);	// temp
+	//         APP_LCD_Digits_draw(decod_cnt%10, 50, 10, 1, APP_LCD_WHITE, APP_LCD_BLACK);	// temp
+
+
+	DECOD_BUTT_Handler();
+	if(decod_buttons_flags.ALL!=0){
+		if((decod_buttons_flags.inc==1) && (decod_buttons.inc==1) ){
+
+		}
+		MIOS32_MIDI_SendDebugMessage("%s%s%s%s", decod_buttons.last?"last ":"",decod_buttons.inst?"inst ":"",decod_buttons.dec?"dec ":"",decod_buttons.inc?"inc ":"");
+		decod_buttons_flags.ALL=0;
+	}
+
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called each mS from the MIDI task which checks for incoming
+// MIDI events. You could add more MIDI related jobs here, but they shouldn't
+// consume more than 300 uS to ensure the responsiveness of incoming MIDI.
+/////////////////////////////////////////////////////////////////////////////
+void APP_MIDI_Tick(void)
+{
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called when a MIDI package has been received
+/////////////////////////////////////////////////////////////////////////////
+void APP_MIDI_NotifyPackage(mios32_midi_port_t port, mios32_midi_package_t midi_package)
+{
+
+	//	if(midi_package.event==NoteOn){
+	//		 MIOS32_MIDI_SendDebugMessage("Note On\n");
+	//	  // forward USB0->UART0 and UART0->USB0
+	//	  switch( port ) {
+	//	    case USB0:
+	//	    	MIOS32_MIDI_SendPackage(USB0, midi_package);
+	//	    	MIOS32_MIDI_SendPackage(UART0,  midi_package);
+	//	    	MIOS32_MIDI_SendPackage(UART1,  midi_package);
+	//	    	break;
+	//	    case UART0:
+	//	    	MIOS32_MIDI_SendPackage(USB0, midi_package);
+	//	    	MIOS32_MIDI_SendPackage(UART0,  midi_package);
+	//	    	break;
+	//	  }
+	//	}
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called before the shift register chain is scanned
+/////////////////////////////////////////////////////////////////////////////
+void APP_SRIO_ServicePrepare(void)
+{
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called after the shift register chain has been scanned
+/////////////////////////////////////////////////////////////////////////////
+void APP_SRIO_ServiceFinish(void)
+{
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called when a button has been toggled
+// pin_value is 1 when button released, and 0 when button pressed
+/////////////////////////////////////////////////////////////////////////////
+void APP_DIN_NotifyToggle(u32 pin, u32 pin_value)
+{
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called when an encoder has been moved
+// incrementer is positive when encoder has been turned clockwise, else
+// it is negative
+/////////////////////////////////////////////////////////////////////////////
+void APP_ENC_NotifyChange(u32 encoder, s32 incrementer)
+{
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called when a pot has been moved
+/////////////////////////////////////////////////////////////////////////////
+void APP_AIN_NotifyChange(u32 pin, u32 pin_value)
+{
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// prints screen background
+/////////////////////////////////////////////////////////////////////////////
+void TASK_TFT_DelayedInit(void *pvParameters)
+{
+
+  while(1)
+  {
+
+    vTaskDelay(pdMS_TO_TICKS(1000) );
+    APP_LCD_DelayedInit(0);
+    APP_LCD_Clear();
+    APP_TFT_Background();
+    tft_ready = 1;
+    APP_LCD_Lite(1);
+    vTaskDelete(xTFTInit);
+  }
+}
+/////////////////////////////////////////////////////////////////////////////
+// prints screen background
+/////////////////////////////////////////////////////////////////////////////
+void APP_TFT_Background(void){
+
+	if(!APP_LCD_IsReady())return;
+	// background
+	mios32_lcd_bitmap_t bmp;		// dummy bitmap: todo remove
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_Rectangle(x_offset, y_offset, w_max, 91, 2, APP_LCD_DARKGREY, 0, 0);
+#ifndef REDUCED_APP_LCD
+	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+	APP_LCD_PrintString(bmp, 0, x_offset+47, y_offset+7, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "SCALE");
+#endif
+	for(int i=1; i<=16; i++)APP_LCD_DrawFastVLine(x_offset+w_max-2-i*23, (i==16)?y_offset+2:y_offset+40,  (i==16)?94:50, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastHLine(x_offset+2, y_offset+39, w_max-4, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastHLine(x_offset+2, y_offset+64, w_max-4, APP_LCD_DARKGREY);
+#ifndef REDUCED_APP_LCD
+	APP_LCD_PrintString(bmp, 0, x_offset+47, y_offset+45, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "PATTERN");
+	APP_LCD_PrintString(bmp, 0, x_offset+47, y_offset+70, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "STEP");
+#endif
+
+
+	APP_LCD_Rectangle(x_offset, y_offset+93, w_max, 71, 2, APP_LCD_DARKGREY, 0, 0);
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	APP_LCD_PrintString(bmp, 0, x_offset+48, y_offset+103, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "INSTRUMENT");
+	APP_LCD_PrintString(bmp, 0, x_offset+48, y_offset+118, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "< ACCENT");
+	APP_LCD_PrintString(bmp, 0, x_offset+48, y_offset+144, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "SOUND  ROM");
+	APP_LCD_DrawFastHLine(x_offset+2, y_offset+136, w_max-4, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+94, y_offset+95,  69, APP_LCD_DARKGREY);
+
+	APP_LCD_Rectangle(x_offset, y_offset+166, w_max, 114, 2, APP_LCD_DARKGREY, 0, 0);
+	APP_LCD_PrintString(bmp, 0, x_offset+30, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
+	APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MODE");
+	APP_LCD_DrawFastHLine(x_offset+2, y_offset+188, w_max-4, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+58, y_offset+168, 110, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+186, y_offset+168, 110, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+324, y_offset+168, 110, APP_LCD_DARKGREY);
+
+	APP_LCD_PrintString(bmp, 0, x_offset+335, y_offset+249, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "MIDI  ACT.");
+	APP_LCD_DrawFastHLine(x_offset+325, y_offset+243, 139, APP_LCD_DARKGREY);
+	//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	APP_LCD_PrintString(bmp, 0, x_offset+350, y_offset+262, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "RX");
+	APP_LCD_PrintString(bmp, 0, x_offset+438, y_offset+249, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "505 TX");
+	APP_LCD_PrintString(bmp, 0, x_offset+438, y_offset+262, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "5;6 TX");
+
+	// last step
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	for(int i=0; i<16; i++){
+		APP_LCD_FColourSet(APP_LCD_DARKGREY);
+		APP_LCD_PrintFormattedString(bmp, 0, x_offset+w_max-359+i*23, y_offset+71, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%d", (i+1));
+	}
+
+}
+/////////////////////////////////////////////////////////////////////////////
+// periodically called for screen print
+/////////////////////////////////////////////////////////////////////////////
+static void TASK_TFT_Periodic(void *pvParameters)
+{
+	portTickType xLastExecutionTime;
+
+	// Initialise the xLastExecutionTime variable on task entry
+	xLastExecutionTime = xTaskGetTickCount();
+
+	while( 1 ) {
+		// wait for 20 mS
+		//vTaskDelayUntil(&xLastExecutionTime, 20 / portTICK_RATE_MS);
+		vTaskDelayUntil(&xLastExecutionTime, 40 / portTICK_RATE_MS);
+
+		// temp
+		s32 data = ROM_Read(address);
+		MIOS32_MIDI_SendDebugMessage("data@%08x = %d", address,  data);
+		address++;
+		if(address>=0x80000)address=0;
+
+
+		if(tft_ready){
+			mios32_lcd_bitmap_t bmp;		//dummy bitmap
+			// All Digits
+			for(int i=0;i<6;i++){
+				if( decod_digits_flags & (1<<i) ){
+					decod_digits_flags &= ~(1<<i);
+					APP_LCD_Digits_draw(decod_digits[i], x_offset + decod_digits_pos[i], y_offset+197, 1, APP_LCD_WHITE, APP_LCD_BLACK);
+				}
+			}
+			APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+			// temp for button testing
+			if(decod_buttons.dec)APP_LCD_PrintString(bmp, 0, x_offset+100, y_offset+110, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "DEC");
+			else APP_LCD_PrintString(bmp, 0, x_offset+100, y_offset+110, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "        ");
+
+			// last step/ dot steps
+			for(int i=0; i<16; i++){
+				if(decod_last_step_flags &(1<<i)){
+					if(decod_last_step &(1<<i))APP_LCD_FColourSet(APP_LCD_WHITE);
+					else APP_LCD_FColourSet(APP_LCD_DARKGREY);
+					APP_LCD_PrintFormattedString(bmp, 0, x_offset+w_max-359+i*23, y_offset+71, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%d", (i+1));
+				}
+				if(decod_step_dots_flags &(1<<i) || decod_last_step_flags &(1<<i)){
+					APP_LCD_DrawFastBall(x_offset+w_max-364+i*23, y_offset+46, (decod_step_dots &(1<<i))?((decod_last_step &(1<<i))?APP_LCD_WHITE:APP_LCD_DARKGREY):APP_LCD_BLACK);
+				}
+			}
+			decod_last_step_flags = 0x0000;
+			decod_step_dots_flags = 0x0000;
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			// Scale
+			if(decod_scale_flag){
+				decod_scale_flag=0;
+				u16 w = 16*23-1;
+				u16 scale_y_offset=y_offset +8;
+
+				switch(decod_scale){
+				case 0x00:
+				case 0x02:
+				case 0x07:
+				case 0x0e:
+					APP_LCD_Rectangle(x_offset+w_max-w, scale_y_offset, w-2, 23, 0, 0, 1, 0);
+					break;
+				default:
+				}
+				switch(decod_scale){
+				case 0x00:
+					APP_LCD_PrintString(bmp, 0, x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "  1<32  ");
+					break;
+				case 0x02:
+					APP_LCD_PrintString(bmp, 0, x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "  1<16  ");
+					break;
+				case 0x07:
+					APP_LCD_PrintString(bmp, 0, x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "1<32T");
+					break;
+				case 0x0e:
+					APP_LCD_PrintString(bmp, 0, x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "1<16T");
+					break;
+				default:
+				}
+				switch(decod_scale){
+				case 0x02:
+					APP_LCD_DrawFastVLine(x_offset+w_max-4*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-4*23+7, scale_y_offset+18, APP_LCD_WHITE);
+					APP_LCD_DrawFastVLine(x_offset+w_max-12*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-12*23+7, scale_y_offset+18, APP_LCD_WHITE);
+				case 0x00:
+					APP_LCD_DrawFastVLine(x_offset+w_max-8*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-8*23+7, scale_y_offset+18, APP_LCD_WHITE);
+					APP_LCD_DrawFastVLine(x_offset+w_max-16*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-16*23+7, scale_y_offset+18, APP_LCD_WHITE);
+					break;
+				case 0x07:
+					for(int i=0; i<2; i++){
+						APP_LCD_DrawPixel(x_offset+w_max-(10+i*6)*23+6, scale_y_offset+1, APP_LCD_WHITE);
+						APP_LCD_DrawFastHLine(x_offset+w_max-(10+i*6)*23+7, scale_y_offset, 6*23-13, APP_LCD_WHITE);
+						APP_LCD_DrawPixel(x_offset+w_max-(4+i*6)*23-6, scale_y_offset+1, APP_LCD_WHITE);
+					}
+					APP_LCD_DrawPixel(x_offset+w_max-4*23+6, scale_y_offset+1, APP_LCD_WHITE);
+					APP_LCD_DrawFastHLine(x_offset+w_max-4*23+7, scale_y_offset, 4*23-13, APP_LCD_WHITE);
+					for(int i=1; i<=8; i++){
+						APP_LCD_DrawFastCroche(x_offset+w_max-i*46+11, scale_y_offset+5, APP_LCD_WHITE);
+						APP_LCD_DrawFastVLine(x_offset+w_max-i*46+10, scale_y_offset+5, 13, APP_LCD_WHITE);
+						APP_LCD_DrawFastNoire(x_offset+w_max-i*46+6, scale_y_offset+18, APP_LCD_WHITE);
+					}
+
+					break;
+				case 0x0e:
+					for(int i=0; i<5; i++){
+						APP_LCD_DrawPixel(x_offset+w_max-(4+i*3)*23+6, scale_y_offset+1, APP_LCD_WHITE);
+						APP_LCD_DrawFastHLine(x_offset+w_max-(4+i*3)*23+7, scale_y_offset, 3*23-13, APP_LCD_WHITE);
+						APP_LCD_DrawPixel(x_offset+w_max-(1+i*3)*23-6, scale_y_offset+1, APP_LCD_WHITE);
+					}
+					APP_LCD_DrawPixel(x_offset+w_max-1*23+6, scale_y_offset+1, APP_LCD_WHITE);
+					APP_LCD_DrawFastHLine(x_offset+w_max-1*23+7, scale_y_offset, 1*23-13, APP_LCD_WHITE);
+					for(int i=1; i<=16; i++){
+						APP_LCD_DrawFastCroche(x_offset+w_max-i*23+11, scale_y_offset+5, APP_LCD_WHITE);
+						APP_LCD_DrawFastVLine(x_offset+w_max-i*23+10, scale_y_offset+5, 13, APP_LCD_WHITE);
+						APP_LCD_DrawFastNoire(x_offset+w_max-i*23+6, scale_y_offset+18, APP_LCD_WHITE);
+					}
+
+					break;
+				default:
+					break;
+				}
+			}
+			// Labels
+			//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+			if(decod_labels_flags.tempo || decod_labels_flags.measure){
+				APP_LCD_Rectangle(x_offset+93, y_offset+173, 58, 10, 0, 0, 1, 0);
+				if(decod_labels.tempo)
+					APP_LCD_PrintString(bmp, 0, x_offset+122, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TEMPO");
+				if(decod_labels.measure)
+				APP_LCD_PrintString(bmp, 0, x_offset+122, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MEASURE");
+			}
+			if(decod_labels_flags.grp_pat || decod_labels_flags.level){
+				APP_LCD_Rectangle(x_offset+202, y_offset+173, 107, 10, 0, 0, 1, 0);
+				if(decod_labels.grp_pat){
+					APP_LCD_PrintString(bmp, 0, x_offset+202, y_offset+173, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "GROUP");
+					APP_LCD_PrintString(bmp, 0, x_offset+309, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "PATTERN");}
+				if(decod_labels.level)
+					APP_LCD_PrintString(bmp, 0, x_offset+309, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "LEVEL");
+			}
+			if(decod_labels_flags.sync){
+				if(decod_labels.sync)
+				APP_LCD_PrintString(bmp, 0, x_offset+122, y_offset+262, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MIDI  SYNC");
+			else APP_LCD_Rectangle(x_offset+82, y_offset+262, 80, 10, 0, 0, 1, 0);
+			}
+			if(decod_labels_flags.chain){
+				if(decod_labels.chain)
+				APP_LCD_PrintString(bmp, 0, x_offset+232, y_offset+262, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "CHAIN");
+			else APP_LCD_Rectangle(x_offset+212, y_offset+262, 40, 10, 0, 0, 1, 0);
+			}
+			if(decod_labels_flags.block){
+				if(decod_labels.block)
+				APP_LCD_PrintString(bmp, 0, x_offset+278, y_offset+262, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "BLOCK");
+			else APP_LCD_Rectangle(x_offset+258, y_offset+262, 40, 10, 0, 0, 1, 0);
+			}
+			decod_labels_flags.ALL = 0;
+			// Mode
+#ifndef REDUCED_APP_LCD
+			APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+			if(decod_mode_flag){
+				decod_mode_flag=0;
+				switch(decod_mode){
+				case 0x01:
+				case 0x02:
+				case 0x04:
+				case 0x08:
+				case 0x10:
+					APP_LCD_Rectangle(x_offset+355, y_offset+200, 76, 16, 0, 0, 1, 0);
+					APP_LCD_Rectangle(x_offset+368, y_offset+217, 51, 16, 0, 0, 1, 0);
+					break;
+				default:
+					break;
+				}
+				switch(decod_mode){
+				case 0x01:
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "TRACK");
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+217, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "PLAY");
+					break;
+				case 0x02:
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "PATTERN");
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+217, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "PLAY");
+					break;
+				case 0x04:
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "TRACK");
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+217, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "WRITE");
+					break;
+				case 0x08:
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "STEP");
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+217, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "WRITE");
+					break;
+				case 0x10:
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "TAP");
+					APP_LCD_PrintString(bmp, 0, x_offset+393, y_offset+217, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "WRITE");
+					break;
+				default:
+					break;
+				}
+			}
+			// Group
+			if(decod_group_flag){
+				decod_group_flag=0;
+				switch(decod_group){
+				case 0x01:
+					APP_LCD_PrintString(bmp, 0, x_offset+221, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "A");
+					break;
+				case 0x02:
+					APP_LCD_PrintString(bmp, 0, x_offset+221, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "B");
+					break;
+				case 0x04:
+					APP_LCD_PrintString(bmp, 0, x_offset+221, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "C");
+					break;
+				case 0x08:
+					APP_LCD_PrintString(bmp, 0, x_offset+221, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "D");
+					break;
+				case 0x10:
+					APP_LCD_PrintString(bmp, 0, x_offset+221, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "E");
+					break;
+				case 0x20:
+					APP_LCD_PrintString(bmp, 0, x_offset+221, y_offset+200, 0, APP_LCD_STRING_ALIGN_CENTER, -48, "F");
+					break;
+				default:
+					APP_LCD_Rectangle(x_offset+212, y_offset+200, 20, 13, 0, 0, 1, 0);
+					break;
+				}
+			}
+#endif
+			// MIDI activity
+			u8 act=MIOS32_UART_RXTX_Act();
+			if(act&0x01)APP_LCD_Rectangle(x_offset+335, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			else APP_LCD_Rectangle(x_offset+335, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
+			if(act&0x10)APP_LCD_Rectangle(x_offset+441, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			else APP_LCD_Rectangle(x_offset+441, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
+			if(act&0x02)APP_LCD_Rectangle(x_offset+441, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			else APP_LCD_Rectangle(x_offset+441, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
+		}
+	}
+}
+
+// EXTI calback must be placed here because they are common
+void EXTI4_15_IRQHandler(void){
+	// callback for DECOD function
+	DECOD_EXTI_CS_Callback();
+	// callback for UART TX bypass option
+	MIOS32_UART_TX_BypassCallback();
+
+}
+void EXTI2_3_IRQHandler(void){
+	// callback for DECOD function
+	DECOD_EXTI_CLK_Callback();
+}

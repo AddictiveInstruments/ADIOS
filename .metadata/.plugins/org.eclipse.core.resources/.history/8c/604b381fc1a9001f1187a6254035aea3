@@ -1,0 +1,19 @@
+# $Id: Makefile 194 2008-12-18 01:47:21Z tk $
+
+################################################################################
+# The make rule compiles the code and generates the mios32_bsl_*.inc file
+################################################################################
+all: MBHP_DIPCOREF4 cleanall
+
+MBHP_DIPCOREF4:
+	make -f Makefile.bsl_MBHP_DIPCOREF4 cleanall
+	make -f Makefile.bsl_MBHP_DIPCOREF4
+	mv project_build/project.bin project_MBHP_DIPCOREF4.bin
+	perl gen_inc_file.pl project_MBHP_DIPCOREF4.bin ../../mios32/STM32F4xx/mios32_bsl_MBHP_DIPCOREF4.inc mios32_bsl_image mios32_bsl
+	perl gen_inc_file.pl project_MBHP_DIPCOREF4.bin ../updater/bsl_image_MBHP_DIPCOREF4.inc bsl_image 0
+
+clean:
+	make -f MBHP_DIPCOREF4 clean
+
+cleanall:
+	make -f MBHP_DIPCOREF4 cleanall

@@ -1,0 +1,140 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file    rom.h
+  * @brief   This file contains all the function prototypes for
+  *          the rom.c file
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2024 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
+/* Define to prevent recursive inclusion -------------------------------------*/
+#ifndef _TR5X6_ROM_H__
+#define _TR5X6_ROM_H__
+
+
+/* Includes ------------------------------------------------------------------*/
+#include <mios32.h>
+
+/* Defines ------------------------------------------------------------------*/
+/* sound datas ROM */
+#define TR5X6_ROM_SECTOR_SIZE 	0x1000	// 4K
+// SST39xx040: nor flash memory range (512K)
+//# define TR5X6_ROM_START_ADDR  (0x00000000)
+//# define TR5X6_ROM_END_ADDR    (0x00080000 - 1)
+// SST39xx168x: Flash Plus(MPF+) memory range (2M)
+#define TR5X6_ROM_START_ADDR  	(0x00000000)
+#define TR5X6_ROM_END_ADDR    	(0x00200000 - 1)
+
+/* names, colors and misc ROM */
+#define TR5X6_FLASH_PAGE_SIZE 0x800	// 2K
+// We use the last 4 pages of the internal flash as ROM, 8K
+#define TR5X6_FLASH_START_ADDR  (0x08000000 + MIOS32_SYS_FlashSizeGet() - 0x2000)	//0x0801E000
+#define TR5X6_FLASH_END_ADDR    (0x08000000 + MIOS32_SYS_FlashSizeGet() - 1)		//0x0801FFFF
+#define TR5X6_FLASH_PAGE_BASE	((MIOS32_SYS_FlashSizeGet() - 0x2000)/TR5X6_FLASH_PAGE_SIZE)	// 2K
+
+#define TR5X6_MAGIC_NUMBER		87
+/* Structures ----------------------------------------------------------------*/
+typedef enum
+{
+  TR5X6_ROM_BUSY = 1,
+  TR5X6_ROM_ERROR,
+  TR5X6_ROM_COMPLETE,
+  TR5X6_ROM_TIMEOUT,
+  TR5X6_ROM_OK
+}tr5x6_rom_status;
+
+typedef enum {
+	SIZE_4K=0,
+	SIZE_8K,
+	SIZE_16K,
+	SIZE_32K
+} tr5x6_slot_size_t;
+
+typedef enum {
+	SLOT_EVEN=0,
+	SLOT_ODD
+} tr5x6_slot_parity_t;
+
+#if TR5X6_UNIT_SELECT==505
+typedef struct {
+	char name[14];
+	u32 addr_offset:18;
+	u32 size:2;
+	u32 parity:1;
+	u32 dummy:11;
+} tr5x6_slot_t;
+
+
+//typedef union {
+//	struct __attribute__((__packed__)){
+//		u8 ALL[6528];
+//	};
+//	struct __attribute__((__packed__)){
+//		tr5x6_flash_info_t slots[256];
+//		tr5x6_flash_info_t banks[16];
+//		u8 diummy[1664];
+//	};
+//} tr5x6_flash_t;
+
+#else //TR5X6_UNIT_SELECT==626
+typedef struct {
+	char name[14];
+	char shortname[4];
+	u32 addr_offset:18;
+	u32 size:2;
+	u32 parity:1;
+	u32 dummy:11;
+} tr5x6_slot_t;
+
+#endif
+
+typedef union {
+	struct __attribute__((__packed__)){
+		u8 ToWrite[24];
+		u8 bank;
+		u8 slot;
+	};
+	struct __attribute__((__packed__)){
+		char name[22];
+		u16 color;
+		u16 dummy2;
+	};
+} tr5x6_flash_info_t;
+
+#if TR5X6_UNIT_SELECT==505
+extern const tr5x6_slot_t tr5x6_slots[16];
+
+#else //TR5X6_UNIT_SELECT==626
+extern const tr5x6_slot_t tr5x6_slots[30];
+
+#endif
+
+extern const char tr5x6_slot_name[4][4];
+extern const char tr5x6_slot_duration[4][6];
+/* Prototypes ----------------------------------------------------------------*/
+extern void TR5X6_ROM_Init(void);
+extern void TR5X6_ROM_HOST(void);
+extern u8 TR5X6_ROM_BankGet(void);
+extern s32 TR5X6_ROM_BankSet(u8 bank);
+extern u32 TR5X6_ROM_ProgAddr(u8 bank);
+extern u32 TR5X6_ROM_HostAddr(u8 bank);
+extern s32 TR5X6_ROM_BaseAddrSet(uint8_t bank);
+extern s32 TR5X6_ROM_Read(uint32_t address);
+extern tr5x6_rom_status TR5X6_ROM_Write(uint32_t address, uint8_t data, uint32_t Timeout);
+extern tr5x6_rom_status TR5X6_ROM_Sector_Erase(uint32_t sector, uint32_t Timeout);
+extern s32 TR5X6_FLASH_SlotRead(tr5x6_flash_info_t* slot);
+extern s32 TR5X6_FLASH_BankRead(tr5x6_flash_info_t* slot);
+extern s32 TR5X6_MEM_Format(void);
+extern s32 TR5X6_FLASH_Slot_Write(tr5x6_flash_info_t slot);
+extern s32 TR5X6_FLASH_Bank_Write(tr5x6_flash_info_t slot);
+#endif /*_TR5X6_ROM_H__ */

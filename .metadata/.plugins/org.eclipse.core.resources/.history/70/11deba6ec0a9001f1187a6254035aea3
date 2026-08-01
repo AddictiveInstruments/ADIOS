@@ -1,0 +1,9 @@
+D:/mios32/trunk/mios32/STM32F4xx/mios32_sys.c:80:5:MIOS32_SYS_Init	16	static
+D:/mios32/trunk/mios32/STM32F4xx/mios32_sys.c:232:5:MIOS32_SYS_Reset	8	static
+D:/mios32/trunk/mios32/STM32F4xx/mios32_sys.c:306:5:MIOS32_SYS_ChipIDGet	0	static
+D:/mios32/trunk/mios32/STM32F4xx/mios32_sys.c:316:5:MIOS32_SYS_FlashSizeGet	0	static
+D:/mios32/trunk/mios32/STM32F4xx/mios32_sys.c:326:5:MIOS32_SYS_RAMSizeGet	0	static
+D:/mios32/trunk/mios32/STM32F4xx/mios32_sys.c:344:5:MIOS32_SYS_SerialNumberGet	8	static
+D:/mios32/trunk/mios32/STM32F4xx/mios32_sys.c:382:5:MIOS32_SYS_TimeSet	48	static
+D:/mios32/trunk/mios32/STM32F4xx/mios32_sys.c:457:19:MIOS32_SYS_TimeGet	0	static
+D:/mios32/trunk/mios32/STM32F4xx/mios32_sys.c:485:5:MIOS32_SYS_DMA_CallbackSet	0	static

@@ -1,0 +1,8 @@
+15:03:37 **** Incremental Build of configuration Default for project app_skeleton_cpp ****
+make all 
+/d/mios32/trunk/mios32/mios32.mk:67: /d/mios32/trunk/mios32//mios32_family.mk: No such file or directory
+make: *** No rule to make target '/d/mios32/trunk/mios32//mios32_family.mk'.  Stop.
+"make all" terminated with exit code 2. Build might be incomplete.
+
+15:03:37 Build Failed. 1 errors, 1 warnings. (took 186ms)
+

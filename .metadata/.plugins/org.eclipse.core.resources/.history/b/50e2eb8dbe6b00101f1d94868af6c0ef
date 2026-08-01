@@ -1,0 +1,1929 @@
+// $Id: app.c 1920 2014-01-08 19:29:35Z tk $
+/*
+ * MIOS32 Application Template
+ *
+ * ==========================================================================
+ *
+ *  Copyright (C) <year> <your name> (<your email address>)
+ *  Licensed for personal non-commercial use only.
+ *  All other rights reserved.
+ * 
+ * ==========================================================================
+ */
+
+/////////////////////////////////////////////////////////////////////////////
+// Include files
+/////////////////////////////////////////////////////////////////////////////
+
+#include <mios32.h>
+#include "app.h"
+#include "app_lcd.h"
+#include "glcd_font.h"
+#include "tr5x6_decod.h"
+#include "tr5x6_rom.h"
+#include "midio_sysex.h"
+#include "tr5x6_pict.h"
+
+#include <FreeRTOS.h>
+#include <portmacro.h>
+#include <task.h>
+#include <queue.h>
+#include <semphr.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+// define priority level for SPI Handler task:
+// use same priority as MIOS32 specific tasks (3)
+#define PRIORITY_TASK_TFT_HANDLER	( tskIDLE_PRIORITY + 3 )
+#define PRIORITY_TASK_ROM_HANDLER	( tskIDLE_PRIORITY + 3 )
+#define x_offset	8
+#define y_offset	15
+#define w_max		464
+#define h_max		280
+
+#define xfer_bmp_bank_height	(s16)(26)
+#define xfer_bmp_slot_height	(s16)(41)
+#define xfer_bmp_height			(s16)(xfer_bmp_bank_height+xfer_bmp_slot_height)
+#define xfer_bmp_width			(s16)(5*23-1)
+#define xfer_bmp_size 			(int)(((xfer_bmp_height/8)+((xfer_bmp_height%8)?1:0))*xfer_bmp_width)
+#define xfer_bmp_slot_size 		(int)(((xfer_bmp_slot_height/8)+((xfer_bmp_slot_height%8)?1:0))*xfer_bmp_width)
+#define xfer_bmp_bank_size 		(int)(((xfer_bmp_bank_height/8)+((xfer_bmp_bank_height%8)?1:0))*xfer_bmp_width)
+// local prototype of the task function
+static void Legend_Draw(int x, int y, const char *func, const char *butt);
+static void SettingsMenu_Draw(void);
+static void SettingsMenu_Legend(void);
+static void Formatting_Page(void);
+static void About_Page(void);
+static void TASK_SettingsMenu(void *pvParameters);
+static void TASK_TFT_Periodic(void *pvParameters);
+static void TASK_ROM_Periodic(void *pvParameters);
+static void APP_TFT_Background(void);
+static s32 NOTIFY_MIDI_TimeOut(mios32_midi_port_t port);
+static s32 NOTIFY_MIDI_Rx(mios32_midi_port_t port, u8 byte);
+
+TaskHandle_t xSettings = NULL;
+TaskHandle_t xTFTRefresh = NULL;
+TaskHandle_t xROMCheck = NULL;
+static u8 normal_start = 0;
+u32 old_count;
+u8 old_segments[40];
+static u8 bank_change_inhibit = 0;
+static u8 first_start = 1;
+static u8 bank_changed = 0;
+
+#if TR5X6_UNIT_SELECT==626
+static u8 inst_change_exit=0;
+static u8 inst_grid_name=0;
+static u8 inst_grid_shown=0;
+#endif
+
+static u8 newID_cnt=0;
+static u8 newID_old=0;
+static s8 xfer_delay=0;
+static u16 xfer_flag=0;
+static u8 beat_flag=0;
+static u8 beat_enabled=1;
+static u32 midi_clock_ctr;
+static u16 beat_color = APP_LCD_DARKGREY;
+mios32_lcd_bitmap_t bmp;		//dummy bitmap
+//static u8 uart1_act=0;
+static u8 menu_pos = 0;
+static u8 menu_edit = 0;
+static u8 last_id = 0;
+static u8 curr_id = 0;
+static u8 formatting=0;
+//// define a Mutex for LCD access
+//xSemaphoreHandle xSPISemaphore;
+//#define MUTEX_SPI_TAKE { while( xSemaphoreTakeRecursive(xSPISemaphore, (portTickType)1) != pdTRUE ); }
+//#define MUTEX_SPI_GIVE { xSemaphoreGiveRecursive(xSPISemaphore); }
+
+//temp
+//static int address=0;
+//static int count=0;
+//static s32 upload_progress=0;
+//static s32 upload_progress_old=0;
+
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called after startup to initialize the application
+/////////////////////////////////////////////////////////////////////////////
+void APP_Init(void)
+{
+	// ROM R/W init
+	TR5X6_ROM_Init();
+	TR5X6_ROM_HOST();
+	// initialize all LEDs
+	MIOS32_BOARD_LED_Init(0xffffffff);
+	
+	// initialize LCD Bus Decoder.
+	TR5X6_DECOD_Init();
+
+	// TFT init
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+	APP_LCD_Clear();	// clear the TFT
+	// check magic number and boot page request
+	u8 rom_empty = 0;
+	if((*((volatile u8*)(TR5X6_FLASH_END_ADDR)))!=TR5X6_MAGIC_NUMBER)rom_empty = 1;
+	if( (tr5x6_decod_buttons.ALL==0x0a) || rom_empty ){
+		tr5x6_decod_buttons_flags.ALL=0;
+		curr_id = MIOS32_MIDI_DeviceIDGet();
+		last_id = curr_id;
+		if(rom_empty){
+			APP_LCD_Lite(1);	// swwitch on
+			// periodic screen task
+			menu_pos = 1;
+			menu_edit = 1;
+			formatting = 1;
+			APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Format   BANKs");
+			Formatting_Page();
+			for(u16 d=0; d<2000; d++)MIOS32_DELAY_Wait_uS(1000);		// wait 2s
+			MIOS32_SYS_Reset();
+			//TR5X6_MEM_Format();
+		}else{
+			SettingsMenu_Draw();
+			SettingsMenu_Legend();
+			APP_LCD_Lite(1);
+			// periodic screen task
+			xTaskCreate(TASK_SettingsMenu, "Settings_Menu", (TFT_TASK_STACK_SIZE)/4, NULL, PRIORITY_TASK_TFT_HANDLER, &xSettings);
+		}
+
+	}else {
+		mios32_lcd_bitmap_t logo_bmp = APP_LCD_BitmapInit((u8*)tr5x6_logo, 400, 56, 400, Is1BIT);
+		for (int w=0; w<400;w++){
+			u8* bmp_mem_ptr = logo_bmp.memory +w;
+			mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 56, 400, Is1BIT);
+			APP_LCD_SendBitmap(bmp2print, 40+w, y_offset+132);
+		}
+
+		APP_LCD_Lite(1);
+		while(1){};
+		// initialize SysEx mgnt.
+		MIDIO_SYSEX_Init(0);
+		// install Direct MIDI RX callback
+		MIOS32_MIDI_DirectRxCallback_Init(&NOTIFY_MIDI_Rx);
+
+		// install SysEx callback
+		MIOS32_MIDI_SysExCallback_Init(APP_SYSEX_Parser);
+
+		// install timeout callback function
+		MIOS32_MIDI_TimeOutCallback_Init(NOTIFY_MIDI_TimeOut);
+
+		// TFT
+
+		normal_start = 1;		// marks TFT ready
+		// periodic screen task
+		xTaskCreate(TASK_TFT_Periodic, "TFT_Handler", (TFT_TASK_STACK_SIZE)/4, NULL, PRIORITY_TASK_TFT_HANDLER, &xTFTRefresh);
+		// periodic ROM task
+		xTaskCreate(TASK_ROM_Periodic, "ROM_Handler", (ROM_TASK_STACK_SIZE)/4, NULL, PRIORITY_TASK_ROM_HANDLER, &xROMCheck);
+		first_start=1;
+	}
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This task is running endless in background
+/////////////////////////////////////////////////////////////////////////////
+void APP_Background(void)
+{
+
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called each mS from the main task which also handles DIN, ENC
+// and AIN events. You could add more jobs here, but they shouldn't consume
+// more than 300 uS to ensure the responsiveness of buttons, encoders, pots.
+// Alternatively you could create a dedicated task for application specific
+// jobs as explained in $MIOS32_PATH/apps/tutorials/006_rtos_tasks
+/////////////////////////////////////////////////////////////////////////////
+void APP_Tick(void)
+{
+	// Button interception
+	TR5X6_DECOD_BUTT_Handler();
+	// Sysex Time out tick	}
+	if(normal_start)MIDIO_SYSEX_TimeOut_Period();
+	// check for decoding
+
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called each mS from the MIDI task which checks for incoming
+// MIDI events. You could add more MIDI related jobs here, but they shouldn't
+// consume more than 300 uS to ensure the responsiveness of incoming MIDI.
+/////////////////////////////////////////////////////////////////////////////
+void APP_MIDI_Tick(void)
+{
+
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called when a MIDI package has been received
+/////////////////////////////////////////////////////////////////////////////
+void APP_MIDI_NotifyPackage(mios32_midi_port_t port, mios32_midi_package_t midi_package)
+{
+	if(port==UART1){
+		if(normal_start)MIOS32_MIDI_SendPackage(UART0,  midi_package);
+	}
+}
+
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Installed via MIOS32_MIDI_DirectRxCallback_Init
+/////////////////////////////////////////////////////////////////////////////
+static s32 NOTIFY_MIDI_Rx(mios32_midi_port_t port, u8 midi_byte)
+{
+	// check for MIDI clock fom TR
+	if(normal_start){
+		if(port==UART1){
+			if( midi_byte == 0xf8 ) {
+
+
+				if( (midi_clock_ctr % 24) == 0 ){
+					beat_enabled=1;		// beat
+					beat_flag=1;
+				}else if( (midi_clock_ctr % 24) == 6 ){
+					beat_enabled=0;		// beat
+					beat_flag=1;
+				}
+						// beat
+
+				++midi_clock_ctr;
+
+				return 0; // no error, no filtering
+			}
+
+			// check for MIDI start or continue
+			if( midi_byte == 0xfa || midi_byte == 0xfb ) {
+				beat_color = APP_LCD_RED;
+				beat_flag=1;
+				midi_clock_ctr = 0;
+				//    total_delay = 0;
+
+				return 0; // no error, no filtering
+			}
+
+			// check for MIDI stop
+			if( midi_byte == 0xfc ) {
+				beat_color = APP_LCD_DARKGREY;
+				beat_flag=1;
+
+				return 0; // no error, no filtering
+			}
+		}
+	}
+	return 0; // no error, no filtering
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This function parses an incoming sysex stream for MIOS32 commands
+/////////////////////////////////////////////////////////////////////////////
+s32 APP_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
+{
+
+	// App sysex parser
+	MIDIO_SYSEX_Parser(port, midi_in);
+
+	return 1; // no error
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called before the shift register chain is scanned
+/////////////////////////////////////////////////////////////////////////////
+void APP_SRIO_ServicePrepare(void)
+{
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called after the shift register chain has been scanned
+/////////////////////////////////////////////////////////////////////////////
+void APP_SRIO_ServiceFinish(void)
+{
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called when a button has been toggled
+// pin_value is 1 when button released, and 0 when button pressed
+/////////////////////////////////////////////////////////////////////////////
+void APP_DIN_NotifyToggle(u32 pin, u32 pin_value)
+{
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called when an encoder has been moved
+// incrementer is positive when encoder has been turned clockwise, else
+// it is negative
+/////////////////////////////////////////////////////////////////////////////
+void APP_ENC_NotifyChange(u32 encoder, s32 incrementer)
+{
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This hook is called when a pot has been moved
+/////////////////////////////////////////////////////////////////////////////
+void APP_AIN_NotifyChange(u32 pin, u32 pin_value)
+{
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// prints screen background
+/////////////////////////////////////////////////////////////////////////////
+void APP_TFT_Background(void){
+#if 1
+	APP_LCD_Clear();	// clear the TFT
+	// background
+	//mios32_lcd_bitmap_t bmp;		// dummy bitmap: todo remove
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_Rectangle(x_offset, y_offset, w_max, 91, 2, APP_LCD_DARKGREY, 0, 0);
+#ifndef REDUCED_APP_LCD
+	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+	APP_LCD_PrintString(x_offset+47, y_offset+8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "SCALE");
+#endif
+	for(int i=1; i<=16; i++)APP_LCD_DrawFastVLine(x_offset+w_max-2-i*23, (i==16)?y_offset+2:y_offset+40,  (i==16)?94:50, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastHLine(x_offset+2, y_offset+39, w_max-4, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastHLine(x_offset+2, y_offset+64, w_max-4, APP_LCD_DARKGREY);
+#ifndef REDUCED_APP_LCD
+	APP_LCD_PrintString(x_offset+47, y_offset+46, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PATTERN");
+	APP_LCD_PrintString(x_offset+47, y_offset+71, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "STEP");
+#endif
+
+
+	APP_LCD_Rectangle(x_offset, y_offset+93, w_max, 71, 2, APP_LCD_DARKGREY, 0, 0);
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+#if TR5X6_UNIT_SELECT==505
+	APP_LCD_PrintString(x_offset+48, y_offset+103, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "INSTRUMENT");
+	APP_LCD_PrintString(x_offset+48, y_offset+118, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "/ ACCENT");
+#else // TR5X6_UNIT_SELECT==626
+	APP_LCD_PrintString(x_offset+48, y_offset+110, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "INSTRUMENT");
+#endif
+	APP_LCD_PrintString(x_offset+48, y_offset+144, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "SOUND  BANK");
+	APP_LCD_DrawFastHLine(x_offset+2, y_offset+136, w_max-4, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+94, y_offset+95,  69, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+w_max-(6*23)-2, y_offset+137,  25, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+w_max-(5*23)-2, y_offset+95,  69, APP_LCD_DARKGREY);
+
+	APP_LCD_Rectangle(x_offset, y_offset+166, w_max, 114, 2, APP_LCD_DARKGREY, 0, 0);
+	APP_LCD_DrawFastHLine(x_offset+2, y_offset+188, w_max-4, APP_LCD_DARKGREY);
+#if TR5X6_UNIT_SELECT==505
+	APP_LCD_PrintString(x_offset+30, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
+	APP_LCD_PrintString(x_offset+393, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MODE");
+	APP_LCD_DrawFastVLine(x_offset+58, y_offset+168, 110, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+186, y_offset+168, 110, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+324, y_offset+168, 110, APP_LCD_DARKGREY);
+	APP_LCD_PrintString(x_offset+335, y_offset+249, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "MIDI ACT.");
+	APP_LCD_DrawFastHLine(x_offset+325, y_offset+243, 139, APP_LCD_DARKGREY);
+	//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	APP_LCD_PrintString(x_offset+350, y_offset+262, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "RX");
+	APP_LCD_PrintString(x_offset+438, y_offset+249, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "505 TX");
+	APP_LCD_PrintString(x_offset+438, y_offset+262, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "5x6 TX");
+#else // TR5X6_UNIT_SELECT==626
+	APP_LCD_PrintString(x_offset+27, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "BANK");
+	APP_LCD_PrintString(x_offset+79, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
+	APP_LCD_PrintString(x_offset+236, y_offset+173, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "GROUP");
+	APP_LCD_PrintString(x_offset+340, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "PATTERN");
+	APP_LCD_PrintString(x_offset+404, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MODE");
+	APP_LCD_DrawFastVLine(x_offset+53, y_offset+168, 110, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+106, y_offset+168, 110, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+230, y_offset+168, 110, APP_LCD_DARKGREY);
+	APP_LCD_DrawFastVLine(x_offset+344, y_offset+168, 110, APP_LCD_DARKGREY);
+	APP_LCD_PrintString(x_offset+350, y_offset+249, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "MIDI ACT.");
+	APP_LCD_DrawFastHLine(x_offset+345, y_offset+232, 119, APP_LCD_DARKGREY);
+	//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	APP_LCD_PrintString(x_offset+365, y_offset+262, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "RX");
+	APP_LCD_PrintString(x_offset+443, y_offset+249, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "626 TX");
+	APP_LCD_PrintString(x_offset+443, y_offset+262, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "5x6 TX");
+#endif
+
+
+	// last step
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	for(int i=0; i<16; i++){
+		APP_LCD_FColourSet(APP_LCD_DARKGREY);
+		APP_LCD_PrintFormattedString(x_offset+w_max-359+i*23, y_offset+71, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%d", (i+1));
+	}
+#endif
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// periodically called for screen print
+/////////////////////////////////////////////////////////////////////////////
+static void TASK_ROM_Periodic(void *pvParameters)
+{
+	portTickType xLastExecutionTime;
+
+	// Initialise the xLastExecutionTime variable on task entry
+	xLastExecutionTime = xTaskGetTickCount();
+
+	while( 1 ) {
+		// wait for 80 mS
+		vTaskDelayUntil(&xLastExecutionTime, 80 / portTICK_RATE_MS);
+		// check for requested write
+		MIDIO_SYSEX_Cmd_WriteInfoRequest();
+		MIDIO_SYSEX_Cmd_WriteBlockRequest();
+	}
+}
+
+
+
+/////////////////////////////////////////////////////////////////////////////
+// prepares and prints the transfer window
+/////////////////////////////////////////////////////////////////////////////
+static void TFT_XferSlotInfoReceived(void)
+{
+	u8 xfer_bmp_array[xfer_bmp_size];
+	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
+
+	s8 bank_progress = MIDIO_SYSEX_Bank_Progression();
+	s16 height = xfer_bmp_height;
+	if(bank_progress>=0){
+		height = xfer_bmp_slot_height;
+	}
+	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, height, xfer_bmp_width, Is1BIT);
+
+	//memset(sysex_bmp.memory, 0x00, size);
+	u8 cmd = MIDIO_SYSEX_Cmd_Current();
+	u8 bank_slot = ((cmd==CMD_SLOT_WRITE_INFO) || (cmd==CMD_SLOT_READ_INFO))?1:0;
+	u8 read_write = ((cmd==CMD_SLOT_WRITE_INFO) || (cmd==CMD_BANK_WRITE_INFO))?1:0;
+	// prints messages in bitmap
+	if(bank_slot){
+		if(bank_progress>=0)
+			APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot# %u", MIDIO_SYSEX_Slot_Current()+1);
+		else APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 16, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u/Slot# %u", MIDIO_SYSEX_Bank_Current()+1, MIDIO_SYSEX_Slot_Current()+1);
+
+	}else
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 16, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u", MIDIO_SYSEX_Bank_Current()+1);
+
+	if(read_write)
+		APP_LCD_BitmapPrintString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), (bank_progress>=0)?23:36, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Info write ok.");
+	else
+		APP_LCD_BitmapPrintString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), (bank_progress>=0)?23:36, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Info read ok.");
+
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	APP_LCD_BColourSetRGB(0x7f3030);
+	for (int w=0; w<xfer_bmp_width;w++){
+		u8* bmp_mem_ptr = xfer_bmp.memory +w;
+		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, height, xfer_bmp_width, Is1BIT);
+		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
+	}
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+
+	if(bank_progress>=0){
+		for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;	// adds top line separation
+		mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width, Is1BIT);
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8-1, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u - %u%s", MIDIO_SYSEX_Bank_Current()+1, bank_progress, "%");
+		u8 r=0x7f-(40*bank_progress/100);u8 g=40*bank_progress/100;u8 b=40*bank_progress/100;
+		APP_LCD_PrintProgress(xfer_bmp, (u32)((r<<16)|(g<<8)|b), x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height+1, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width*bank_progress/100);
+		APP_LCD_DrawFastHLine(x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height, xfer_bmp_width, APP_LCD_DARKGREY);
+	}
+
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// prepares and prints the transfer window
+/////////////////////////////////////////////////////////////////////////////
+static void TFT_XferSlotProgress(u8 _progress)
+{
+	u8 xfer_bmp_array[xfer_bmp_size];
+	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
+
+	s8 bank_progress = MIDIO_SYSEX_Bank_Progression();
+	s16 height = xfer_bmp_height;
+	if(bank_progress>=0){
+		height = xfer_bmp_slot_height;
+	}
+	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, height, xfer_bmp_width, Is1BIT);
+
+	// prints messages in bitmap
+	if(bank_progress>=0){
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot# %u", MIDIO_SYSEX_Slot_Current()+1);
+	}else{
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 16, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u/Slot# %u", MIDIO_SYSEX_Bank_Current()+1, MIDIO_SYSEX_Slot_Current()+1);
+	}
+
+	if(MIDIO_SYSEX_Cmd_Current()==CMD_READ_BLOCK){
+		if(_progress==100)
+			APP_LCD_BitmapPrintString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), (bank_progress>=0)?23:36, 0, APP_LCD_STRING_ALIGN_CENTER, -32,  "ROM read.");
+		else APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), (bank_progress>=0)?23:36, 0, APP_LCD_STRING_ALIGN_CENTER, -32,  "%u%s", _progress, "% ...");
+
+	}else{
+		if(_progress==100)
+			APP_LCD_BitmapPrintString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), (bank_progress>=0)?23:36, 0, APP_LCD_STRING_ALIGN_CENTER, -32,  "ROM written.");
+		else APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), (bank_progress>=0)?23:36, 0, APP_LCD_STRING_ALIGN_CENTER, -32,  "%u%s", _progress, "% ...");
+
+	}
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+
+	if(_progress!=101){
+		//APP_LCD_FColourSet(APP_LCD_WHITE);
+		u8 r=0x7f-(40*_progress/100);u8 g=40*_progress/100;u8 b=40*_progress/100;
+		APP_LCD_PrintProgress(xfer_bmp, (u32)((r<<16)|(g<<8)|b), x_offset+w_max-2-xfer_bmp_width, y_offset+95, xfer_bmp_width, height, xfer_bmp_width*_progress/100);   // new
+	}else{
+		//APP_LCD_FColourSet(APP_LCD_RED);
+		  for (int w=0; w<xfer_bmp_width;w++){
+			  u8* bmp_mem_ptr = xfer_bmp.memory +w;
+			  mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_slot_height, height, Is1BIT);
+			  APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
+		  }
+	}
+
+	if(bank_progress>=0){
+		for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;	// adds top line separation
+		mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width, Is1BIT);
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8-1, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u - %u%s", MIDIO_SYSEX_Bank_Current()+1, bank_progress, "%");
+		u8 r=0x7f-(40*bank_progress/100);u8 g=40*bank_progress/100;u8 b=40*bank_progress/100;
+		APP_LCD_PrintProgress(xfer_bmp, (u32)((r<<16)|(g<<8)|b), x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height+1, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width*bank_progress/100);
+		APP_LCD_DrawFastHLine(x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height, xfer_bmp_width, APP_LCD_DARKGREY);
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// prepares and prints the transfer window
+/////////////////////////////////////////////////////////////////////////////
+static void TFT_Slotinfo(void)
+{
+#if 0
+	u8 xfer_bmp_array[xfer_bmp_size];
+	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
+	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_height, xfer_bmp_width, Is1BIT);
+	//memset(sysex_bmp.memory, 0x00, size);
+	s8 selected = -1;
+	for(int i=0; i<16; i++)if(tr5x6_decod_inst_sel &(1<<i)){selected = i; break;}
+	// prints messages in bitmap
+	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%d-%s", selected+1, tr5x6_slots[selected].name);
+	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot: %s/%s", tr5x6_slot_name[tr5x6_slots[selected].size], tr5x6_slot_duration[tr5x6_slots[selected].size]);
+	APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
+	APP_LCD_BColourSet(APP_LCD_RED);
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	//APP_LCD_FColourSet(APP_LCD_RED);
+	for (int w=0; w<xfer_bmp_width;w++){
+		u8* bmp_mem_ptr = xfer_bmp.memory +w;
+		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_height, xfer_bmp_width, Is1BIT);
+		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
+	}
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+#else
+
+	u8 xfer_bmp_array[xfer_bmp_size];
+	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
+	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_height, xfer_bmp_width, Is1BIT);
+	//memset(sysex_bmp.memory, 0x00, size);
+	s8 selected = -1;
+	for(int i=0; i<16; i++){
+		if(tr5x6_decod_inst_sel &(1<<i)){
+			selected = i;
+#if TR5X6_UNIT_SELECT==626
+			if(tr5x6_decod_inst_blk &(1<<i))selected += 16;
+#endif
+			break;
+		}
+	}
+
+	// prints messages in bitmap
+	char name[15];
+	memcpy(name, tr5x6_slots[selected].name, 14);
+	for(int i=1; i<14; i++)name[i]=toupper(name[i]);
+
+	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot# %d", selected+1);
+	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 27, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%s", name);
+	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 44, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Size: %s/%s", tr5x6_slot_name[tr5x6_slots[selected].size], tr5x6_slot_duration[tr5x6_slots[selected].size]);
+	APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
+	//APP_LCD_BColourSet(APP_LCD_RED);
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	//APP_LCD_FColourSet(APP_LCD_RED);
+	for (int w=0; w<xfer_bmp_width;w++){
+		u8* bmp_mem_ptr = xfer_bmp.memory +w;
+		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_height, xfer_bmp_width, Is1BIT);
+		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
+	}
+	//APP_LCD_BColourSet(APP_LCD_BLACK);
+#endif
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// prepares and prints the transfer window
+/////////////////////////////////////////////////////////////////////////////
+static void TFT_XferError(u8 _error)
+{
+	u8 xfer_bmp_array[xfer_bmp_size];
+	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
+	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_slot_height, xfer_bmp_width, Is1BIT);
+	//memset(sysex_bmp.memory, 0x00, size);
+
+	// prints messages in bitmap
+	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank%u/Slot%u", MIDIO_SYSEX_Bank_Current()+1, MIDIO_SYSEX_Slot_Current()+1);
+	APP_LCD_BitmapPrintString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Transfer Error!");
+	APP_LCD_FColourSet(APP_LCD_RED);
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	//APP_LCD_FColourSet(APP_LCD_RED);
+	for (int w=0; w<xfer_bmp_width;w++){
+		u8* bmp_mem_ptr = xfer_bmp.memory +w;
+		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_slot_height, xfer_bmp_width, Is1BIT);
+		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
+	}
+
+}
+
+#if TR5X6_UNIT_SELECT==626
+/////////////////////////////////////////////////////////////////////////////
+// prepares and prints the transfer window
+/////////////////////////////////////////////////////////////////////////////
+static void TFT_InstChange(u8 inst)
+{
+	u8 x=inst%8; u8 y=inst/8;
+	u8 bmp_array[45*3];
+	for(int i =0; i<(45*3); i++)bmp_array[i] = 0x00;
+	mios32_lcd_bitmap_t bmp = APP_LCD_BitmapInit((u8*)bmp_array, 45, 20, 45, Is1BIT);
+	//memset(sysex_bmp.memory, 0x00, size);
+
+	// prints messages in bitmap
+	//APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank%u/Slot%u", MIDIO_SYSEX_Bank_Current()+1, MIDIO_SYSEX_Slot_Current()+1);
+	//APP_LCD_BitmapPrintString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Transfer Error!");
+	if(tr5x6_decod_inst_blk &(1<<inst)){
+		inst +=16;
+	}
+	tr5x6_flash_info_t slot;
+	slot.bank=TR5X6_ROM_BankGet();
+	slot.slot=inst;
+	TR5X6_FLASH_SlotRead(&slot);
+	APP_LCD_FColourSetRGB(slot.color);
+	if(inst_grid_name)
+		APP_LCD_BitmapPrintFormattedString(bmp, 0, 22, 4, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%s", tr5x6_slots[inst].shortname);
+	else APP_LCD_BitmapPrintFormattedString(bmp, 0, 22, 4, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%d", (inst+1));
+
+	//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	//APP_LCD_FColourSet(APP_LCD_RED);
+	for (int w=0; w<45;w++){
+		u8* bmp_mem_ptr = bmp.memory +w;
+		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 20, 45, Is1BIT);
+		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-369+x*46+w, y_offset+95+(21*y));
+	}
+
+}
+#endif
+
+#if 0
+static void TFT_BankChange(u8 bank_num)
+{
+	u8 bmp_array[229*2];
+	for(int i =0; i<(229*2); i++)bmp_array[i] = 0x00;
+	mios32_lcd_bitmap_t bmp = APP_LCD_BitmapInit((u8*)bmp_array, 229, 16, 229, Is1BIT);
+	tr5x6_flash_info_t slot;
+	slot.bank=bank_num;
+	slot.slot=0;
+	TR5X6_FLASH_BankRead(&slot);
+	APP_LCD_FColourSetRGB(slot.color);
+	APP_LCD_BitmapPrintFormattedString(bmp, 0, 9, 3, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%d-%s", bank_num+1, slot.name);
+
+	//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	//APP_LCD_FColourSet(APP_LCD_RED);
+	for (int w=0; w<229;w++){
+		u8* bmp_mem_ptr = bmp.memory +w;
+		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 16, 229, Is1BIT);
+		APP_LCD_SendBitmap(bmp2print, x_offset+95+w, y_offset+141);
+	}
+
+}
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// periodically called for screen print
+/////////////////////////////////////////////////////////////////////////////
+static void TASK_TFT_Periodic(void *pvParameters)
+{
+	portTickType xLastExecutionTime;
+
+	// Initialise the xLastExecutionTime variable on task entry
+	xLastExecutionTime = xTaskGetTickCount();
+
+	while( 1 ) {
+		// wait for 40 mS
+		vTaskDelayUntil(&xLastExecutionTime, 40 / portTICK_RATE_MS);
+		if(!APP_LCD_IsReady())return;
+		if(first_start)APP_TFT_Background();	// prints the background
+		if(normal_start){
+
+
+			u8 newId_flag=0;
+
+
+#if 0
+			// button testing
+			if(tr5x6_decod_buttons_flags.ALL){
+				if(tr5x6_decod_buttons_flags.dec)
+					APP_LCD_PrintString(x_offset+104, y_offset+144, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "DEC");
+				else if(tr5x6_decod_buttons_flags.inc)
+					APP_LCD_PrintString(x_offset+104, y_offset+144, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "INC");
+				else if(tr5x6_decod_buttons_flags.inst)
+									APP_LCD_PrintString(x_offset+104, y_offset+144, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "INST");
+				else if(tr5x6_decod_buttons_flags.last)
+									APP_LCD_PrintString(x_offset+104, y_offset+144, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "LAST");
+
+				tr5x6_decod_buttons_flags.ALL=0;
+			}
+												    
+#endif	
+
+
+#if TR5X6_UNIT_SELECT==505
+			// look for sound bank change inhibit
+			if(tr5x6_decod_labels.grp_pat){
+				bank_change_inhibit=0;
+			}else{
+				bank_change_inhibit=1;
+			}
+			
+			// Catch the Basic Channel of the unit(Sysex Device ID).
+			//if(tr5x6_decod_digits_flags){
+			if((tr5x6_decod_digits[1]==0x60) && (tr5x6_decod_digits[2]==0x64) && (tr5x6_decod_digits[3]==0x72)){
+				u8 devId = 0;
+				if((tr5x6_decod_digits[4]==0x00) || (tr5x6_decod_digits[4]==0x03)){
+					if(tr5x6_decod_digits[4]==0x03)devId += 10;
+					switch(tr5x6_decod_digits[5]){
+					case 0x03: devId += 1; break;
+					case 0x6d: devId += 2; break;
+					case 0x2f: devId += 3; break;
+					case 0x33: devId += 4; break;
+					case 0x3e: devId += 5; break;
+					case 0x7e: devId += 6; break;
+					case 0x0b: devId += 7; break;
+					case 0x7f: devId += 8; break;
+					case 0x3f: devId += 9; break;
+					}
+					devId --;
+					if(newID_old!=devId){
+						newID_cnt=0;
+						tr5x6_decod_digits_flags=0x3e;
+						newID_old=devId;
+					}
+					if((newID_cnt++)>50){
+						newID_cnt=51;
+						if(MIOS32_MIDI_DeviceIDGet()!=devId){
+							MIOS32_MIDI_DeviceIDSet(devId);
+							// BSL_ID_Update();
+						}
+
+					}
+					if(MIOS32_MIDI_DeviceIDGet()==devId)newId_flag=1;
+				}
+			}else{
+				if(newID_cnt){
+					newID_cnt=0;
+					newId_flag=0;
+					tr5x6_decod_digits_flags=0x3e;
+				}
+
+			}
+			
+			// All Digits
+			for(int i=0;i<6;i++){
+				if( (tr5x6_decod_digits_flags & (1<<i)) || newId_flag ){
+					tr5x6_decod_digits_flags &= ~(1<<i);     
+					APP_LCD_Digits_draw(tr5x6_decod_digits[i], x_offset + tr5x6_decod_digits_pos[i], y_offset+197, 1, ((i>0) && newId_flag)?APP_LCD_GREEN:APP_LCD_WHITE, APP_LCD_BLACK);
+				}
+			}
+			
+			// beat flag
+			if(beat_flag){
+				if(beat_enabled)
+					APP_LCD_DrawFastBeat(x_offset+w_max+5-(6*23),  y_offset+145, beat_color);
+				else
+					APP_LCD_DrawFastBeat(x_offset+w_max+5-(6*23),  y_offset+145, APP_LCD_BLACK);
+				beat_flag=0;
+			}
+			
+			// font/color Init!
+			APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+
+			// Bank select
+			if( (tr5x6_decod_buttons_flags.inc & tr5x6_decod_buttons.inc) || (tr5x6_decod_buttons_flags.dec & tr5x6_decod_buttons.dec) || first_start || tr5x6_sysex_bank_info_refresh ){
+				if(!bank_change_inhibit){
+					//APP_LCD_Rectangle(x_offset+95, y_offset+137, (10*23)-1, 23, 0, 0, 1, 0);
+					u8 bank_num = TR5X6_ROM_BankGet();
+					if((tr5x6_decod_buttons_flags.inc==1) && (tr5x6_decod_buttons.inc==1) ){
+						bank_num +=1;
+						bank_num &=(TR5X6_BANK_NUM-1);
+						TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
+					}else if((tr5x6_decod_buttons_flags.dec==1) && (tr5x6_decod_buttons.dec==1) ){
+						bank_num -=1;
+						bank_num &=(TR5X6_BANK_NUM-1);
+						TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
+					}
+
+					bank_changed=1;
+					tr5x6_flash_info_t slot;
+					slot.bank=bank_num;
+					slot.slot=0;
+					TR5X6_FLASH_BankRead(&slot);
+					APP_LCD_FColourSetRGB(slot.color);
+					APP_LCD_PrintFormattedString(x_offset+104, y_offset+144, (10*23)-10, APP_LCD_STRING_ALIGN_LEFT, -32, "%d-%s", bank_num+1, slot.name);
+				}
+				tr5x6_decod_buttons_flags.ALL=0;
+				tr5x6_sysex_bank_info_refresh = 0;
+				if(first_start)bank_changed=0;
+				first_start=0;
+			}
+
+
+			// Instruments select
+			if(tr5x6_xfer_state.FLAG){
+
+				if(tr5x6_xfer_state.FLAG_INFO){
+					tr5x6_xfer_state.FLAG_INFO=0;
+					xfer_flag=0;
+					TFT_XferSlotInfoReceived();
+					xfer_delay=0;
+					//MIOS32_MIDI_SendDebugMessage("Info\n");
+					//xfer_time_out=1000;
+				}else if(tr5x6_xfer_state.FLAG_BEGIN){
+					tr5x6_xfer_state.FLAG_BEGIN=0;
+					xfer_flag=0;
+					TFT_XferSlotProgress(0);
+					xfer_delay=0;
+					//MIOS32_MIDI_SendDebugMessage("Begin\n");
+					//xfer_time_out=1000;
+
+				}else if(tr5x6_xfer_state.FLAG_CONT){
+					tr5x6_xfer_state.FLAG_CONT=0;
+					xfer_flag=0;
+					TFT_XferSlotProgress(MIDIO_SYSEX_Slot_Progression());
+					xfer_delay=0;
+					//MIOS32_MIDI_SendDebugMessage("get progress %u \n",MIDIO_SYSEX_BlockProgression() );
+					//xfer_time_out=1000;
+				}else if(tr5x6_xfer_state.FLAG_END){
+					tr5x6_xfer_state.FLAG_END=0;
+					///xfer_time_out=-1;
+					//MIOS32_MIDI_SendDebugMessage("End detected\n");
+					xfer_flag=0;
+					if(tr5x6_xfer_state.STAT==XFER_INFO){
+						xfer_delay=16;
+						// slot info received messsage
+					}
+					else if(tr5x6_xfer_state.STAT==XFER_CONT){
+						xfer_delay=16;
+						TFT_XferSlotProgress(MIDIO_SYSEX_Slot_Progression());
+					}
+					else xfer_delay=0;
+					tr5x6_decod_inst_acc_flags=tr5x6_decod_inst_acc;
+					tr5x6_xfer_state.STAT=XFER_END;
+				}else if(tr5x6_xfer_state.FLAG_ERROR){
+					tr5x6_xfer_state.FLAG_ERROR=0;
+					//xfer_time_out=-1;
+					//MIOS32_MIDI_SendDebugMessage("xfer error\n");
+					xfer_flag=0;
+					TFT_XferError(0);	// default error, toDo: Error handling
+					tr5x6_decod_inst_acc_flags=tr5x6_decod_inst_acc;
+					xfer_delay=40;
+				}
+
+			}
+			
+			if( ((tr5x6_xfer_state.STAT==XFER_END) || (tr5x6_xfer_state.STAT==XFER_ERROR)) && (xfer_delay>0) ){
+				xfer_delay--;
+				//MIOS32_MIDI_SendDebugMessage("delay end %u\n", xfer_delay);
+				if(xfer_delay==0){
+					tr5x6_xfer_state.STAT=XFER_IDLE;
+					xfer_flag=1;
+				}
+			}
+			
+			if( (xfer_delay==0) && (tr5x6_xfer_state.STAT==XFER_IDLE) ){
+				//if( (tr5x6_xfer_state.STAT<=XFER_END) && xfer_flag){
+				//	APP_LCD_Rectangle(x_offset+w_max-4-xfer_bmp_width, y_offset+95, xfer_bmp_width, 40, 0, 0, 1, APP_LCD_BLACK);
+				//}
+				if(((tr5x6_decod_inst_acc_flags&0x1) & (tr5x6_decod_inst_acc&0x1))  || ((tr5x6_decod_inst_acc&0x1) && xfer_flag)){
+					xfer_flag = 0;
+					if(!bank_changed){
+						APP_LCD_Rectangle(x_offset+w_max-4-xfer_bmp_width, y_offset+95, xfer_bmp_width, 40, 0, 0, 1, APP_LCD_BLACK);
+					}
+				}else if(((((tr5x6_decod_inst_acc_flags&0x2) & (tr5x6_decod_inst_acc&0x2)) ||
+									(tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel)) && (!bank_changed)) || ((tr5x6_decod_inst_acc&0x2) && xfer_flag)){
+					xfer_flag = 0;
+					TFT_Slotinfo();
+				}
+			}
+
+			if( (tr5x6_decod_inst_acc_flags&0x1) & (tr5x6_decod_inst_acc&0x1) ){
+				APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+				APP_LCD_PrintString(x_offset+104, y_offset+111, 11*23-10, APP_LCD_STRING_ALIGN_LEFT, -32, "ACCENT");
+			}else if(((tr5x6_decod_inst_acc_flags&0x2) & (tr5x6_decod_inst_acc&0x2)) ||
+					(tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel) || bank_changed){
+				//APP_LCD_Rectangle(x_offset+100, y_offset+96, 360, 40, 0, 0, 1, 0);
+				for(int i=0; i<16; i++){
+					if(tr5x6_decod_inst_sel &(1<<i)){
+
+						//APP_LCD_BColourSet(APP_LCD_RED);
+						APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+						tr5x6_flash_info_t slot;
+						slot.bank=TR5X6_ROM_BankGet();
+						slot.slot=i;
+						TR5X6_FLASH_SlotRead(&slot);
+						APP_LCD_FColourSetRGB(slot.color);
+						APP_LCD_PrintFormattedString(x_offset+104, y_offset+111, 11*23-10, APP_LCD_STRING_ALIGN_LEFT, -32, "%d-%s", i+1, slot.name);
+
+
+						//APP_LCD_BColourSet(APP_LCD_BLACK);
+						break;
+
+					}
+				}
+
+			}
+			bank_changed = 0;
+			tr5x6_decod_inst_acc_flags=0;
+			tr5x6_decod_inst_sel_flags = 0x0000;
+
+
+
+			APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			// last step/ dot steps
+			for(int i=0; i<16; i++){
+				if(tr5x6_decod_last_step_flags &(1<<i)){
+					if(tr5x6_decod_last_step &(1<<i))APP_LCD_FColourSet(APP_LCD_WHITE);
+					else APP_LCD_FColourSet(APP_LCD_DARKGREY);
+					APP_LCD_PrintFormattedString(x_offset+w_max-358+i*23, y_offset+71, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%d", (i+1));
+				}
+				if(tr5x6_decod_step_dots_flags &(1<<i) || tr5x6_decod_last_step_flags &(1<<i)){
+					APP_LCD_DrawFastBall(x_offset+w_max-364+i*23, y_offset+46, (tr5x6_decod_step_dots &(1<<i))?((tr5x6_decod_last_step &(1<<i))?APP_LCD_WHITE:APP_LCD_DARKGREY):APP_LCD_BLACK);
+				}
+			}
+			tr5x6_decod_last_step_flags = 0x0000;
+			tr5x6_decod_step_dots_flags = 0x0000;
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			// Scale
+			if(tr5x6_decod_scale_flag){
+				tr5x6_decod_scale_flag=0;
+				u16 w = 16*23-1;
+				u16 scale_y_offset=y_offset +8;
+
+				switch(tr5x6_decod_scale){
+				case 0x00:
+				case 0x02:
+				case 0x07:
+				case 0x0e:
+					APP_LCD_Rectangle(x_offset+w_max-w, scale_y_offset, w-2, 23, 0, 0, 1, 0);
+					break;
+				default:
+				}
+				switch(tr5x6_decod_scale){
+				case 0x00:
+					APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "  1/32  ");
+					break;
+				case 0x02:
+					APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "  1/16  ");
+					break;
+				case 0x07:
+					APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "1/32T");
+					break;
+				case 0x0e:
+					APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "1/16T");
+					break;
+				default:
+				}
+				switch(tr5x6_decod_scale){
+				case 0x02:
+					APP_LCD_DrawFastVLine(x_offset+w_max-4*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-4*23+7, scale_y_offset+18, APP_LCD_WHITE);
+					APP_LCD_DrawFastVLine(x_offset+w_max-12*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-12*23+7, scale_y_offset+18, APP_LCD_WHITE);
+				case 0x00:
+					APP_LCD_DrawFastVLine(x_offset+w_max-8*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-8*23+7, scale_y_offset+18, APP_LCD_WHITE);
+					APP_LCD_DrawFastVLine(x_offset+w_max-16*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-16*23+7, scale_y_offset+18, APP_LCD_WHITE);
+					break;
+				case 0x07:
+					for(int i=0; i<2; i++){
+						APP_LCD_DrawPixel(x_offset+w_max-(10+i*6)*23+6, scale_y_offset+1, APP_LCD_WHITE);
+						APP_LCD_DrawFastHLine(x_offset+w_max-(10+i*6)*23+7, scale_y_offset, 6*23-13, APP_LCD_WHITE);
+						APP_LCD_DrawPixel(x_offset+w_max-(4+i*6)*23-6, scale_y_offset+1, APP_LCD_WHITE);
+					}
+					APP_LCD_DrawPixel(x_offset+w_max-4*23+6, scale_y_offset+1, APP_LCD_WHITE);
+					APP_LCD_DrawFastHLine(x_offset+w_max-4*23+7, scale_y_offset, 4*23-13, APP_LCD_WHITE);
+					for(int i=1; i<=8; i++){
+						APP_LCD_DrawFastCroche(x_offset+w_max-i*46+11, scale_y_offset+5, APP_LCD_WHITE);
+						APP_LCD_DrawFastVLine(x_offset+w_max-i*46+10, scale_y_offset+5, 13, APP_LCD_WHITE);
+						APP_LCD_DrawFastNoire(x_offset+w_max-i*46+6, scale_y_offset+18, APP_LCD_WHITE);
+					}
+
+					break;
+				case 0x0e:
+					for(int i=0; i<5; i++){
+						APP_LCD_DrawPixel(x_offset+w_max-(4+i*3)*23+6, scale_y_offset+1, APP_LCD_WHITE);
+						APP_LCD_DrawFastHLine(x_offset+w_max-(4+i*3)*23+7, scale_y_offset, 3*23-13, APP_LCD_WHITE);
+						APP_LCD_DrawPixel(x_offset+w_max-(1+i*3)*23-6, scale_y_offset+1, APP_LCD_WHITE);
+					}
+					APP_LCD_DrawPixel(x_offset+w_max-1*23+6, scale_y_offset+1, APP_LCD_WHITE);
+					APP_LCD_DrawFastHLine(x_offset+w_max-1*23+7, scale_y_offset, 1*23-13, APP_LCD_WHITE);
+					for(int i=1; i<=16; i++){
+						APP_LCD_DrawFastCroche(x_offset+w_max-i*23+11, scale_y_offset+5, APP_LCD_WHITE);
+						APP_LCD_DrawFastVLine(x_offset+w_max-i*23+10, scale_y_offset+5, 13, APP_LCD_WHITE);
+						APP_LCD_DrawFastNoire(x_offset+w_max-i*23+6, scale_y_offset+18, APP_LCD_WHITE);
+					}
+
+					break;
+				default:
+					break;
+				}
+			}
+			// Labels
+			//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+			if(tr5x6_decod_labels_flags.tempo || tr5x6_decod_labels_flags.measure){
+				APP_LCD_Rectangle(x_offset+93, y_offset+173, 58, 10, 0, 0, 1, 0);
+				if(tr5x6_decod_labels.tempo)
+					APP_LCD_PrintString(x_offset+122, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TEMPO");
+				if(tr5x6_decod_labels.measure)
+					APP_LCD_PrintString(x_offset+122, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MEASURE");
+			}
+			if(tr5x6_decod_labels_flags.grp_pat || tr5x6_decod_labels_flags.level){
+				APP_LCD_Rectangle(x_offset+202, y_offset+173, 107, 10, 0, 0, 1, 0);
+				if(tr5x6_decod_labels.grp_pat){
+					APP_LCD_PrintString(x_offset+202, y_offset+173, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "GROUP");
+					APP_LCD_PrintString(x_offset+309, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "PATTERN");}
+				if(tr5x6_decod_labels.level)
+					APP_LCD_PrintString(x_offset+309, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "LEVEL");
+			}
+			if(tr5x6_decod_labels_flags.sync){
+				if(tr5x6_decod_labels.sync)
+					APP_LCD_PrintString(x_offset+122, y_offset+262, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MIDI  SYNC");
+				else APP_LCD_Rectangle(x_offset+82, y_offset+262, 80, 10, 0, 0, 1, 0);
+			}
+			if(tr5x6_decod_labels_flags.chain){
+				if(tr5x6_decod_labels.chain)
+					APP_LCD_PrintString(x_offset+232, y_offset+262, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "CHAIN");
+				else APP_LCD_Rectangle(x_offset+212, y_offset+262, 40, 10, 0, 0, 1, 0);
+			}
+			if(tr5x6_decod_labels_flags.block){
+				if(tr5x6_decod_labels.block)
+					APP_LCD_PrintString(x_offset+278, y_offset+262, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "BLOCK");
+				else APP_LCD_Rectangle(x_offset+258, y_offset+262, 40, 10, 0, 0, 1, 0);
+			}
+			tr5x6_decod_labels_flags.ALL = 0;
+			// Mode
+#ifndef REDUCED_APP_LCD
+			APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+			if(tr5x6_decod_mode_flag){
+				tr5x6_decod_mode_flag=0;
+				switch(tr5x6_decod_mode){
+				case 0x01:
+				case 0x02:
+				case 0x04:
+				case 0x08:
+				case 0x10:
+					APP_LCD_Rectangle(x_offset+355, y_offset+200, 76, 16, 0, 0, 1, 0);
+					APP_LCD_Rectangle(x_offset+368, y_offset+217, 51, 16, 0, 0, 1, 0);
+					break;
+				default:
+					break;
+				}
+				switch(tr5x6_decod_mode){
+				case 0x01:
+					APP_LCD_PrintString(x_offset+393, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
+					APP_LCD_PrintString(x_offset+393, y_offset+218, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PLAY");
+					break;
+				case 0x02:
+					APP_LCD_PrintString(x_offset+393, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PATTERN");
+					APP_LCD_PrintString(x_offset+393, y_offset+218, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PLAY");
+					break;
+				case 0x04:
+					APP_LCD_PrintString(x_offset+393, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
+					APP_LCD_PrintString(x_offset+393, y_offset+218, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "WRITE");
+					break;
+				case 0x08:
+					APP_LCD_PrintString(x_offset+393, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "STEP");
+					APP_LCD_PrintString(x_offset+393, y_offset+218, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "WRITE");
+					break;
+				case 0x10:
+					APP_LCD_PrintString(x_offset+393, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TAP");
+					APP_LCD_PrintString(x_offset+393, y_offset+218, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "WRITE");
+					break;
+				default:
+					break;
+				}
+			}
+			// Group
+			if(tr5x6_decod_group_flag){
+				tr5x6_decod_group_flag=0;
+				switch(tr5x6_decod_group){
+				case 0x01:
+					APP_LCD_PrintString(x_offset+221, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "A");
+					break;
+				case 0x02:
+					APP_LCD_PrintString(x_offset+221, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "B");
+					break;
+				case 0x04:
+					APP_LCD_PrintString(x_offset+221, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "C");
+					break;
+				case 0x08:
+					APP_LCD_PrintString(x_offset+221, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "D");
+					break;
+				case 0x10:
+					APP_LCD_PrintString(x_offset+221, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "E");
+					break;
+				case 0x20:
+					APP_LCD_PrintString(x_offset+221, y_offset+201, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "F");
+					break;
+				default:
+					APP_LCD_Rectangle(x_offset+212, y_offset+200, 20, 13, 0, 0, 1, 0);
+					break;
+				}
+			}
+#endif
+			// MIDI activity
+			u8 act=(MIOS32_UART_RXTX_Act() & 0x5) | (MIDIO_SYSEX_Act() & 0x2);
+			if(act&0x01)APP_LCD_Rectangle(x_offset+335, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			else APP_LCD_Rectangle(x_offset+335, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
+			if(act&0x04)APP_LCD_Rectangle(x_offset+441, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			else APP_LCD_Rectangle(x_offset+441, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
+			if(act&0x02)APP_LCD_Rectangle(x_offset+441, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			else APP_LCD_Rectangle(x_offset+441, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
+
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			
+			
+			
+#else // TR5X6_UNIT_SELECT==626
+			// look for sound bank change inhibit
+			if(tr5x6_decod_labels.measure || tr5x6_decod_labels.tempo){
+				bank_change_inhibit=0;
+			}else{
+				bank_change_inhibit=1;
+			}
+
+			// All Digits
+			for(int i=0;i<7;i++){
+				if( (tr5x6_decod_digits_flags & (1<<i)) || newId_flag ){
+					tr5x6_decod_digits_flags &= ~(1<<i);
+#if 0
+					if((i==0) && (tr5x6_decod_digits[0]!= 0x03)){
+					//	normal_start=0;
+						for(int j =0;j<32;j++)
+						MIOS32_MIDI_SendDebugMessage("digit#%d=x%02x\n",j, tr5x6_decod_segments[j]);
+					}
+#endif
+					APP_LCD_Digits_draw(tr5x6_decod_digits[i], x_offset + tr5x6_decod_digits_pos[i], y_offset+197, 1, ((i>0) && newId_flag)?APP_LCD_GREEN:APP_LCD_WHITE, APP_LCD_BLACK);
+				}
+			}
+
+			// beat flag
+			if(beat_flag){
+				if(beat_enabled)
+					APP_LCD_DrawFastBeat(x_offset+w_max+5-(6*23),  y_offset+145, beat_color);
+																      
+				else
+					APP_LCD_DrawFastBeat(x_offset+w_max+5-(6*23),  y_offset+145, APP_LCD_BLACK);
+				beat_flag=0;
+			}
+			
+			APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			// Bank select
+			if( (tr5x6_decod_buttons.inst && ((tr5x6_decod_buttons_flags.inc & tr5x6_decod_buttons.inc) || (tr5x6_decod_buttons_flags.dec & tr5x6_decod_buttons.dec)))
+					|| first_start || tr5x6_sysex_bank_info_refresh ){
+
+#if 1
+				u8 bank_num = TR5X6_ROM_BankGet();
+				if((tr5x6_decod_buttons_flags.inc==1) && (tr5x6_decod_buttons.inc==1) ){
+					bank_num +=1;
+					bank_num &=(TR5X6_BANK_NUM-1);
+					TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
+				}else if((tr5x6_decod_buttons_flags.dec==1) && (tr5x6_decod_buttons.dec==1) ){
+					bank_num -=1;
+					bank_num &=(TR5X6_BANK_NUM-1);
+					TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
+				}
+
+				bank_changed=1;
+				tr5x6_flash_info_t slot;
+				slot.bank=bank_num;
+				slot.slot=0;
+				TR5X6_FLASH_BankRead(&slot);
+				APP_LCD_FColourSetRGB(slot.color);
+				APP_LCD_PrintFormattedString(x_offset+104, y_offset+144, (10*23)-10, APP_LCD_STRING_ALIGN_LEFT, -32, "%d-%s", bank_num+1, slot.name);
+#else
+				//if(!bank_change_inhibit){
+					u8 bank_num = TR5X6_ROM_BankGet();
+					if((tr5x6_decod_buttons_flags.inc==1) && (tr5x6_decod_buttons.inc==1) ){
+						bank_num +=1;
+						bank_num &=(TR5X6_BANK_NUM-1);
+						TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
+					}else if((tr5x6_decod_buttons_flags.dec==1) && (tr5x6_decod_buttons.dec==1) ){
+						bank_num -=1;
+						bank_num &=(TR5X6_BANK_NUM-1);
+						TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
+					}
+
+					bank_changed=1;
+					TFT_BankChange(bank_num);
+
+#endif
+				//}
+			}
+			tr5x6_decod_buttons_flags.inc=0;
+			tr5x6_decod_buttons_flags.dec=0;
+			tr5x6_sysex_bank_info_refresh = 0;
+			if(first_start)bank_changed=0;
+			first_start=0;
+
+			// How much instruments shown
+			u8 num_sel=0;
+			for(int i=0; i<16; i++)if(tr5x6_decod_inst_sel & (1<<i))num_sel++;
+
+			// prints Inst Change grid
+			if(num_sel==16){
+				if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst )inst_grid_name ^=0xff;
+				if( tr5x6_decod_inst_sel_flags || tr5x6_decod_inst_blk_flags || (tr5x6_decod_buttons_flags.inst && inst_change_exit)){
+					if(!inst_change_exit){
+						APP_LCD_Rectangle(x_offset+95, y_offset+95, 367, 41, 0, 0, 1, 0);
+						for(int i=1; i<8; i++)APP_LCD_DrawFastVLine(x_offset+w_max-2-i*46, y_offset+95, 41, APP_LCD_DARKGREY);
+						APP_LCD_DrawFastHLine(x_offset+95, y_offset+115, 367, APP_LCD_DARKGREY);
+						APP_LCD_DrawFastHLine(x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height, xfer_bmp_width, APP_LCD_DARKGREY);
+						for(int i=0; i<16; i++){
+							u8 x=i%8; u8 y=i/8;
+							TFT_InstChange(i);
+							if(tr5x6_decod_inst_blk &(1<<i)){
+								//inst_num +=16;
+								APP_LCD_DrawFastCorner(x_offset+w_max-369+x*46, y_offset+107+(21*y), APP_LCD_WHITE);
+							}
+						}
+					}else{
+						if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst ){
+							for(int i=0; i<16; i++){
+								u8 x=i%8; u8 y=i/8;
+								TFT_InstChange(i);
+								if( tr5x6_decod_inst_blk &(1<<i) ){
+									APP_LCD_DrawFastCorner(x_offset+w_max-369+x*46, y_offset+107+(21*y), APP_LCD_WHITE);
+								}
+							}
+						}else{
+							for(int i=0; i<16; i++){
+								u8 x=i%8; u8 y=i/8;
+								if( tr5x6_decod_inst_blk_flags &(1<<i) ){
+									TFT_InstChange(i);
+									if( tr5x6_decod_inst_blk &(1<<i) ){
+										//inst_num +=16;
+										APP_LCD_DrawFastCorner(x_offset+w_max-369+x*46, y_offset+107+(21*y), APP_LCD_WHITE);
+									}
+									break;
+								}
+							}
+						}
+					}
+				}	
+				inst_change_exit = 1;
+				tr5x6_decod_buttons_flags.inst=0;
+			// Instruments select
+			} else if(num_sel==1){
+				if(inst_change_exit){
+					inst_grid_shown=0;
+					inst_change_exit=0;
+					tr5x6_decod_inst_sel_flags=tr5x6_decod_inst_sel;
+					APP_LCD_Rectangle(x_offset+95, y_offset+95, 367, 41, 0, 0, 1, 0);
+					APP_LCD_DrawFastVLine(x_offset+w_max-(5*23)-2, y_offset+95,  69, APP_LCD_DARKGREY);
+				}
+				if(tr5x6_xfer_state.FLAG){
+
+					if(tr5x6_xfer_state.FLAG_INFO){
+						tr5x6_xfer_state.FLAG_INFO=0;
+						xfer_flag=0;
+						TFT_XferSlotInfoReceived();
+						xfer_delay=0;
+						//MIOS32_MIDI_SendDebugMessage("Info\n");
+						//xfer_time_out=1000;
+					}else if(tr5x6_xfer_state.FLAG_BEGIN){
+						tr5x6_xfer_state.FLAG_BEGIN=0;
+						xfer_flag=0;
+						TFT_XferSlotProgress(0);
+						xfer_delay=0;
+						//MIOS32_MIDI_SendDebugMessage("Begin\n");
+						//xfer_time_out=1000;
+
+					}else if(tr5x6_xfer_state.FLAG_CONT){
+						tr5x6_xfer_state.FLAG_CONT=0;
+						xfer_flag=0;
+						TFT_XferSlotProgress(MIDIO_SYSEX_Slot_Progression());
+						xfer_delay=0;
+						//MIOS32_MIDI_SendDebugMessage("get progress %u \n",MIDIO_SYSEX_BlockProgression() );
+						//xfer_time_out=1000;
+					}else if(tr5x6_xfer_state.FLAG_END){
+						tr5x6_xfer_state.FLAG_END=0;
+						///xfer_time_out=-1;
+						//MIOS32_MIDI_SendDebugMessage("End detected\n");
+						xfer_flag=0;
+						if(tr5x6_xfer_state.STAT==XFER_INFO){
+							xfer_delay=16;
+							// slot info received messsage
+						}
+						else if(tr5x6_xfer_state.STAT==XFER_CONT){
+							xfer_delay=16;
+							TFT_XferSlotProgress(MIDIO_SYSEX_Slot_Progression());
+						}
+						else xfer_delay=0;
+						tr5x6_decod_inst_sel_flags=tr5x6_decod_inst_sel;
+						tr5x6_xfer_state.STAT=XFER_END;
+					}else if(tr5x6_xfer_state.FLAG_ERROR){
+						tr5x6_xfer_state.FLAG_ERROR=0;
+						//xfer_time_out=-1;
+						//MIOS32_MIDI_SendDebugMessage("xfer error\n");
+						xfer_flag=0;
+						TFT_XferError(0);	// default error, toDo: Error handling
+						tr5x6_decod_inst_sel_flags=tr5x6_decod_inst_sel;
+						xfer_delay=40;
+					}
+
+				}
+				
+				if( ((tr5x6_xfer_state.STAT==XFER_END) || (tr5x6_xfer_state.STAT==XFER_ERROR)) && (xfer_delay>0) ){
+					xfer_delay--;
+					//MIOS32_MIDI_SendDebugMessage("delay end %u\n", xfer_delay);
+					if(xfer_delay==0){
+						tr5x6_xfer_state.STAT=XFER_IDLE;
+						xfer_flag=1;
+					}
+				}
+				
+				if( (xfer_delay==0) && (tr5x6_xfer_state.STAT==XFER_IDLE) ){
+					//if( (tr5x6_xfer_state.STAT<=XFER_END) && xfer_flag){
+					//	APP_LCD_Rectangle(x_offset+w_max-4-xfer_bmp_width, y_offset+95, xfer_bmp_width, 40, 0, 0, 1, APP_LCD_BLACK);
+					//}
+					if( (((tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel) || (tr5x6_decod_inst_blk_flags & tr5x6_decod_inst_blk))  && (!bank_changed)) || xfer_flag ){
+						xfer_flag = 0;
+						TFT_Slotinfo();
+					}
+				}
+
+				if( ((tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel) || (tr5x6_decod_inst_blk_flags & tr5x6_decod_inst_blk))  || bank_changed){
+					//APP_LCD_Rectangle(x_offset+100, y_offset+96, 360, 40, 0, 0, 1, 0);
+					for(int i=0; i<16; i++){
+						u8 inst_num = i;
+						if(tr5x6_decod_inst_sel &(1<<i)){
+							if(tr5x6_decod_inst_blk &(1<<i))inst_num +=16;
+							//APP_LCD_BColourSet(APP_LCD_RED);
+							APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+							tr5x6_flash_info_t slot;
+							slot.bank=TR5X6_ROM_BankGet();
+							slot.slot=inst_num;
+							TR5X6_FLASH_SlotRead(&slot);
+							APP_LCD_FColourSetRGB(slot.color);
+							APP_LCD_PrintFormattedString(x_offset+104, y_offset+111, 11*23-10, APP_LCD_STRING_ALIGN_LEFT, -32, "%d-%s", inst_num+1, slot.name);
+
+
+							//APP_LCD_BColourSet(APP_LCD_BLACK);
+							break;
+
+						}
+					}
+
+				}
+			}
+			bank_changed = 0;
+			tr5x6_decod_inst_sel_flags=0;
+			tr5x6_decod_inst_blk_flags=0;
+
+
+			APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			// last step/ dot steps
+			for(int i=0; i<16; i++){
+				if(tr5x6_decod_last_step_flags &(1<<i)){
+					if(tr5x6_decod_last_step &(1<<i))APP_LCD_FColourSet(APP_LCD_WHITE);
+					else APP_LCD_FColourSet(APP_LCD_DARKGREY);
+					APP_LCD_PrintFormattedString(x_offset+w_max-358+i*23, y_offset+71, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%d", (i+1));
+				}
+				if(tr5x6_decod_step_dots_flags &(1<<i) || tr5x6_decod_last_step_flags &(1<<i)){
+					APP_LCD_DrawFastBall(x_offset+w_max-364+i*23, y_offset+46, (tr5x6_decod_step_dots &(1<<i))?((tr5x6_decod_last_step &(1<<i))?APP_LCD_WHITE:APP_LCD_DARKGREY):APP_LCD_BLACK);
+				}
+			}
+			tr5x6_decod_last_step_flags = 0x0000;
+			tr5x6_decod_step_dots_flags = 0x0000;
+
+			// Scale
+			if(tr5x6_decod_scale_flag){
+				tr5x6_decod_scale_flag=0;
+				u16 w = 16*23-1;
+				u16 scale_y_offset=y_offset +8;
+
+				switch(tr5x6_decod_scale){
+				case 0x00:
+				case 0x02:
+				case 0x07:
+				case 0x0e:
+					APP_LCD_Rectangle(x_offset+w_max-w, scale_y_offset, w-2, 23, 0, 0, 1, 0);
+					break;
+				default:
+				}
+
+				switch(tr5x6_decod_scale){
+				case 0x00:
+					APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "  1/32  ");
+					break;
+				case 0x02:
+					APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "  1/16  ");
+					break;
+				case 0x07:
+					APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "1/32T");
+					break;
+				case 0x0e:
+					APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "1/16T");
+					break;
+				default:
+				}
+				switch(tr5x6_decod_scale){
+				case 0x02:
+					APP_LCD_DrawFastVLine(x_offset+w_max-4*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-4*23+7, scale_y_offset+18, APP_LCD_WHITE);
+					APP_LCD_DrawFastVLine(x_offset+w_max-12*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-12*23+7, scale_y_offset+18, APP_LCD_WHITE);
+				case 0x00:
+					APP_LCD_DrawFastVLine(x_offset+w_max-8*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-8*23+7, scale_y_offset+18, APP_LCD_WHITE);
+					APP_LCD_DrawFastVLine(x_offset+w_max-16*23+11, scale_y_offset+5, 13, APP_LCD_WHITE);
+					APP_LCD_DrawFastNoire(x_offset+w_max-16*23+7, scale_y_offset+18, APP_LCD_WHITE);
+					break;
+				case 0x07:
+					for(int i=0; i<2; i++){
+						APP_LCD_DrawPixel(x_offset+w_max-(10+i*6)*23+6, scale_y_offset+1, APP_LCD_WHITE);
+						APP_LCD_DrawFastHLine(x_offset+w_max-(10+i*6)*23+7, scale_y_offset, 6*23-13, APP_LCD_WHITE);
+						APP_LCD_DrawPixel(x_offset+w_max-(4+i*6)*23-6, scale_y_offset+1, APP_LCD_WHITE);
+					}
+					APP_LCD_DrawPixel(x_offset+w_max-4*23+6, scale_y_offset+1, APP_LCD_WHITE);
+					APP_LCD_DrawFastHLine(x_offset+w_max-4*23+7, scale_y_offset, 4*23-13, APP_LCD_WHITE);
+					for(int i=1; i<=8; i++){
+						APP_LCD_DrawFastCroche(x_offset+w_max-i*46+11, scale_y_offset+5, APP_LCD_WHITE);
+						APP_LCD_DrawFastVLine(x_offset+w_max-i*46+10, scale_y_offset+5, 13, APP_LCD_WHITE);
+						APP_LCD_DrawFastNoire(x_offset+w_max-i*46+6, scale_y_offset+18, APP_LCD_WHITE);
+					}
+
+					break;
+				case 0x0e:
+					for(int i=0; i<5; i++){
+						APP_LCD_DrawPixel(x_offset+w_max-(4+i*3)*23+6, scale_y_offset+1, APP_LCD_WHITE);
+						APP_LCD_DrawFastHLine(x_offset+w_max-(4+i*3)*23+7, scale_y_offset, 3*23-13, APP_LCD_WHITE);
+						APP_LCD_DrawPixel(x_offset+w_max-(1+i*3)*23-6, scale_y_offset+1, APP_LCD_WHITE);
+					}
+					APP_LCD_DrawPixel(x_offset+w_max-1*23+6, scale_y_offset+1, APP_LCD_WHITE);
+					APP_LCD_DrawFastHLine(x_offset+w_max-1*23+7, scale_y_offset, 1*23-13, APP_LCD_WHITE);
+					for(int i=1; i<=16; i++){
+						APP_LCD_DrawFastCroche(x_offset+w_max-i*23+11, scale_y_offset+5, APP_LCD_WHITE);
+						APP_LCD_DrawFastVLine(x_offset+w_max-i*23+10, scale_y_offset+5, 13, APP_LCD_WHITE);
+						APP_LCD_DrawFastNoire(x_offset+w_max-i*23+6, scale_y_offset+18, APP_LCD_WHITE);
+					}
+
+					break;
+				default:
+					break;
+				}
+			}
+
+			// Labels
+			APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+			if(tr5x6_decod_labels_flags.ALL &0x7f){
+				APP_LCD_Rectangle(x_offset+140, y_offset+173, 60, 10, 0, 0, 1, 0);
+				if(tr5x6_decod_labels.tempo)
+					APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TEMPO");
+				else if(tr5x6_decod_labels.measure)
+					APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MEASURE");
+				else if(tr5x6_decod_labels.pitch)
+					APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PITCH");
+				else if(tr5x6_decod_labels.level)
+					APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "LEVEL");
+				else if(tr5x6_decod_labels.shuffle)
+					APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "SHUFFLE");
+				else if(tr5x6_decod_labels.flam)
+					APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "FLAM");
+				else if(tr5x6_decod_labels.accent)
+					APP_LCD_PrintString( x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "ACCENT");
+			}
+			if(tr5x6_decod_labels_flags.sync){
+				if(tr5x6_decod_labels.sync){
+					APP_LCD_FColourSet(APP_LCD_WHITE);
+					APP_LCD_PrintString( x_offset+404, y_offset+236, 0, APP_LCD_STRING_ALIGN_CENTER, -32, " EXT SYNC ON ");
+				}else {
+					APP_LCD_FColourSet(APP_LCD_DARKGREY);
+					APP_LCD_PrintString(x_offset+404, y_offset+236, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "EXT SYNC OFF");
+					APP_LCD_FColourSet(APP_LCD_WHITE);
+				}
+
+			}
+			if(tr5x6_decod_labels_flags.chain){
+				if(tr5x6_decod_labels.chain)
+					APP_LCD_PrintString(x_offset+262, y_offset+250, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "CHAIN");
+				else APP_LCD_Rectangle(x_offset+242, y_offset+250, 40, 10, 0, 0, 1, 0);
+			}
+			if(tr5x6_decod_labels_flags.block){
+				if(tr5x6_decod_labels.block)
+					APP_LCD_PrintString(x_offset+308, y_offset+250, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "BLOCK");
+				else APP_LCD_Rectangle(x_offset+288, y_offset+250, 40, 10, 0, 0, 1, 0);
+			}
+			tr5x6_decod_labels_flags.ALL = 0;
+			// Mode
+#ifndef REDUCED_APP_LCD
+			APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+			if(tr5x6_decod_mode_flag){
+				tr5x6_decod_mode_flag=0;
+				switch(tr5x6_decod_mode){
+				case 0x01:
+				case 0x02:
+				case 0x04:
+				case 0x08:
+				case 0x10:
+					APP_LCD_Rectangle(x_offset+366, y_offset+195, 76, 16, 0, 0, 1, 0);
+					APP_LCD_Rectangle(x_offset+379, y_offset+212, 51, 16, 0, 0, 1, 0);
+					break;
+				default:
+					break;
+				}
+				switch(tr5x6_decod_mode){
+				case 0x01:
+					APP_LCD_PrintString(x_offset+404, y_offset+196, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
+					APP_LCD_PrintString(x_offset+404, y_offset+213, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PLAY");
+					break;
+				case 0x02:
+					APP_LCD_PrintString(x_offset+404, y_offset+196, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PATTERN");
+					APP_LCD_PrintString(x_offset+404, y_offset+213, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PLAY");
+					break;
+				case 0x04:
+					APP_LCD_PrintString(x_offset+404, y_offset+196, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
+					APP_LCD_PrintString(x_offset+404, y_offset+213, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "WRITE");
+					break;
+				case 0x08:
+					APP_LCD_PrintString(x_offset+404, y_offset+196, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "STEP");
+					APP_LCD_PrintString(x_offset+404, y_offset+213, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "WRITE");
+					break;
+				case 0x10:
+					APP_LCD_PrintString(x_offset+404, y_offset+196, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TAP");
+					APP_LCD_PrintString(x_offset+404, y_offset+213, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "WRITE");
+					break;
+				default:
+					break;
+				}
+			}
+			// Group
+			if(tr5x6_decod_group_flag){
+				tr5x6_decod_group_flag=0;
+				switch(tr5x6_decod_group){
+				case 0x01:
+					APP_LCD_PrintString(x_offset+261, y_offset+205, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "A");
+					break;
+				case 0x02:
+					APP_LCD_PrintString(x_offset+261, y_offset+205, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "B");
+					break;
+				case 0x04:
+					APP_LCD_PrintString(x_offset+261, y_offset+205, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "C");
+					break;
+				case 0x08:
+					APP_LCD_PrintString(x_offset+261, y_offset+205, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "D");
+					break;
+				case 0x10:
+					APP_LCD_PrintString(x_offset+261, y_offset+205, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "E");
+					break;
+				case 0x20:
+					APP_LCD_PrintString(x_offset+261, y_offset+205, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "F");
+					break;
+				default:
+					APP_LCD_Rectangle(x_offset+252, y_offset+204, 20, 13, 0, 0, 1, 0);
+					break;
+				}
+			}
+#endif
+
+			// MIDI activity
+			u8 act=(MIOS32_UART_RXTX_Act() & 0x5) | (MIDIO_SYSEX_Act() & 0x2);
+			if(act&0x01)APP_LCD_Rectangle(x_offset+350, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			else APP_LCD_Rectangle(x_offset+350, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
+			if(act&0x04)APP_LCD_Rectangle(x_offset+446, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			else APP_LCD_Rectangle(x_offset+446, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
+			if(act&0x02)APP_LCD_Rectangle(x_offset+446, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			else APP_LCD_Rectangle(x_offset+446, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
+#endif
+		}
+		// release SPI access for other tasks
+		//MUTEX_SPI_GIVE;
+	}
+}
+
+// EXTI calback must be placed here because they are common
+void EXTI4_15_IRQHandler(void){
+	// callback for DECOD function
+	TR5X6_DECOD_EXTI_LCD_Callback();
+	// callback for UART TX bypass option
+	//MIOS32_UART_TX_BypassCallback();
+
+}
+void EXTI2_3_IRQHandler(void){
+	// callback for DECOD function
+	TR5X6_DECOD_EXTI_BUTT_Callback();
+	//if(EXTI->FPR1 & EXTI_FPR1_FPIF3)
+	//{
+		//MIOS32_BOARD_LED_Set(1, 1);
+
+	//	tr5x6_decod_buttons.ALL=(u8)(GPIOD->IDR & 0xf);
+		//if(tr5x6_decod_buttons.ALL)
+//		tr5x6_decod_buttons.last = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_LAST)?0:1;
+//		//tr5x6_decod_buttons.inst = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INST)?0:1;
+//		tr5x6_decod_buttons.inc = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INC)?0:1;
+//		tr5x6_decod_buttons.dec = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_DEC)?0:1;
+//		//s32 led =  MIOS32_BOARD_LED_Get();
+
+		//LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_3);
+	//	EXTI->FPR1 |=EXTI_FPR1_FPIF3;
+		//MIOS32_BOARD_LED_Set(1, 0);
+	//}
+}
+
+s32 NOTIFY_MIDI_TimeOut(mios32_midi_port_t port){
+	MIOS32_MIDI_SendDebugMessage("midi time out!\n");
+	return 0;
+}
+
+
+void SettingsMenu_Draw(void){
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+
+	if(menu_edit){
+		if(menu_pos==0){
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Settings   Menu");
+			APP_LCD_PrintFormattedString(250, y_offset+40, 40,  APP_LCD_STRING_ALIGN_LEFT, -32, "%d", curr_id);
+			APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
+			APP_LCD_PrintString(120, y_offset+40, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Device   ID:");
+			APP_LCD_PrintString(120, y_offset+60, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Format   BANKs");
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+		}else if(menu_pos==1){
+			APP_LCD_Clear();	// clear the TFT
+			APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Format   BANKs");
+			APP_LCD_FColourSet(APP_LCD_RED);
+			APP_LCD_PrintString(240, y_offset+40, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Format  will  erase  all  the  Banks!");
+			APP_LCD_PrintString(240, y_offset+60, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Please  backup  your  Banks  first...");
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			APP_LCD_PrintString(240, y_offset+100, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "It  will  take  around  6  minutes.");
+			APP_LCD_PrintString(240, y_offset+120, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Are you sure?");
+		}else if(menu_pos==2){
+			APP_LCD_Clear();	// clear the TFT
+			//APP_LCD_PrintString(bmp, 0, 240, y_offset+10, 0, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "About");
+			About_Page();
+		}
+
+	}else{
+		if(menu_pos==0){
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			APP_LCD_Rectangle(109, y_offset+40, 7, 51, 0, 0, 1, 0);
+			APP_LCD_PrintString(116, y_offset+40, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, ">");
+			APP_LCD_PrintString(120, y_offset+40, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Device   ID:");
+			APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
+			APP_LCD_PrintFormattedString(250, y_offset+40, 40,  APP_LCD_STRING_ALIGN_LEFT, -32, "%d", curr_id);
+			APP_LCD_PrintString(120, y_offset+60, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Format   BANKs");
+			APP_LCD_PrintString(120, y_offset+80, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "About");
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+		}else if(menu_pos==1){
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			APP_LCD_Rectangle(109, y_offset+40, 7, 51, 0, 0, 1, 0);
+			APP_LCD_PrintString(116, y_offset+60, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, ">");
+			APP_LCD_PrintString(120, y_offset+60, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Format   BANKs");
+			APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
+			APP_LCD_PrintString(120, y_offset+40, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Device   ID:");
+			APP_LCD_PrintFormattedString(250, y_offset+40, 40,  APP_LCD_STRING_ALIGN_LEFT, -32, "%d", curr_id);
+			APP_LCD_PrintString(120, y_offset+80, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "About");
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+		}else if(menu_pos==2){
+			APP_LCD_FColourSet(APP_LCD_WHITE);
+			APP_LCD_Rectangle(109, y_offset+40, 7, 51, 0, 0, 1, 0);
+			APP_LCD_PrintString(116, y_offset+80, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, ">");
+			APP_LCD_PrintString(120, y_offset+80, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "About");
+			APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
+			APP_LCD_PrintString(120, y_offset+60, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Format   BANKs");
+			APP_LCD_PrintString(120, y_offset+40, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Device   ID:");
+			APP_LCD_PrintFormattedString(250, y_offset+40, 40,  APP_LCD_STRING_ALIGN_LEFT, -32, "%d", curr_id);
+		}
+		APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Settings   Menu");
+	}
+}
+
+
+
+
+void Legend_Draw(int x, int y, const char *func, const char *butt){
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	APP_LCD_PrintFormattedString(x-2, y+2, 56, APP_LCD_STRING_ALIGN_RIGHT, -32, func);
+	APP_LCD_PrintString(x+3, y+2, 0, APP_LCD_STRING_ALIGN_LEFT, -32, butt);
+	u8 func_len = (u8)APP_LCD_StringKernGet(-32, butt) + 5;
+	APP_LCD_Rectangle(x, y, func_len, 15, 1, APP_LCD_LIGHTGREY, 0, 0);
+}
+
+void SettingsMenu_Legend(void){
+
+	if(formatting){
+		Legend_Draw(x_offset+420, y_offset+32, "EXEC", "INST");
+		Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
+	}else{
+		if(menu_edit){
+			if(menu_pos==0){
+				Legend_Draw(x_offset+420, y_offset+52, "INC", "UP");
+				Legend_Draw(x_offset+420, y_offset+72, "DEC", "DOWN");
+				Legend_Draw(x_offset+420, y_offset+32, "ENTER", "INST");
+				Legend_Draw(x_offset+420, y_offset+12, "CANCEL", "LAST");
+			}else if(menu_pos==1){
+				Legend_Draw(x_offset+160, y_offset+150, "NO", "LAST");
+				Legend_Draw(x_offset+290, y_offset+150, "YES", "INST");
+			}else if(menu_pos==2){
+				Legend_Draw(x_offset+420, y_offset+12, "ESC", "LAST");
+			}
+
+		}else{
+			Legend_Draw(x_offset+420, y_offset+52, "  UP", "UP");
+			Legend_Draw(x_offset+420, y_offset+72, "DOWN", "DOWN");
+			if(menu_pos==0){
+				Legend_Draw(x_offset+420, y_offset+32, " EDIT", "INST");
+
+			}else if(menu_pos==1){
+				Legend_Draw(x_offset+420, y_offset+32, "EXEC", "INST");
+			}else if(menu_pos==2){
+				Legend_Draw(x_offset+420, y_offset+32, "EXEC", "INST");
+			}
+			Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
+		}
+	}
+
+}
+
+void Formatting_Page(void){
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	APP_LCD_Rectangle(0, 40, 480, 200, 0, 0, 2, APP_LCD_BLACK);
+	APP_LCD_PrintString(92, y_offset+50, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Formatting   ROM...");
+
+	TR5X6_MEM_Format();
+
+}
+
+void About_Page(void)
+{
+	APP_LCD_Clear();	// clear the TFT
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	//APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
+	mios32_lcd_bitmap_t logo_bmp = APP_LCD_BitmapInit((u8*)tr5x6_logo, 400, 56, 400, Is1BIT);
+	for (int w=0; w<400;w++){
+		u8* bmp_mem_ptr = logo_bmp.memory +w;
+		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 56, 400, Is1BIT);
+		APP_LCD_SendBitmap(bmp2print, 40+w, y_offset+25);
+	}
+	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+	APP_LCD_PrintString(40, y_offset+82, 0, APP_LCD_STRING_ALIGN_LEFT, -32, (char*)TR5X6_VERSION);
+
+	logo_bmp = APP_LCD_BitmapInit((u8*)ai_logo, 49, 32, 49, Is1BIT);
+	for (int w=0; w<49;w++){
+		u8* bmp_mem_ptr = logo_bmp.memory +w;
+		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 32, 49, Is1BIT);
+		APP_LCD_SendBitmap(bmp2print, 40+w, y_offset+110);
+	}
+	logo_bmp = APP_LCD_BitmapInit((u8*)ai_name, 246, 24, 246, Is1BIT);
+	for (int w=0; w<246;w++){
+		u8* bmp_mem_ptr = logo_bmp.memory +w;
+		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 24, 246, Is1BIT);
+		APP_LCD_SendBitmap(bmp2print, 94+w, y_offset+114);
+	}
+	APP_LCD_PrintString(40, y_offset+150, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "(C)2024 B.Dupeyron");
+
+	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+	APP_LCD_PrintString(240, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Special   thanks   to:");
+	APP_LCD_DrawFastHLine(156, y_offset+187, 11, APP_LCD_WHITE);
+	APP_LCD_DrawFastHLine(171, y_offset+187, 152, APP_LCD_WHITE);
+	//APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
+	APP_LCD_PrintString(240, y_offset+195, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "David,  Sunshine");
+	APP_LCD_PrintString(240, y_offset+215, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Harry,  Cedric");
+	APP_LCD_PrintString(240, y_offset+235, 0,  APP_LCD_STRING_ALIGN_CENTER, -32, "and   Michael.");
+
+}
+void TASK_SettingsMenu(void *pvParameters){
+	portTickType xLastExecutionTime;
+
+	// Initialise the xLastExecutionTime variable on task entry
+	xLastExecutionTime = xTaskGetTickCount();
+
+	while( 1 ) {
+		// wait for 40 mS
+		vTaskDelayUntil(&xLastExecutionTime, 40 / portTICK_RATE_MS);
+		if(formatting){
+			if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+				tr5x6_decod_buttons_flags.inc = 0;
+			}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+				tr5x6_decod_buttons_flags.dec = 0;
+			}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+				formatting=0;
+				menu_edit=0;
+				APP_LCD_Clear();	// clear the TFT
+				SettingsMenu_Draw();
+				SettingsMenu_Legend();
+				tr5x6_decod_buttons_flags.inst=0;
+			}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+				MIOS32_SYS_Reset();
+			}
+		}else if(menu_edit){
+			if(menu_pos==0){
+				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+					curr_id = (curr_id+1) & 0x7f;
+					SettingsMenu_Draw();
+					SettingsMenu_Legend();
+					tr5x6_decod_buttons_flags.inc = 0;
+				}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+					curr_id = (curr_id-1) & 0x7f;
+					SettingsMenu_Draw();
+					SettingsMenu_Legend();
+					tr5x6_decod_buttons_flags.dec = 0;
+				}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+					last_id = curr_id;
+					MIOS32_MIDI_DeviceIDSet(curr_id);
+					menu_edit=0;
+					SettingsMenu_Draw();
+					SettingsMenu_Legend();
+					tr5x6_decod_buttons_flags.inst=0;
+				}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+					curr_id= last_id;
+					MIOS32_MIDI_DeviceIDSet(curr_id);
+					menu_edit=0;
+					SettingsMenu_Draw();
+					SettingsMenu_Legend();
+					tr5x6_decod_buttons_flags.last=0;
+				}
+			}else if(menu_pos==1){
+				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+					tr5x6_decod_buttons_flags.inc = 0;
+				}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+					tr5x6_decod_buttons_flags.dec = 0;
+				}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+					formatting = 1;
+					//vTaskSuspend(xSettings);
+					Formatting_Page();
+					SettingsMenu_Legend();
+					//vTaskResume(xSettings);
+					tr5x6_decod_buttons_flags.inst=0;
+				}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+					APP_LCD_Clear();	// clear the TFT
+					menu_edit=0;
+					SettingsMenu_Draw();
+					SettingsMenu_Legend();
+					tr5x6_decod_buttons_flags.last=0;
+				}
+			}else if(menu_pos==2){
+				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+					tr5x6_decod_buttons_flags.inc = 0;
+				}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+					tr5x6_decod_buttons_flags.dec = 0;
+				}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+					tr5x6_decod_buttons_flags.inst=0;
+				}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+					APP_LCD_Clear();	// clear the TFT
+					menu_edit=0;
+					SettingsMenu_Draw();
+					SettingsMenu_Legend();
+					tr5x6_decod_buttons_flags.last=0;
+				}
+			}
+
+		}else{
+			if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+				menu_pos += 1;
+				if(menu_pos>2) menu_pos= 0;
+				SettingsMenu_Draw();
+				SettingsMenu_Legend();
+				tr5x6_decod_buttons_flags.inc = 0;
+			}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+				menu_pos -= 1;
+				if(menu_pos>2) menu_pos= 2;
+				SettingsMenu_Draw();
+				SettingsMenu_Legend();
+				tr5x6_decod_buttons_flags.dec = 0;
+			}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+				menu_edit=1;
+				last_id = curr_id;
+				SettingsMenu_Draw();
+				SettingsMenu_Legend();
+				tr5x6_decod_buttons_flags.inst=0;
+			}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+				MIOS32_SYS_Reset();
+			}
+		}
+	}
+}

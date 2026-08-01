@@ -1,0 +1,18 @@
+09:25:22 **** Incremental Build of configuration Default for project mpc2k_display ****
+make all 
+rm -f project.hex
+-------------------------------------------------------------------------------
+Application successfully built for:
+Processor: 
+Family:    STM32G0xx
+Board:     
+LCD:       universal
+-------------------------------------------------------------------------------
+arm-none-eabi-size project_build/project.elf
+   text	   data	    bss	    dec	    hex	filename
+  22852	      8	   7776	  30636	   77ac	project_build/project.elf
+20000000 D __ram_start
+20001e68 B __ram_end
+
+09:25:25 Build Finished. 0 errors, 0 warnings. (took 3s.541ms)
+
