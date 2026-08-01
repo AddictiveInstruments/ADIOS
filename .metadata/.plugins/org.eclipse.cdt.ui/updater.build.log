@@ -1,7 +1,0 @@
-00:23:17 **** Clean-only build of configuration Default for project updater ****
-bash D:/MIOS32/trunk/bootloader/updater/release.sh RELEASE clean 
-ERROR: the release directory 'RELEASE' already exists!
-"bash D:/MIOS32/trunk/bootloader/updater/release.sh RELEASE clean" terminated with exit code 1. Build might be incomplete.
-
-00:23:17 Build Finished. 0 errors, 0 warnings. (took 218ms)
-

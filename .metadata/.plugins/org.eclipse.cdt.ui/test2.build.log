@@ -1,4 +1,0 @@
-make -f ..\..\Makefile
-g++.exe -c -O2   -o test2.o /d/MIOS32/trunk/test2/test2.cpp
-g++.exe  -o test2 test2.o
-Build complete (0 errors, 0 warnings): D:\MIOS32\trunk\test2\build\default

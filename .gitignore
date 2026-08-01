@@ -93,6 +93,14 @@ Mkfile.old
 dkms.conf
 
 # --- MIOS32 build system additions (2026-08-01) ---
+# Eclipse/STM32CubeIDE indexer cache (regenerated locally, huge .pdom files)
+.metadata/
+
+# Leftover Subversion working-copy metadata from before this became a plain
+# folder copy - duplicated content, not useful
+.svn/
+*/.svn/
+
 # Per-project build output directories (make target)
 project_build/
 *.dd

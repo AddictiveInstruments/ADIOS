@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">
-<refactoring comment="Rename resource &apos;mpc2k_display/etc/ld/STM32G0xx/STM32G030_bsl.ld&apos; to &apos;STM32G030K6.ld&apos;" description="Rename resource &apos;STM32G030_bsl.ld&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="etc/ld/STM32G0xx/STM32G030_bsl.ld" name="STM32G030K6.ld" stamp="1784835219836" updateReferences="true"/>
-</session>

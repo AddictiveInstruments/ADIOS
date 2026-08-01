@@ -1,7 +1,0 @@
-bsl_sysex.c:414:12:BSL_SYSEX_SendAck.isra	48	static
-bsl_sysex.c:386:12:BSL_SYSEX_RecAddrAndLen.isra	8	static
-bsl_sysex.c:175:5:BSL_SYSEX_Init	0	static
-bsl_sysex.c:191:5:BSL_SYSEX_HaltStateGet	0	static
-bsl_sysex.c:218:5:BSL_SYSEX_Cmd	64	static
-bsl_sysex.c:441:5:BSL_SYSEX_SendUploadReq	40	static
-bsl_sysex.c:200:5:BSL_SYSEX_ReleaseHaltState	8	static
