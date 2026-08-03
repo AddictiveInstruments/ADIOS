@@ -191,7 +191,7 @@ s32 TR5X6_ROM_BankSet(u8 bank, u8 address_set){
 		TR5X6_ROM_Addr_Set(TR5X6_ROM_HostAddr(bank));
 	if(bank==rom_bank)return 0;
 	rom_bank = bank;
-	//MIOS32_MIDI_SendProgramChange(UART0, mios32_midi_chn_t chn, u8 prg);
+	//MIOS32_MIDI_SendProgramChange(DIN0, mios32_midi_chn_t chn, u8 prg);
 	if(address_set)
 		TR5X6_ROM_BankStore(bank);
 	else

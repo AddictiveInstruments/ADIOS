@@ -211,13 +211,13 @@ s32 MIOS32_ENC_UpdateStates(void)
     // take over encoder state from SRIO handler if SR != 0
     // (if SR configured with 0 we expect that the state is controlled from application, e.g. by scanning GPIOs)
     if( enc_config_ptr->cfg.sr != 0 ) {
-      // check if encoder state has been changed, and clear changed flags, so that the changes won't be propagated to DIN handler
+      // check if encoder state has been changed, and clear changed flags, so that the changes won't be propagated to SRIN handler
       u8 sr = enc_config_ptr->cfg.sr-1;
       u8 pos = enc_config_ptr->cfg.pos;
       u8 pos_normalized = pos & 6; // (0, 2, 4 or 6)
       u8 changed_mask = 3 << pos_normalized; // note: by checking mios32_srio_din_changed[sr] directly, we speed up the scanning of unmoved encoders by factor 3!
       enc_state_ptr->last12 = enc_state_ptr->act12;
-      if( (mios32_srio_din_changed[sr] & changed_mask) && MIOS32_DIN_SRChangedGetAndClear(sr, changed_mask) ) {
+      if( (mios32_srio_din_changed[sr] & changed_mask) && MIOS32_SRIN_SRChangedGetAndClear(sr, changed_mask) ) {
 	u8 state = (mios32_srio_din[sr] >> pos_normalized) & 3;
 	if( pos & 1 ) { // swap pins?
 	  state = ((state << 1) & 2) | (state >> 1);

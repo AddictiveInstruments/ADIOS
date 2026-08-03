@@ -77,16 +77,16 @@ void APP_MIDI_NotifyPackage(mios32_midi_port_t port, mios32_midi_package_t midi_
 
 //	if(midi_package.event==NoteOn){
 //		 MIOS32_MIDI_SendDebugMessage("Note On\n");
-//	  // forward USB0->UART0 and UART0->USB0
+//	  // forward USB0->DIN0 and DIN0->USB0
 //	  switch( port ) {
 //	    case USB0:
 //	    	MIOS32_MIDI_SendPackage(USB0, midi_package);
-//	    	MIOS32_MIDI_SendPackage(UART0,  midi_package);
-//	    	MIOS32_MIDI_SendPackage(UART1,  midi_package);
+//	    	MIOS32_MIDI_SendPackage(DIN0,  midi_package);
+//	    	MIOS32_MIDI_SendPackage(DIN1,  midi_package);
 //	    	break;
-//	    case UART0:
+//	    case DIN0:
 //	    	MIOS32_MIDI_SendPackage(USB0, midi_package);
-//	    	MIOS32_MIDI_SendPackage(UART0,  midi_package);
+//	    	MIOS32_MIDI_SendPackage(DIN0,  midi_package);
 //	    	break;
 //	  }
 //	}

@@ -47,8 +47,8 @@ typedef enum {
   COM_USB6 = 0x16,
   COM_USB7 = 0x17,
 
-  COM_UART0 = 0x20,
-  COM_UART1 = 0x21,
+  COM_DIN0 = 0x20,
+  COM_DIN1 = 0x21,
 
   COM_IIC0 = 0x30,
   COM_IIC1 = 0x31,

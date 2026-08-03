@@ -2,9 +2,8 @@
 //! \defgroup MIOS32_UTILS
 //!
 //! Delay / Timer / Stopwatch / Sign-of-life (SOF) LED utility functions for
-//! MIOS32 (merged 2026-08-01 from the former mios32_delay.c, mios32_timer.c,
-//! mios32_stopwatch.c - each still independently opt-in via its own
-//! MIOS32_USE_x define, see below).
+//! MIOS32 - each independently opt-in via its own MIOS32_USE_x define, see
+//! below.
 //!
 //! \{
 /* ==========================================================================
@@ -38,8 +37,9 @@
 #define MIOS32_DELAY_TIMER_RCC LL_APB2_GRP1_PERIPH_TIM1
 #endif
 
-// compile-time clock-enable, not a runtime MIOS32_DELAY_TIMER comparison -
 // override all three together if you override the timer above
+// (MIOS32_DELAY_TIMER_RCC_ENABLE must call the LL_APBx_GRP1_EnableClock()
+// matching whichever bus your chosen timer sits on)
 #ifndef MIOS32_DELAY_TIMER_RCC_ENABLE
 #define MIOS32_DELAY_TIMER_RCC_ENABLE() LL_APB2_GRP1_EnableClock(MIOS32_DELAY_TIMER_RCC)
 #endif
@@ -309,10 +309,9 @@ TIMER2_IRQ_HANDLER
 #if defined(MIOS32_USE_STOPWATCH)
 
 // single default timer - override all three together in your project's
-// mios32_config.h if TIM6 is unavailable/conflicts on your hardware. The
-// clock-enable is a compile-time macro (not a runtime STOPWATCH_TIMER_BASE
-// comparison) so switching timers costs nothing at runtime and doesn't pull
-// in both LL_APBx_GRP1_EnableClock() calls into the binary.
+// mios32_config.h if TIM6 is unavailable/conflicts on your hardware
+// (STOPWATCH_TIMER_RCC_ENABLE must call the LL_APBx_GRP1_EnableClock()
+// matching whichever bus your chosen timer sits on).
 #ifndef STOPWATCH_TIMER_BASE
 #define STOPWATCH_TIMER_BASE                 TIM6
 #endif
@@ -414,7 +413,7 @@ u32 MIOS32_STOPWATCH_ValueGet(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// MIOS32_SOF - sign-of-life LED (2026-08-01, new)
+// MIOS32_SOF - sign-of-life LED
 // A single GPIO toggled as a heartbeat - project-configurable pin, meant as
 // a lightweight replacement for mios32_board.c's fixed on-board LED.
 /////////////////////////////////////////////////////////////////////////////

@@ -84,10 +84,27 @@ typedef enum {
   USB14 = 0x16,
   USB15 = 0x17,
 
-  UART0 = 0x20,
-  UART1 = 0x21,
-  UART2 = 0x22,
-  UART3 = 0x23,
+  // named after the classic 5-pin DIN MIDI connector - the physical/
+  // hardware MIDI ports, as opposed to USBn/IICn/SPIMn above. Not "UARTn":
+  // that bare name collides with real CMSIS peripheral macros (UART4/5/7/
+  // 8/9/10 on STM32F4/F7/H7) and with this driver's own MIOS32_UARTn
+  // logical-port aliases in mios32_uart.c.
+  DIN0 = 0x20,
+  DIN1 = 0x21,
+  DIN2 = 0x22,
+  DIN3 = 0x23,
+  DIN4 = 0x24,
+  DIN5 = 0x25,
+  DIN6 = 0x26,
+  DIN7 = 0x27,
+  DIN8 = 0x28,
+  DIN9 = 0x29,
+  DIN10 = 0x2a,
+  DIN11 = 0x2b,
+  DIN12 = 0x2c,
+  DIN13 = 0x2d,
+  DIN14 = 0x2e,
+  DIN15 = 0x2f,
 
   IIC0 = 0x30,
   IIC1 = 0x31,

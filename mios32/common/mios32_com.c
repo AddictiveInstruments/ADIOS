@@ -61,7 +61,9 @@ s32 MIOS32_COM_Init(u32 mode)
 #endif
 
   // if any COM assignment:
-#if MIOS32_UART0_ASSIGNMENT == 2 || MIOS32_UART1_ASSIGNMENT == 2 || MIOS32_UART2_ASSIGNMENT == 2 || MIOS32_UART3_ASSIGNMENT == 2
+#if MIOS32_UART0_ASSIGNMENT == 2 || MIOS32_UART1_ASSIGNMENT == 2 || MIOS32_UART2_ASSIGNMENT == 2 || MIOS32_UART3_ASSIGNMENT == 2 || \
+    MIOS32_UART4_ASSIGNMENT == 2 || MIOS32_UART5_ASSIGNMENT == 2 || MIOS32_UART6_ASSIGNMENT == 2 || MIOS32_UART7_ASSIGNMENT == 2 || \
+    MIOS32_UART8_ASSIGNMENT == 2 || MIOS32_UART9_ASSIGNMENT == 2
   if( MIOS32_UART_Init(0) < 0 )
     ret |= (1 << 1);
 #endif
@@ -72,7 +74,7 @@ s32 MIOS32_COM_Init(u32 mode)
 
 /////////////////////////////////////////////////////////////////////////////
 //! This function checks the availability of a COM port
-//! \param[in] port COM port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (DEFAULT, USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \return 1: port available
 //! \return 0: port not available
 /////////////////////////////////////////////////////////////////////////////
@@ -113,7 +115,7 @@ s32 MIOS32_COM_CheckAvailable(mios32_com_port_t port)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Sends a package over given port
-//! \param[in] port COM port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (DEFAULT, USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \param[in] buffer character buffer
 //! \param[in] len buffer length
 //! \return -1 if port not available
@@ -161,7 +163,7 @@ s32 MIOS32_COM_SendBuffer_NonBlocking(mios32_com_port_t port, u8 *buffer, u16 le
 /////////////////////////////////////////////////////////////////////////////
 //! Sends a package over given port
 //! (blocking function)
-//! \param[in] port COM port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (DEFAULT, USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \param[in] buffer character buffer
 //! \param[in] len buffer length
 //! \return -1 if port not available
@@ -205,7 +207,7 @@ s32 MIOS32_COM_SendBuffer(mios32_com_port_t port, u8 *buffer, u16 len)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Sends a single character over given port
-//! \param[in] port COM port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (DEFAULT, USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \param[in] c character
 //! \return -1 if port not available
 //! \return -2 buffer is full
@@ -221,7 +223,7 @@ s32 MIOS32_COM_SendChar_NonBlocking(mios32_com_port_t port, char c)
 /////////////////////////////////////////////////////////////////////////////
 //! Sends a single character over given port
 //! (blocking function)
-//! \param[in] port COM port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (DEFAULT, USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \param[in] c character
 //! \return -1 if port not available
 //! \return 0 on success
@@ -234,7 +236,7 @@ s32 MIOS32_COM_SendChar(mios32_com_port_t port, char c)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Sends a string over given port
-//! \param[in] port COM port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (DEFAULT, USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \param[in] str zero-terminated string
 //! \return -1 if port not available
 //! \return -2 buffer is full
@@ -250,7 +252,7 @@ s32 MIOS32_COM_SendString_NonBlocking(mios32_com_port_t port, const char *str)
 /////////////////////////////////////////////////////////////////////////////
 //! Sends a string over given port
 //! (blocking function)
-//! \param[in] port COM port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (DEFAULT, USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \param[in] str zero-terminated string
 //! \return -1 if port not available
 //! \return 0 on success
@@ -263,7 +265,7 @@ s32 MIOS32_COM_SendString(mios32_com_port_t port, const char *str)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Sends a formatted string (-> printf) over given port
-//! \param[in] port COM port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (DEFAULT, USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \param[in] *format zero-terminated format string - 128 characters supported maximum!
 //! \param[in] ... optional arguments,
 //!        128 characters supported maximum!
@@ -285,7 +287,7 @@ s32 MIOS32_COM_SendFormattedString_NonBlocking(mios32_com_port_t port, const cha
 /////////////////////////////////////////////////////////////////////////////
 //! Sends a formatted string (-> printf) over given port
 //! (blocking function)
-//! \param[in] port COM port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (DEFAULT, USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \param[in] *format zero-terminated format string - 128 characters supported maximum!
 //! \param[in] ... optional arguments,
 //! \return -1 if port not available
@@ -338,10 +340,16 @@ s32 MIOS32_COM_Receive_Handler(void)
       case 0: status = -1; break;
 #endif
 #if !defined(MIOS32_DONT_USE_UART)
-      case 1: if( MIOS32_UART_IsAssignedToMIDI(0) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(0); port = UART0; } break;
-      case 2: if( MIOS32_UART_IsAssignedToMIDI(1) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(1); port = UART1; } break;
-      case 3: if( MIOS32_UART_IsAssignedToMIDI(2) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(2); port = UART2; } break;
-      case 4: if( MIOS32_UART_IsAssignedToMIDI(3) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(3); port = UART3; } break;
+      case 1: if( MIOS32_UART_IsAssignedToMIDI(0) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(0); port = DIN0; } break;
+      case 2: if( MIOS32_UART_IsAssignedToMIDI(1) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(1); port = DIN1; } break;
+      case 3: if( MIOS32_UART_IsAssignedToMIDI(2) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(2); port = DIN2; } break;
+      case 4: if( MIOS32_UART_IsAssignedToMIDI(3) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(3); port = DIN3; } break;
+      case 5: if( MIOS32_UART_IsAssignedToMIDI(4) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(4); port = DIN4; } break;
+      case 6: if( MIOS32_UART_IsAssignedToMIDI(5) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(5); port = DIN5; } break;
+      case 7: if( MIOS32_UART_IsAssignedToMIDI(6) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(6); port = DIN6; } break;
+      case 8: if( MIOS32_UART_IsAssignedToMIDI(7) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(7); port = DIN7; } break;
+      case 9: if( MIOS32_UART_IsAssignedToMIDI(8) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(8); port = DIN8; } break;
+      case 10: if( MIOS32_UART_IsAssignedToMIDI(9) ) { status = -1; } else { status = MIOS32_UART_RxBufferGet(9); port = DIN9; } break;
 #endif
       default:
 	// allow 64 forwards maximum to yield some CPU time for other tasks
@@ -403,7 +411,7 @@ s32 MIOS32_COM_ReceiveCallback_Init(void *callback_receive)
 //! The preset which will be used after application reset can be set in
 //! mios32_config.h via "#define MIOS32_COM_DEFAULT_PORT <port>".<BR>
 //! It's set to USB0 as long as not overruled in mios32_config.h
-//! \param[in] port COM port (USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
 s32 MIOS32_COM_DefaultPortSet(mios32_com_port_t port)
@@ -430,7 +438,7 @@ mios32_com_port_t MIOS32_COM_DefaultPortGet(void)
 //! The preset which will be used after application reset can be set in
 //! mios32_config.h via "#define MIOS32_COM_DEBUG_PORT <port>".<BR>
 //! It's set to USB0 as long as not overruled in mios32_config.h
-//! \param[in] port COM port (USB0..USB7, UART0..UART1, IIC0..IIC7)
+//! \param[in] port COM port (USB0..USB7, DIN0..DIN9, IIC0..IIC7)
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
 s32 MIOS32_COM_DebugPortSet(mios32_com_port_t port)

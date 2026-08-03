@@ -71,8 +71,8 @@
 //#define MIOS32_MIDI_USBH_DEBUG
 #ifdef MIOS32_MIDI_USBH_DEBUG
 #ifndef MIOS32_MIDI_USBH_DEBUG_PORT
-// debug port is UART0
-#define MIOS32_MIDI_USBH_DEBUG_PORT UART0
+// debug port is DIN0
+#define MIOS32_MIDI_USBH_DEBUG_PORT DIN0
 #endif
 #ifndef DEBUG_MSG
 #define DEBUG_MSG MIOS32_MIDI_SendDebugMessage

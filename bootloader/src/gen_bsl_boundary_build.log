@@ -1,0 +1,10 @@
+make[1]: Entering directory '/e/MIOS32/trunk_dyn_bsl/bootloader/src'
+rm -f project.hex
+D:/gcc/toochain-4_7/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: project_build/bsl_sysex.o: in function `BSL_SYSEX_WriteMem':
+E:\MIOS32\trunk_dyn_bsl\bootloader\src/bsl_sysex.c:623:(.text.BSL_SYSEX_Cmd+0x2aa): undefined reference to `LL_FLASH_EraseSector'
+D:/gcc/toochain-4_7/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:\MIOS32\trunk_dyn_bsl\bootloader\src/bsl_sysex.c:645:(.text.BSL_SYSEX_Cmd+0x32c): undefined reference to `LL_FLASH_ProgramWord'
+D:/gcc/toochain-4_7/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:\MIOS32\trunk_dyn_bsl\bootloader\src/bsl_sysex.c:654:(.text.BSL_SYSEX_Cmd+0x338): undefined reference to `LL_FLASH_DataCacheReset'
+D:/gcc/toochain-4_7/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:\MIOS32\trunk_dyn_bsl\bootloader\src/bsl_sysex.c:655:(.text.BSL_SYSEX_Cmd+0x340): undefined reference to `LL_FLASH_InstructionCacheReset'
+collect2.exe: error: ld returned 1 exit status
+make[1]: *** [../../include/makefile/common.mk:135: project_build/project.elf] Error 1
+make[1]: Leaving directory '/e/MIOS32/trunk_dyn_bsl/bootloader/src'

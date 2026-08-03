@@ -420,7 +420,6 @@ s32 MIDIO_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
 		return 1; // don't forward package to APP_MIDI_NotifyPackage()
 
 	sysex_port = port;
-	//MIOS32_UART_TX_Bypass(0, 0);
 	// branch depending on state
 	if( !sysex_state.MY_SYSEX ) {
 		if( midi_in != sysex_header[sysex_state.CTR] ) {
@@ -447,14 +446,12 @@ s32 MIDIO_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
 			if( !sysex_state.DEV_ID ) {
 				if(midi_in==MIOS32_MIDI_DeviceIDGet())sysex_state.DEV_ID = 1;
 				else MIDIO_SYSEX_Cmd_Finished();
-				//MIOS32_UART_TX_Bypass(0, 0);
 			}
 			// check if command byte has been received
 			else if( !sysex_state.CMD ) {
 				sysex_state.CMD = 1;
 				sysex_cmd = midi_in;
 				MIDIO_SYSEX_Cmd(MIDIO_SYSEX_CMD_STATE_BEGIN, midi_in);
-				//MIOS32_UART_TX_Bypass(0, 0);
 			}
 			else
 				MIDIO_SYSEX_Cmd(MIDIO_SYSEX_CMD_STATE_CONT, midi_in);
@@ -474,8 +471,6 @@ s32 MIDIO_SYSEX_Cmd_Finished(void)
 	sysex_state.ALL = 0;
 	sysex_cmd = CMD_IDLE;
 
-	//MIOS32_UART_TX_Bypass(0, 1);
-	//MIOS32_UART_TX_Bypass(0, 1);
 	// enable MIDI forwarding again
 	// TODO
 	//  MIOS_MPROC_MergerEnable();

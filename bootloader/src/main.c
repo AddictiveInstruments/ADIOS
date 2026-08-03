@@ -225,7 +225,7 @@ int main(void)
 
   MIOS32_BOARD_LED_Init(BSL_LED_MASK);
 
-  // BSL_HOLD_PIN (PA11, confirmed by hardware measurement 2026-07-31)
+  // BSL_HOLD_PIN (PA11)
 #if !defined(MIOS32_FAMILY_STM32F10x) && !defined(MIOS32_FAMILY_STM32F4xx)
   {
     LL_GPIO_InitTypeDef GPIO_InitStructure;
@@ -319,7 +319,7 @@ int main(void)
   ///////////////////////////////////////////////////////////////////////////
   if( !fastboot ) {
 #if !defined(MIOS32_DONT_USE_UART_MIDI)
-    BSL_SYSEX_SendUploadReq(UART0);
+    BSL_SYSEX_SendUploadReq(DIN0);
 #endif
     if( usb_was_initialized )
       BSL_SYSEX_SendUploadReq(USB0);

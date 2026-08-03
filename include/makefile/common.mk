@@ -1,9 +1,9 @@
 # $Id: common.mk 2422 2016-11-02 21:44:39Z tk $
 #
 # following variables should be set before including this file:
-#   - PROCESSOR e.g.: STM32F103RE
-#   - FAMILY    e.g.: STM32F10x
-#   - BOARD     e.g.: MBHP_CORE_STM32
+#   - PROCESSOR e.g.: STM32G070CB
+#   - FAMILY    e.g.: STM32G0xx
+#   - BOARD     e.g.: STM32G070CB
 #   - LCD       e.g.: clcd
 #   - LD_FILE   e.g.: $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(PROCESSOR).ld
 #   - PROJECT   e.g.: project   # (.lst, .hex, .map, etc... will be added automatically)
@@ -55,10 +55,6 @@ AFLAGS += $(A_DEFINES) $(A_INCLUDE) -Wa,-adhlns=$(<:.s=.lst)
 CFLAGS += $(C_DEFINES) $(C_INCLUDE) -Wall -Wno-format -Wno-switch -Wno-strict-aliasing
 
 # add family specific arguments
-ifeq ($(FAMILY),STM32F10x)
-CFLAGS += -mcpu=cortex-m3 -mlittle-endian -ffunction-sections -fdata-sections -fomit-frame-pointer
-endif
-
 ifeq ($(FAMILY),STM32F4xx)
 # leads to a crash - reason not analysed yet
 #CFLAGS += -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mthumb -mfloat-abi=hard -mlittle-endian -ffunction-sections -fdata-sections -fomit-frame-pointer
@@ -67,16 +63,7 @@ CFLAGS += -mcpu=cortex-m4 -mlittle-endian -ffunction-sections -fdata-sections -f
 endif
 
 ifeq ($(FAMILY),STM32G0xx)
-CFLAGS += -mcpu=cortex-m0plus -mlittle-endian -ffunction-sections -fdata-sections -fomit-frame-pointer 
-endif
-
-
-ifeq ($(FAMILY),LPC17xx)
-CFLAGS += -mcpu=cortex-m3 -mlittle-endian -ffunction-sections -fdata-sections -fomit-frame-pointer
-endif
-
-ifeq ($(FAMILY),STR9x)
-CFLAGS += -mcpu=arm7tdmi -D PACK_STRUCT_END=__attribute\(\(packed\)\) -D ALIGN_STRUCT_END=__attribute\(\(aligned\(4\)\)\) -fomit-frame-pointer -ffunction-sections -mthumb-interwork
+CFLAGS += -mcpu=cortex-m0plus -mlittle-endian -ffunction-sections -fdata-sections -fomit-frame-pointer
 endif
 
 # define CPP flags

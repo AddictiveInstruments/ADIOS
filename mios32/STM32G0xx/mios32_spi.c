@@ -3,9 +3,12 @@
 //!
 //! Hardware Abstraction Layer for SPI ports of STM32G0xx
 //!
-//! Two ports are provided: SPI0 (SPI1 peripheral) and SPI1 (SPI2 peripheral).
-//! Each port has a single CS (chip select) line under manual GPIO control -
-//! there is no second CS line on this family (unlike some STM32F4xx boards).
+//! Two ports are provided on every G0 chip: SPI0 (SPI1 peripheral) and SPI1
+//! (SPI2 peripheral). A 3rd port, SPI2 (SPI3 peripheral), is available on
+//! G0B0/G0B1/G0C1 only (MIOS32_USE_SPI2 is force-disabled on every other G0
+//! chip). Each port has a single CS (chip select) line under manual GPIO
+//! control - there is no second CS line on this family (unlike some
+//! STM32F4xx boards).
 //!
 //! If SPI low-level functions should be used to access other peripherals,
 //! please ensure that the appr. MIOS32_* drivers are disabled (e.g.
@@ -35,18 +38,25 @@
 // this module can be optionally enabled in a local mios32_config.h file (included from mios32.h)
 #if defined(MIOS32_USE_SPI)
 
+// SPI2 (3rd port, SPI3 peripheral) only exists on G0B0/G0B1/G0C1 - force it
+// off on every other G0 chip, whatever the project's mios32_config.h says.
+#if defined(MIOS32_USE_SPI2) && !defined(MIOS32_PROCESSOR_STM32G0B0) && !defined(MIOS32_PROCESSOR_STM32G0B1) && !defined(MIOS32_PROCESSOR_STM32G0C1)
+#undef MIOS32_USE_SPI2
+#endif
+
+// on G0B0/G0B1/G0C1, DMA1 channels 4-7 and DMA2 channels 1-5 share a single
+// NVIC vector (unlike the rest of the G0 family, where DMA1 ch4-7 has its
+// own vector) - SPI1 (DMA1) and SPI2 (DMA2) must be serviced by one combined
+// interrupt handler on these chips.
+#if defined(MIOS32_PROCESSOR_STM32G0B0) || defined(MIOS32_PROCESSOR_STM32G0B1) || defined(MIOS32_PROCESSOR_STM32G0C1)
+#define MIOS32_SPI_SHARED_DMA_VECTOR 1
+#endif
+
 
 /////////////////////////////////////////////////////////////////////////////
 // SPI Pin definitions
 // (not part of mios32_spi.h file, since overruling would lead to a hardware
 // dependency in MIOS32 applications)
-//
-// 2026-08-01: SPI1 (2nd port) defaults to the SPI2 peripheral for every
-// STM32G0xx variant used by this project (G030K6/G031K8/G050K8/G070CB all
-// have SPI1+SPI2 with identical AF mapping on these pins per CMSIS headers -
-// only the G0B1 adds a 3rd SPI, out of scope). The previous per-processor
-// split (SPI1 on G030K6/G031K8, SPI2 on G050K8/G070CB) had no hardware
-// justification and has been dropped.
 //
 // CS is always plain GPIO (never an alternate function), even in slave mode -
 // this driver never uses the SPI peripheral's own hardware NSS.
@@ -65,17 +75,39 @@
 #define MIOS32_SPI0_DMA_TX_IRQ_FLAGS (LL_DMA_IFCR_CTCIF3 | LL_DMA_IFCR_CTEIF3 | LL_DMA_IFCR_CHTIF3 | LL_DMA_IFCR_CGIF3)
 #define MIOS32_SPI0_DMA_IRQ_CHANNEL DMA1_Channel2_3_IRQn
 #define MIOS32_SPI0_DMA_IRQHANDLER_FUNC void DMA1_Channel2_3_IRQHandler(void)
+#ifndef MIOS32_SPI0_CS_PORT
 #define MIOS32_SPI0_CS_PORT   GPIOA
+#endif
+#ifndef MIOS32_SPI0_CS_PIN
 #define MIOS32_SPI0_CS_PIN    LL_GPIO_PIN_4
+#endif
+#ifndef MIOS32_SPI0_SCLK_PORT
 #define MIOS32_SPI0_SCLK_PORT GPIOA
+#endif
+#ifndef MIOS32_SPI0_SCLK_PIN
 #define MIOS32_SPI0_SCLK_PIN  LL_GPIO_PIN_5
-#define MIOS32_SPI0_SCLK_ALT  LL_GPIO_AF_0
+#endif
+#ifndef MIOS32_SPI0_SCLK_AF
+#define MIOS32_SPI0_SCLK_AF  LL_GPIO_AF_0
+#endif
+#ifndef MIOS32_SPI0_MISO_PORT
 #define MIOS32_SPI0_MISO_PORT GPIOA
+#endif
+#ifndef MIOS32_SPI0_MISO_PIN
 #define MIOS32_SPI0_MISO_PIN  LL_GPIO_PIN_6
-#define MIOS32_SPI0_MISO_ALT  LL_GPIO_AF_0
+#endif
+#ifndef MIOS32_SPI0_MISO_AF
+#define MIOS32_SPI0_MISO_AF  LL_GPIO_AF_0
+#endif
+#ifndef MIOS32_SPI0_MOSI_PORT
 #define MIOS32_SPI0_MOSI_PORT GPIOA
+#endif
+#ifndef MIOS32_SPI0_MOSI_PIN
 #define MIOS32_SPI0_MOSI_PIN  LL_GPIO_PIN_7
-#define MIOS32_SPI0_MOSI_ALT  LL_GPIO_AF_0
+#endif
+#ifndef MIOS32_SPI0_MOSI_AF
+#define MIOS32_SPI0_MOSI_AF  LL_GPIO_AF_0
+#endif
 
 #define MIOS32_SPI1_PTR        SPI2
 #define MIOS32_SPI1_CLOCK      LL_APB1_GRP1_PERIPH_SPI2
@@ -88,26 +120,105 @@
 #define MIOS32_SPI1_DMA_TX_CHN LL_DMA_CHANNEL_5
 #define MIOS32_SPI1_DMA_TX_REQ LL_DMAMUX_REQ_SPI2_TX
 #define MIOS32_SPI1_DMA_TX_IRQ_FLAGS (LL_DMA_IFCR_CTCIF5 | LL_DMA_IFCR_CTEIF5 | LL_DMA_IFCR_CHTIF5 | LL_DMA_IFCR_CGIF5)
+#if defined(MIOS32_SPI_SHARED_DMA_VECTOR)
+#define MIOS32_SPI1_DMA_IRQ_CHANNEL DMA1_Ch4_7_DMA2_Ch1_5_DMAMUX1_OVR_IRQn
+#define MIOS32_SPI1_DMA_IRQHANDLER_FUNC void DMA1_Ch4_7_DMA2_Ch1_5_DMAMUX1_OVR_IRQHandler(void)
+#else
 #define MIOS32_SPI1_DMA_IRQ_CHANNEL DMA1_Ch4_7_DMAMUX1_OVR_IRQn
 #define MIOS32_SPI1_DMA_IRQHANDLER_FUNC void DMA1_Ch4_7_DMAMUX1_OVR_IRQHandler(void)
+#endif
+#ifndef MIOS32_SPI1_CS_PORT
 #define MIOS32_SPI1_CS_PORT   GPIOB
+#endif
+#ifndef MIOS32_SPI1_CS_PIN
 #define MIOS32_SPI1_CS_PIN    LL_GPIO_PIN_12
+#endif
+#ifndef MIOS32_SPI1_SCLK_PORT
 #define MIOS32_SPI1_SCLK_PORT GPIOB
+#endif
+#ifndef MIOS32_SPI1_SCLK_PIN
 #define MIOS32_SPI1_SCLK_PIN  LL_GPIO_PIN_10
-#define MIOS32_SPI1_SCLK_ALT  LL_GPIO_AF_5
+#endif
+#ifndef MIOS32_SPI1_SCLK_AF
+#define MIOS32_SPI1_SCLK_AF  LL_GPIO_AF_5
+#endif
+#ifndef MIOS32_SPI1_MISO_PORT
 #define MIOS32_SPI1_MISO_PORT GPIOB
+#endif
+#ifndef MIOS32_SPI1_MISO_PIN
 #define MIOS32_SPI1_MISO_PIN  LL_GPIO_PIN_2
-#define MIOS32_SPI1_MISO_ALT  LL_GPIO_AF_0
+#endif
+#ifndef MIOS32_SPI1_MISO_AF
+#define MIOS32_SPI1_MISO_AF  LL_GPIO_AF_0
+#endif
+#ifndef MIOS32_SPI1_MOSI_PORT
 #define MIOS32_SPI1_MOSI_PORT GPIOB
+#endif
+#ifndef MIOS32_SPI1_MOSI_PIN
 #define MIOS32_SPI1_MOSI_PIN  LL_GPIO_PIN_11
-#define MIOS32_SPI1_MOSI_ALT  LL_GPIO_AF_0
+#endif
+#ifndef MIOS32_SPI1_MOSI_AF
+#define MIOS32_SPI1_MOSI_AF  LL_GPIO_AF_0
+#endif
+
+// SPI2 (SPI3 peripheral) - only available on G0B0/G0B1/G0C1, see
+// MIOS32_USE_SPI2 force-undef above. Pin mapping is an unverified default
+// (PB3/PB4/PB5, AF6) - not yet checked against real hardware or the
+// reference manual for conflicts with other peripherals on these pins.
+#if defined(MIOS32_USE_SPI2)
+#define MIOS32_SPI2_PTR        SPI3
+#define MIOS32_SPI2_CLOCK      LL_APB1_GRP1_PERIPH_SPI3
+#define MIOS32_SPI2_DMA_CLOCK  LL_AHB1_GRP1_PERIPH_DMA2
+#define MIOS32_SPI2_DMA_RX_PTR DMA2
+#define MIOS32_SPI2_DMA_RX_CHN LL_DMA_CHANNEL_1
+#define MIOS32_SPI2_DMA_RX_REQ LL_DMAMUX_REQ_SPI3_RX
+#define MIOS32_SPI2_DMA_RX_IRQ_FLAGS (LL_DMA_IFCR_CTCIF1 | LL_DMA_IFCR_CTEIF1 | LL_DMA_IFCR_CHTIF1 | LL_DMA_IFCR_CGIF1)
+#define MIOS32_SPI2_DMA_TX_PTR DMA2
+#define MIOS32_SPI2_DMA_TX_CHN LL_DMA_CHANNEL_2
+#define MIOS32_SPI2_DMA_TX_REQ LL_DMAMUX_REQ_SPI3_TX
+#define MIOS32_SPI2_DMA_TX_IRQ_FLAGS (LL_DMA_IFCR_CTCIF2 | LL_DMA_IFCR_CTEIF2 | LL_DMA_IFCR_CHTIF2 | LL_DMA_IFCR_CGIF2)
+#define MIOS32_SPI2_DMA_IRQ_CHANNEL DMA1_Ch4_7_DMA2_Ch1_5_DMAMUX1_OVR_IRQn
+#ifndef MIOS32_SPI2_CS_PORT
+#define MIOS32_SPI2_CS_PORT   GPIOB
+#endif
+#ifndef MIOS32_SPI2_CS_PIN
+#define MIOS32_SPI2_CS_PIN    LL_GPIO_PIN_6
+#endif
+#ifndef MIOS32_SPI2_SCLK_PORT
+#define MIOS32_SPI2_SCLK_PORT GPIOB
+#endif
+#ifndef MIOS32_SPI2_SCLK_PIN
+#define MIOS32_SPI2_SCLK_PIN  LL_GPIO_PIN_3
+#endif
+#ifndef MIOS32_SPI2_SCLK_AF
+#define MIOS32_SPI2_SCLK_AF  LL_GPIO_AF_6
+#endif
+#ifndef MIOS32_SPI2_MISO_PORT
+#define MIOS32_SPI2_MISO_PORT GPIOB
+#endif
+#ifndef MIOS32_SPI2_MISO_PIN
+#define MIOS32_SPI2_MISO_PIN  LL_GPIO_PIN_4
+#endif
+#ifndef MIOS32_SPI2_MISO_AF
+#define MIOS32_SPI2_MISO_AF  LL_GPIO_AF_6
+#endif
+#ifndef MIOS32_SPI2_MOSI_PORT
+#define MIOS32_SPI2_MOSI_PORT GPIOB
+#endif
+#ifndef MIOS32_SPI2_MOSI_PIN
+#define MIOS32_SPI2_MOSI_PIN  LL_GPIO_PIN_5
+#endif
+#ifndef MIOS32_SPI2_MOSI_AF
+#define MIOS32_SPI2_MOSI_AF  LL_GPIO_AF_6
+#endif
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
 // Local variables
 /////////////////////////////////////////////////////////////////////////////
 
-static void (*spi_callback[2])(void);
+static void (*spi_callback[3])(void);
 
 static u8 tx_dummy_byte;
 static u8 rx_dummy_byte;
@@ -235,6 +346,60 @@ s32 MIOS32_SPI_Init(u32 mode)
 	MIOS32_SPI_TransferModeInit(1, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_128);
 #endif /* MIOS32_USE_SPI1 */
 
+
+	///////////////////////////////////////////////////////////////////////////
+	// SPI2
+	///////////////////////////////////////////////////////////////////////////
+#ifdef MIOS32_USE_SPI2
+
+	// disable callback function
+	spi_callback[2] = NULL;
+
+	// set CS pin to 1
+	MIOS32_SPI_CS_PinSet(2, 1);
+
+	// IO configuration
+	MIOS32_SPI_IO_Init(2, MIOS32_SPI_PIN_DRIVER_WEAK);
+
+	// enable SPI peripheral clock
+	LL_APB1_GRP1_EnableClock(MIOS32_SPI2_CLOCK);
+
+	// enable DMA clock
+	LL_AHB1_GRP1_EnableClock(MIOS32_SPI2_DMA_CLOCK);
+
+	LL_DMA_DisableChannel(MIOS32_SPI2_DMA_RX_PTR, MIOS32_SPI2_DMA_RX_CHN);
+	LL_DMA_DisableChannel(MIOS32_SPI2_DMA_TX_PTR, MIOS32_SPI2_DMA_TX_CHN);
+	// DMA Configuration for SPI Rx Event
+	DMA_InitStructure.PeriphRequest = MIOS32_SPI2_DMA_RX_REQ;
+	DMA_InitStructure.PeriphOrM2MSrcAddress = LL_SPI_DMA_GetRegAddr(MIOS32_SPI2_PTR);
+	DMA_InitStructure.MemoryOrM2MDstAddress = 0; // will be configured later
+	DMA_InitStructure.Direction = LL_DMA_DIRECTION_PERIPH_TO_MEMORY;
+	DMA_InitStructure.NbData = 0; // will be configured later
+	DMA_InitStructure.PeriphOrM2MSrcIncMode = LL_DMA_PERIPH_NOINCREMENT;
+	DMA_InitStructure.MemoryOrM2MDstIncMode = LL_DMA_MEMORY_INCREMENT;
+	DMA_InitStructure.PeriphOrM2MSrcDataSize = LL_DMA_PDATAALIGN_BYTE;
+	DMA_InitStructure.MemoryOrM2MDstDataSize = LL_DMA_MDATAALIGN_BYTE;
+	DMA_InitStructure.Mode = LL_DMA_MODE_NORMAL;
+	DMA_InitStructure.Priority = LL_DMA_PRIORITY_MEDIUM;
+	LL_DMA_Init(MIOS32_SPI2_DMA_RX_PTR, MIOS32_SPI2_DMA_RX_CHN, &DMA_InitStructure);
+	// DMA Configuration for SPI Tx Event
+	// (partly re-using previous DMA setup)
+	DMA_InitStructure.PeriphRequest = MIOS32_SPI2_DMA_TX_REQ;
+	DMA_InitStructure.Direction = LL_DMA_DIRECTION_MEMORY_TO_PERIPH;
+	LL_DMA_Init(MIOS32_SPI2_DMA_TX_PTR, MIOS32_SPI2_DMA_TX_CHN, &DMA_InitStructure);
+
+	// enable SPI interrupts to DMA
+	LL_SPI_EnableDMAReq_RX(MIOS32_SPI2_PTR);
+	LL_SPI_EnableDMAReq_TX(MIOS32_SPI2_PTR);
+
+	// Configure DMA interrupt (shares a vector with SPI1 on this chip - see
+	// MIOS32_SPI_SHARED_DMA_VECTOR)
+	MIOS32_IRQ_Install(MIOS32_SPI2_DMA_IRQ_CHANNEL, MIOS32_IRQ_SPI_DMA_PRIORITY);
+
+	// initial SPI peripheral configuration
+	MIOS32_SPI_TransferModeInit(2, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_128);
+#endif /* MIOS32_USE_SPI2 */
+
 	return 0; // no error
 }
 
@@ -242,7 +407,7 @@ s32 MIOS32_SPI_Init(u32 mode)
 /////////////////////////////////////////////////////////////////////////////
 //! (Re-)initializes SPI IO Pins
 //! By default, all output pins are configured with weak open drain drivers for 2 MHz
-//! \param[in] spi SPI number (0 or 1)
+//! \param[in] spi SPI number (0, 1 or 2)
 //! \param[in] spi_pin_driver configures the driver strength:
 //! <UL>
 //!   <LI>MIOS32_SPI_PIN_DRIVER_STRONG: configures outputs for up to 50 MHz
@@ -310,29 +475,29 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
 			// SCLK and DOUT are inputs assigned to alternate functions
 			GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
 			GPIO_InitStructure.Pin = MIOS32_SPI0_SCLK_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI0_SCLK_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI0_SCLK_AF;
 			LL_GPIO_Init(MIOS32_SPI0_SCLK_PORT, &GPIO_InitStructure);
 			GPIO_InitStructure.Pin = MIOS32_SPI0_MOSI_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI0_MOSI_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI0_MOSI_AF;
 			LL_GPIO_Init(MIOS32_SPI0_MOSI_PORT, &GPIO_InitStructure);
 			// DOUT is output assigned to alternate function
 			GPIO_InitStructure.Pin = MIOS32_SPI0_MISO_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI0_MISO_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI0_MISO_AF;
 			LL_GPIO_Init(MIOS32_SPI0_MISO_PORT, &GPIO_InitStructure);
 #endif
 		} else {
 			// SCLK and DOUT are outputs assigned to alternate functions
 			GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
 			GPIO_InitStructure.Pin  = MIOS32_SPI0_SCLK_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI0_SCLK_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI0_SCLK_AF;
 			LL_GPIO_Init(MIOS32_SPI0_SCLK_PORT, &GPIO_InitStructure);
 			GPIO_InitStructure.Pin  = MIOS32_SPI0_MOSI_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI0_MOSI_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI0_MOSI_AF;
 			LL_GPIO_Init(MIOS32_SPI0_MOSI_PORT, &GPIO_InitStructure);
 			// DIN is input with pull-up
 			GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
 			GPIO_InitStructure.Pin  = MIOS32_SPI0_MISO_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI0_MISO_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI0_MISO_AF;
 			LL_GPIO_Init(MIOS32_SPI0_MISO_PORT, &GPIO_InitStructure);
 		}
 
@@ -354,29 +519,29 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
 			// SCLK and DOUT are inputs assigned to alternate functions
 			GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
 			GPIO_InitStructure.Pin = MIOS32_SPI1_SCLK_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI1_SCLK_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI1_SCLK_AF;
 			LL_GPIO_Init(MIOS32_SPI1_SCLK_PORT, &GPIO_InitStructure);
 			GPIO_InitStructure.Pin = MIOS32_SPI1_MOSI_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI1_MOSI_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI1_MOSI_AF;
 			LL_GPIO_Init(MIOS32_SPI1_MOSI_PORT, &GPIO_InitStructure);
 			// DOUT is output assigned to alternate function
 			GPIO_InitStructure.Pin = MIOS32_SPI1_MISO_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI1_MISO_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI1_MISO_AF;
 			LL_GPIO_Init(MIOS32_SPI1_MISO_PORT, &GPIO_InitStructure);
 #endif
 		} else {
 			// SCLK and DOUT are outputs assigned to alternate functions
 			GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
 			GPIO_InitStructure.Pin  = MIOS32_SPI1_SCLK_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI1_SCLK_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI1_SCLK_AF;
 			LL_GPIO_Init(MIOS32_SPI1_SCLK_PORT, &GPIO_InitStructure);
 			GPIO_InitStructure.Pin  = MIOS32_SPI1_MOSI_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI1_MOSI_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI1_MOSI_AF;
 			LL_GPIO_Init(MIOS32_SPI1_MOSI_PORT, &GPIO_InitStructure);
 			// DIN is input with pull-up
 			GPIO_InitStructure.Pull = LL_GPIO_PULL_UP;
 			GPIO_InitStructure.Pin  = MIOS32_SPI1_MISO_PIN;
-			GPIO_InitStructure.Alternate = MIOS32_SPI1_MISO_ALT;
+			GPIO_InitStructure.Alternate = MIOS32_SPI1_MISO_AF;
 			LL_GPIO_Init(MIOS32_SPI1_MISO_PORT, &GPIO_InitStructure);
 		}
 
@@ -386,6 +551,47 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
 		LL_GPIO_Init(MIOS32_SPI1_CS_PORT, &GPIO_InitStructure);
 		break;
 #endif
+
+	case 2:
+#ifndef MIOS32_USE_SPI2
+		return -1; // disabled SPI port
+#else
+		if( slave ) {
+			// SCLK and DOUT are inputs assigned to alternate functions
+			GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
+			GPIO_InitStructure.Pin = MIOS32_SPI2_SCLK_PIN;
+			GPIO_InitStructure.Alternate = MIOS32_SPI2_SCLK_AF;
+			LL_GPIO_Init(MIOS32_SPI2_SCLK_PORT, &GPIO_InitStructure);
+			GPIO_InitStructure.Pin = MIOS32_SPI2_MOSI_PIN;
+			GPIO_InitStructure.Alternate = MIOS32_SPI2_MOSI_AF;
+			LL_GPIO_Init(MIOS32_SPI2_MOSI_PORT, &GPIO_InitStructure);
+			// DOUT is output assigned to alternate function
+			GPIO_InitStructure.Pin = MIOS32_SPI2_MISO_PIN;
+			GPIO_InitStructure.Alternate = MIOS32_SPI2_MISO_AF;
+			LL_GPIO_Init(MIOS32_SPI2_MISO_PORT, &GPIO_InitStructure);
+		} else {
+			// SCLK and DOUT are outputs assigned to alternate functions
+			GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
+			GPIO_InitStructure.Pin  = MIOS32_SPI2_SCLK_PIN;
+			GPIO_InitStructure.Alternate = MIOS32_SPI2_SCLK_AF;
+			LL_GPIO_Init(MIOS32_SPI2_SCLK_PORT, &GPIO_InitStructure);
+			GPIO_InitStructure.Pin  = MIOS32_SPI2_MOSI_PIN;
+			GPIO_InitStructure.Alternate = MIOS32_SPI2_MOSI_AF;
+			LL_GPIO_Init(MIOS32_SPI2_MOSI_PORT, &GPIO_InitStructure);
+			// DIN is input with pull-up
+			GPIO_InitStructure.Pull = LL_GPIO_PULL_UP;
+			GPIO_InitStructure.Pin  = MIOS32_SPI2_MISO_PIN;
+			GPIO_InitStructure.Alternate = MIOS32_SPI2_MISO_AF;
+			LL_GPIO_Init(MIOS32_SPI2_MISO_PORT, &GPIO_InitStructure);
+		}
+
+		// CS is always plain GPIO output, regardless of master/slave mode
+		GPIO_InitStructure.Mode = LL_GPIO_MODE_OUTPUT;
+		GPIO_InitStructure.Pin  = MIOS32_SPI2_CS_PIN;
+		LL_GPIO_Init(MIOS32_SPI2_CS_PORT, &GPIO_InitStructure);
+		break;
+#endif
+
 	default:
 		return -2; // unsupported SPI port
 	}
@@ -399,7 +605,7 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
 //! By default, all SPI peripherals are configured with
 //! MIOS32_SPI_MODE_CLK1_PHASE1 and MIOS32_SPI_PRESCALER_128
 //!
-//! \param[in] spi SPI number (0 or 1)
+//! \param[in] spi SPI number (0, 1 or 2)
 //! \param[in] spi_mode configures clock and capture phase:
 //! <UL>
 //!   <LI>MIOS32_SPI_MODE_CLK0_PHASE0: Idle level of clock is 0, data captured at rising edge
@@ -409,14 +615,15 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
 //! </UL>
 //! \param[in] spi_prescaler configures the SPI speed:
 //! <UL>
-//!   <LI>MIOS32_SPI_PRESCALER_2: sets clock rate 23.4 nS @ 84 MHz (42.67 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_4: sets clock rate 46,8 nS @ 84 MHz (21.33 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_8: sets clock rate 93.8 nS @ 84 MHz (10.67 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_16: sets clock rate 187 nS @ 84 MHz (5.333 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_32: sets clock rate 375 nS @ 84 MHz (2.667 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_64: sets clock rate 750 nS @ 84 MHz (1.333 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_128: sets clock rate 1.5 uS @ 84 MHz (0.667 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_256: sets clock rate 3 uS @ 84 MHz (0.333 MBit/s)
+//! (SPI0/SPI1 are both clocked from the 64 MHz default APB bus on this family):
+//!   <LI>MIOS32_SPI_PRESCALER_2: sets clock rate 31.3 nS @ 64 MHz (32 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_4: sets clock rate 62.5 nS @ 64 MHz (16 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_8: sets clock rate 125 nS @ 64 MHz (8 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_16: sets clock rate 250 nS @ 64 MHz (4 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_32: sets clock rate 500 nS @ 64 MHz (2 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_64: sets clock rate 1 uS @ 64 MHz (1 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_128: sets clock rate 2 uS @ 64 MHz (0.5 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_256: sets clock rate 4 uS @ 64 MHz (0.25 MBit/s)
 //! </UL>
 //! \return 0 if no error
 //! \return -1 if disabled SPI port selected
@@ -527,6 +734,31 @@ s32 MIOS32_SPI_TransferModeInit(u8 spi, mios32_spi_mode_t spi_mode, mios32_spi_p
 #endif
 	} break;
 
+	case 2: {
+#ifndef MIOS32_USE_SPI2
+		return -1; // disabled SPI port
+#else
+		u16 prev_cr1 = MIOS32_SPI2_PTR->CR1;
+		// Insure SPI disabled for configuration
+		LL_SPI_Disable(MIOS32_SPI2_PTR);
+		SPI_InitStructure.BaudRate = (((u16)spi_prescaler&7)-1) << 3;
+		LL_SPI_SetRxFIFOThreshold(MIOS32_SPI2_PTR, LL_SPI_RX_FIFO_TH_QUARTER);
+		LL_SPI_Init(MIOS32_SPI2_PTR, &SPI_InitStructure);
+		LL_SPI_SetStandard(MIOS32_SPI2_PTR, LL_SPI_PROTOCOL_MOTOROLA);
+		LL_SPI_DisableNSSPulseMgt(MIOS32_SPI2_PTR);
+		// SPI enabled
+		LL_SPI_Enable(MIOS32_SPI2_PTR);
+		if( SPI_InitStructure.Mode == LL_SPI_MODE_MASTER ) {
+			if( (prev_cr1 ^ MIOS32_SPI2_PTR->CR1) & 3 ) { // CPOL and CPHA located at bit #1 and #0
+				// clock configuration has been changed - we should send a dummy byte
+				// before the application activates chip select.
+				// this solves a dependency between SDCard and ENC28J60 driver
+				MIOS32_SPI_TransferByte(spi, 0xff);
+			}
+		}
+#endif
+	} break;
+
 	default:
 		return -2; // unsupported SPI port
 	}
@@ -537,7 +769,7 @@ s32 MIOS32_SPI_TransferModeInit(u8 spi, mios32_spi_mode_t spi_mode, mios32_spi_p
 
 /////////////////////////////////////////////////////////////////////////////
 //! Controls the CS (Chip Select) pin of a SPI port
-//! \param[in] spi SPI number (0 or 1)
+//! \param[in] spi SPI number (0, 1 or 2)
 //! \param[in] pin_value 0 or 1
 //! \return 0 if no error
 //! \return -1 if disabled SPI port selected
@@ -562,6 +794,14 @@ s32 MIOS32_SPI_CS_PinSet(u8 spi, u8 pin_value)
 		break;
 #endif
 
+	case 2:
+#ifndef MIOS32_USE_SPI2
+		return -1; // disabled SPI port
+#else
+		MIOS32_SYS_STM_PINSET(MIOS32_SPI2_CS_PORT, MIOS32_SPI2_CS_PIN, pin_value);
+		break;
+#endif
+
 	default:
 		return -2; // unsupported SPI port
 	}
@@ -572,7 +812,7 @@ s32 MIOS32_SPI_CS_PinSet(u8 spi, u8 pin_value)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Transfers a byte to SPI output and reads back the return value from SPI input
-//! \param[in] spi SPI number (0 or 1)
+//! \param[in] spi SPI number (0, 1 or 2)
 //! \param[in] b the byte which should be transfered
 //! \return >= 0: the read byte
 //! \return -1 if disabled SPI port selected
@@ -596,6 +836,14 @@ s32 MIOS32_SPI_TransferByte(u8 spi, u8 b)
 		return -1; // disabled SPI port
 #else
 		spi_ptr = MIOS32_SPI1_PTR;
+		break;
+#endif
+
+	case 2:
+#ifndef MIOS32_USE_SPI2
+		return -1; // disabled SPI port
+#else
+		spi_ptr = MIOS32_SPI2_PTR;
 		break;
 #endif
 
@@ -634,7 +882,7 @@ s32 MIOS32_SPI_TransferByte(u8 spi, u8 b)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Transfers a block of bytes via DMA.
-//! \param[in] spi SPI number (0 or 1)
+//! \param[in] spi SPI number (0, 1 or 2)
 //! \param[in] send_buffer pointer to buffer which should be sent.<BR>
 //! If NULL, 0xff (all-one) will be sent.
 //! \param[in] receive_buffer pointer to buffer which should get the received values.<BR>
@@ -685,6 +933,20 @@ s32 MIOS32_SPI_TransferBlock(u8 spi, u8 *send_buffer, u8 *receive_buffer, u16 le
 		break;
 #endif
 
+	case 2:
+#ifndef MIOS32_USE_SPI2
+		return -1; // disabled SPI port
+#else
+		spi_ptr = MIOS32_SPI2_PTR;
+		dma_tx_ptr = MIOS32_SPI2_DMA_TX_PTR;
+		dma_tx_chn = MIOS32_SPI2_DMA_TX_CHN;
+		dma_tx_irq_flags = MIOS32_SPI2_DMA_TX_IRQ_FLAGS;
+		dma_rx_ptr = MIOS32_SPI2_DMA_RX_PTR;
+		dma_rx_chn = MIOS32_SPI2_DMA_RX_CHN;
+		dma_rx_irq_flags = MIOS32_SPI2_DMA_RX_IRQ_FLAGS;
+		break;
+#endif
+
 	default:
 		return -2; // unsupported SPI port
 	}
@@ -723,7 +985,7 @@ s32 MIOS32_SPI_TransferBlock(u8 spi, u8 *send_buffer, u8 *receive_buffer, u16 le
 	}
 	LL_DMA_SetDataLength(dma_tx_ptr, dma_tx_chn, len);
 
-	// new for STM32F4 DMA: it's required to clear interrupt flags before DMA channel is enabled again
+	// interrupt flags must be cleared before the DMA channel is enabled again
 	dma_rx_ptr->IFCR |= dma_rx_irq_flags;
 	dma_tx_ptr->IFCR |= dma_tx_irq_flags;
 
@@ -758,6 +1020,28 @@ MIOS32_SPI0_DMA_IRQHANDLER_FUNC
 		spi_callback[0]();
 }
 
+#if defined(MIOS32_SPI_SHARED_DMA_VECTOR)
+// SPI1 (DMA1) and SPI2 (DMA2) share this vector on this chip - check each
+// DMA controller's own status flags to know which one actually fired before
+// servicing/clearing it.
+MIOS32_SPI1_DMA_IRQHANDLER_FUNC
+{
+#ifdef MIOS32_USE_SPI1
+	if( DMA1->ISR & MIOS32_SPI1_DMA_RX_IRQ_FLAGS ) {
+		MIOS32_SPI1_DMA_RX_PTR->IFCR |= MIOS32_SPI1_DMA_RX_IRQ_FLAGS;
+		if( spi_callback[1] != NULL )
+			spi_callback[1]();
+	}
+#endif
+#ifdef MIOS32_USE_SPI2
+	if( DMA2->ISR & MIOS32_SPI2_DMA_RX_IRQ_FLAGS ) {
+		MIOS32_SPI2_DMA_RX_PTR->IFCR |= MIOS32_SPI2_DMA_RX_IRQ_FLAGS;
+		if( spi_callback[2] != NULL )
+			spi_callback[2]();
+	}
+#endif
+}
+#else
 MIOS32_SPI1_DMA_IRQHANDLER_FUNC
 {
 	MIOS32_SPI1_DMA_RX_PTR->IFCR |= MIOS32_SPI1_DMA_RX_IRQ_FLAGS;
@@ -765,6 +1049,7 @@ MIOS32_SPI1_DMA_IRQHANDLER_FUNC
 	if( spi_callback[1] != NULL )
 		spi_callback[1]();
 }
+#endif
 
 //! \}
 

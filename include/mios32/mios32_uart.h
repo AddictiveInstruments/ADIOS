@@ -18,22 +18,6 @@
 // Global definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// temporary disabled for STM32 Primer due to pin conflicts
-#if defined(MIOS32_BOARD_STM32_PRIMER)
-# define MIOS32_UART_NUM 0
-#endif
-
-// number of UART interfaces (0..3)
-#ifndef MIOS32_UART_NUM
-#if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
-# define MIOS32_UART_NUM 4
-# elif defined(MIOS32_BOARD_MBHP_DIPCOREF4)
-# define MIOS32_UART_NUM 2
-#else
-# define MIOS32_UART_NUM 2
-#endif
-#endif
-
 // Tx buffer size (1..256)
 #ifndef MIOS32_UART_TX_BUFFER_SIZE
 #define MIOS32_UART_TX_BUFFER_SIZE 64
@@ -84,6 +68,46 @@
 #define MIOS32_UART3_TX_OD 1
 #endif
 
+// Baudrate/TX_OD for UART4..UART9 - only meaningful on STM32F4xx chips with
+// more than 4 USART/UART peripherals (see mios32_uart.c's MIOS32_USE_UARTx
+// force-undef for which ports actually exist per processor).
+#ifndef MIOS32_UART4_BAUDRATE
+#define MIOS32_UART4_BAUDRATE 31250
+#endif
+#ifndef MIOS32_UART4_TX_OD
+#define MIOS32_UART4_TX_OD 1
+#endif
+#ifndef MIOS32_UART5_BAUDRATE
+#define MIOS32_UART5_BAUDRATE 31250
+#endif
+#ifndef MIOS32_UART5_TX_OD
+#define MIOS32_UART5_TX_OD 1
+#endif
+#ifndef MIOS32_UART6_BAUDRATE
+#define MIOS32_UART6_BAUDRATE 31250
+#endif
+#ifndef MIOS32_UART6_TX_OD
+#define MIOS32_UART6_TX_OD 1
+#endif
+#ifndef MIOS32_UART7_BAUDRATE
+#define MIOS32_UART7_BAUDRATE 31250
+#endif
+#ifndef MIOS32_UART7_TX_OD
+#define MIOS32_UART7_TX_OD 1
+#endif
+#ifndef MIOS32_UART8_BAUDRATE
+#define MIOS32_UART8_BAUDRATE 31250
+#endif
+#ifndef MIOS32_UART8_TX_OD
+#define MIOS32_UART8_TX_OD 1
+#endif
+#ifndef MIOS32_UART9_BAUDRATE
+#define MIOS32_UART9_BAUDRATE 31250
+#endif
+#ifndef MIOS32_UART9_TX_OD
+#define MIOS32_UART9_TX_OD 1
+#endif
+
 // Interface assignment: 0 = disabled, 1 = MIDI, 2 = COM
 #ifndef MIOS32_UART0_ASSIGNMENT
 #define MIOS32_UART0_ASSIGNMENT 1
@@ -102,6 +126,26 @@
 // Interface assignment: 0 = disabled, 1 = MIDI, 2 = COM
 #ifndef MIOS32_UART3_ASSIGNMENT
 #define MIOS32_UART3_ASSIGNMENT 1
+#endif
+
+// Interface assignment: 0 = disabled, 1 = MIDI, 2 = COM (UART4..UART9)
+#ifndef MIOS32_UART4_ASSIGNMENT
+#define MIOS32_UART4_ASSIGNMENT 1
+#endif
+#ifndef MIOS32_UART5_ASSIGNMENT
+#define MIOS32_UART5_ASSIGNMENT 1
+#endif
+#ifndef MIOS32_UART6_ASSIGNMENT
+#define MIOS32_UART6_ASSIGNMENT 1
+#endif
+#ifndef MIOS32_UART7_ASSIGNMENT
+#define MIOS32_UART7_ASSIGNMENT 1
+#endif
+#ifndef MIOS32_UART8_ASSIGNMENT
+#define MIOS32_UART8_ASSIGNMENT 1
+#endif
+#ifndef MIOS32_UART9_ASSIGNMENT
+#define MIOS32_UART9_ASSIGNMENT 1
 #endif
 
 
@@ -137,9 +181,6 @@ extern s32 MIOS32_UART_TxBufferPut_NonBlocking(u8 uart, u8 b);
 extern s32 MIOS32_UART_TxBufferPut(u8 uart, u8 b);
 extern s32 MIOS32_UART_TxBufferPutMore_NonBlocking(u8 uart, u8 *buffer, u16 len);
 extern s32 MIOS32_UART_TxBufferPutMore(u8 uart, u8 *buffer, u16 len);
-
-extern s32 MIOS32_UART_TX_Bypass(u8 uart, u8 enable);
-extern void MIOS32_UART_TX_BypassCallback(void);
 
 extern u8 MIOS32_UART_RXTX_Act(void);
 /////////////////////////////////////////////////////////////////////////////

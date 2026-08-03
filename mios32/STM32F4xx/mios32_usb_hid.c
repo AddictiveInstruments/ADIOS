@@ -879,7 +879,7 @@ static USBH_Status USBH_InterfaceInit ( USB_OTG_CORE_HANDLE *pdev, void *phost)
 	if(pdev->cfg.coreID == USB_OTG_FS_CORE_ID){
 #ifndef MIOS32_DONT_USE_USB_HOST
 		machine = &USB_FS_HID_machine;
-		//MIOS32_MIDI_DebugPortSet(UART0);
+		//MIOS32_MIDI_DebugPortSet(DIN0);
 #else
 		return USBH_NOT_SUPPORTED; //
 #endif
@@ -997,7 +997,7 @@ void USBH_InterfaceDeInit ( USB_OTG_CORE_HANDLE *pdev,
 	if(pdev->cfg.coreID == USB_OTG_FS_CORE_ID){
 #ifndef MIOS32_DONT_USE_USB_HOST
 		machine = &USB_FS_HID_machine;
-		//MIOS32_MIDI_DebugPortSet(UART0);
+		//MIOS32_MIDI_DebugPortSet(DIN0);
 #else
 		return; //
 #endif
@@ -1047,7 +1047,7 @@ static USBH_Status USBH_ClassRequest(USB_OTG_CORE_HANDLE *pdev ,
 #ifndef MIOS32_DONT_USE_USB_HOST
 		machine = &USB_FS_HID_machine;
 		desc = &USB_FS_HID_Desc;
-		//MIOS32_MIDI_DebugPortSet(UART0);
+		//MIOS32_MIDI_DebugPortSet(DIN0);
 #else
 		return USBH_NOT_SUPPORTED; //
 #endif
@@ -1136,7 +1136,7 @@ static USBH_Status USBH_Handle(USB_OTG_CORE_HANDLE *pdev , void   *phost)
 	if(pdev->cfg.coreID == USB_OTG_FS_CORE_ID){
 #ifndef MIOS32_DONT_USE_USB_HOST
 		machine = &USB_FS_HID_machine;
-		//MIOS32_MIDI_DebugPortSet(UART0);
+		//MIOS32_MIDI_DebugPortSet(DIN0);
 #else
 		return USBH_NOT_SUPPORTED; //
 #endif

@@ -19,8 +19,8 @@ CFLAGS    +=    -DMIOS32_PROCESSOR_$(PROCESSOR) \
 # TODO: provide makefile option to add code to ARM sources
 THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/common/mios32_srio.c \
-	$(MIOS32_PATH)/mios32/common/mios32_din.c \
-	$(MIOS32_PATH)/mios32/common/mios32_dout.c \
+	$(MIOS32_PATH)/mios32/common/mios32_srin.c \
+	$(MIOS32_PATH)/mios32/common/mios32_srout.c \
 	$(MIOS32_PATH)/mios32/common/mios32_enc.c \
 	$(MIOS32_PATH)/mios32/common/mios32_lcd.c \
 	$(MIOS32_PATH)/mios32/common/mios32_midi.c \

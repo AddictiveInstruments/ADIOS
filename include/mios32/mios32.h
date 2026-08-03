@@ -67,8 +67,8 @@ extern "C" {
 #include <mios32_sys.h>
 #include <mios32_spi.h>
 #include <mios32_srio.h>
-#include <mios32_din.h>
-#include <mios32_dout.h>
+#include <mios32_srin.h>
+#include <mios32_srout.h>
 #include <mios32_enc.h>
 #include <mios32_ain.h>
 #include <mios32_mf.h>

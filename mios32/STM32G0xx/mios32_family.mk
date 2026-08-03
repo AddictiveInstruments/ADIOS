@@ -25,6 +25,7 @@ THUMB_SOURCE += \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_dac.c \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_tim.c \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_usart.c \
+	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_lpuart.c \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_exti.c \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_utils.c \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_spi.c \

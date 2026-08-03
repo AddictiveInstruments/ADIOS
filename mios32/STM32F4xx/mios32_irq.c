@@ -98,8 +98,6 @@ s32 MIOS32_IRQ_Install(u8 IRQn, u8 priority)
   if( priority >= 16 )
     return -1; // invalid priority
 
-  // (2026-08-01) was a manual priority-group bit calc against SCB->AIRCR -
-  // harmonized with STM32G0xx to use the portable CMSIS call instead
   NVIC_SetPriority(IRQn, priority);
   NVIC_EnableIRQ(IRQn);
 

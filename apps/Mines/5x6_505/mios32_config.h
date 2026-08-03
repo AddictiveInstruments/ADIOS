@@ -31,21 +31,19 @@
 #define TR5X6_VERSION      		"b0 . 002 (beta)"
 #endif
 //#define REDUCED_APP_LCD
-#define MIOS32_MIDI_DEFAULT_PORT UART0
-#define MIOS32_MIDI_DEBUG_PORT UART0
+#define MIOS32_MIDI_DEFAULT_PORT DIN0
+#define MIOS32_MIDI_DEBUG_PORT DIN0
 // disable code modules
-// mios32_spi.c (2026-08-01, opt-in) - SPI0 drives the ROM (tr5x6_rom.c), SPI1
-// drives the TFT (5x6_tft.c). Both use the single-CS API (MIOS32_SPI_CS_PinSet)
-// since the shared driver no longer supports a 2nd CS line per port.
-#define MIOS32_USE_SPI
+// mios32_spi.c - SPI0 drives the ROM (tr5x6_rom.c), SPI1 drives the TFT
+// (5x6_tft.c). Both use MIOS32_SPI_CS_PinSet(spi, value) for chip select.
 #define MIOS32_USE_SPI0
 #define MIOS32_USE_SPI1
 #define TR5X6_DECOD_SOFT_SPI
 #ifdef TR5X6_DECOD_SOFT_SPI
 #define MIOS32_DONT_USE_SRIO
 #endif
-#define MIOS32_DONT_USE_DIN
-#define MIOS32_DONT_USE_DOUT
+#define MIOS32_DONT_USE_SRIN
+#define MIOS32_DONT_USE_SROUT
 #define MIOS32_DONT_USE_ENC
 #define MIOS32_DONT_USE_AIN
 #define MIOS32_DONT_USE_MF
@@ -64,15 +62,17 @@
 #define MIOS32_DONT_USE_IIC_MIDI
 //#define MIOS32_USE_I2S
 //#define MIOS32_DONT_USE_BOARD
-// mios32_utils.c (2026-08-01, merged delay/timer/stopwatch/sof) - delay is
-// indispensable (no toggle); timer/stopwatch/sof are opt-in:
+// mios32_utils.c - delay is indispensable (no toggle); timer/stopwatch/sof
+// are opt-in:
 #define MIOS32_USE_STOPWATCH
 // MIOS32_USE_TIMER / MIOS32_USE_SOF left undefined - unused by this project
 #define MIOS32_DONT_USE_SDCARD
 #define MIOS32_DONT_USE_ENC28J60
 
 // calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
-//#define MIOS32_DONT_USE_FREERTOS
+// opt-in, renamed from MIOS32_DONT_USE_FREERTOS - left undefined here since
+// this project uses FreeRTOS (G070CB has plenty of RAM/FLASH margin for it).
+//#define MIOS32_APP_USE_FREERTOS
 
 #if 0
 // Following settings allow to customize the USB device descriptor
@@ -113,28 +113,28 @@
 #if defined(MIOS32_FAMILY_STM32F4xx)
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-// to save some additional memory for STM32F4:
-#define MIOS32_UART_NUM 2
 #define MIOS32_BOARD_J15_LED_NUM 1
 
 // unfortunately!!! Only 584 bytes are missing, maybe the USB driver could be optimized by removing irrelevant code
-//# define MIOS32_DONT_USE_UART
-//# define MIOS32_DONT_USE_UART_MIDI
+#define MIOS32_USE_UART0
+#define MIOS32_USE_UART1
+#define MIOS32_USE_UART_MIDI
 #elif defined(MIOS32_FAMILY_STM32G0xx)
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-// to save some additional memory for STM32F4:
-#define MIOS32_UART_NUM 2
-#if defined(MIOS32_PROCESSOR_STM32G050K8)
-#define MIOS32_UART_MIDI_TX_BYPASS_OPTION
-#endif
 #define MIOS32_BOARD_J15_LED_NUM 1
 
 // unfortunately!!! Only 584 bytes are missing, maybe the USB driver could be optimized by removing irrelevant code
-//# define MIOS32_DONT_USE_UART
-//# define MIOS32_DONT_USE_UART_MIDI
+#define MIOS32_USE_UART0
+#define MIOS32_USE_UART1
+#define MIOS32_USE_UART_MIDI
+// UART0 (USART3) TX runs through an external 3V3->5V transistor stage on
+// this board that inverts the signal - every port defaults to normal
+// polarity in the common driver, this is the per-project override (see
+// the module-level comment in mios32_uart.c).
+#define MIOS32_UART0_TX_INVERTED
 
 #endif
 

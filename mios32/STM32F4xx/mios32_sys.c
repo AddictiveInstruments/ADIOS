@@ -21,14 +21,13 @@
 
 
 
-#ifndef MIOS32_DONT_USE_FREERTOS
+#if MIOS32_APP_USE_FREERTOS
 #include <FreeRTOS.h>
 #include <portmacro.h>
 #endif
 
 // this module is indispensable (the CPU can't run without it - clock, vector
-// table, timebase) - always compiled, no MIOS32_DONT_USE_SYS/MIOS32_USE_SYS
-// toggle (removed 2026-08-01, a toggle here would just be a footgun).
+// table, timebase) - always compiled, no on/off toggle.
 
 // specified in .ld file
 extern u32 mios32_sys_isr_vector;
@@ -45,8 +44,8 @@ const uint8_t APBPrescTable[8]  = {0, 0, 0, 0, 1, 2, 3, 4};
 #define MEM16(addr) (*((volatile u16 *)(addr)))
 #define MEM8(addr)  (*((volatile u8  *)(addr)))
 
-// Clock configuration (2026-08-01 rework) - override-able per-project from
-// mios32_config.h, without touching this file:
+// Clock configuration - override-able per-project from mios32_config.h,
+// without touching this file:
 //   - default: HSI (internal 16 MHz RC, no crystal needed) -> PLL -> 168 MHz,
 //     the simplest/fastest config for this chip. HSI is less precise than a
 //     crystal (~1%, more over temperature) - fine for UART MIDI, but a
@@ -188,7 +187,7 @@ s32 MIOS32_SYS_Init(u32 mode)
 s32 MIOS32_SYS_Reset(void)
 {
   // disable all RTOS tasks
-#ifndef MIOS32_DONT_USE_FREERTOS
+#if MIOS32_APP_USE_FREERTOS
   portENTER_CRITICAL(); // port specific FreeRTOS function to disable tasks (nested)
 #endif
 
@@ -228,17 +227,59 @@ s32 MIOS32_SYS_Reset(void)
   LL_APB1_GRP1_ReleaseReset(0xffffffff);
   LL_APB2_GRP1_ReleaseReset(0xffffffff);
 
-  // NOTE (2026-08-01): this used to write SCB->AIRCR's VECTRESET bit
-  // directly - that bit only exists on Cortex-M0/M0+ (ARMv6-M), it's
-  // reserved (no effect) on this chip's Cortex-M4 (ARMv7-M), so this never
-  // actually reset the CPU - it silently fell through into the while(1)
-  // below and hung forever. NVIC_SystemReset() (SYSRESETREQ) is the correct,
-  // portable CMSIS call, already used the same way on STM32G0xx.
+  // CAUTION: do not replace this with a direct write to SCB->AIRCR's
+  // VECTRESET bit - that bit only exists on Cortex-M0/M0+ (ARMv6-M) and is
+  // reserved (no effect) on this chip's Cortex-M4 (ARMv7-M), so the CPU
+  // would never actually reset. NVIC_SystemReset() (SYSRESETREQ) is the
+  // correct, portable CMSIS call - used the same way on STM32G0xx.
   NVIC_SystemReset();
 
   while( 1 );
 
   return -1; // we will never reach this point
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Requests that the bootloader stays resident after the next reset, so
+//! that an application can trigger a firmware update (e.g. via MIDI SysEx)
+//! without requiring the user to touch the physical BSL_HOLD pin.
+//! The request is stored in an RTC backup register, which survives
+//! NVIC_SystemReset() (unlike RAM) and doesn't wear out flash.
+//! \return 0 (no error)
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_SYS_BootloaderModeRequest(void)
+{
+  // unlike STM32G0xx (separate TAMP peripheral with an
+  // LL_RTC_BKP_SetRegister(TAMP, ...) wrapper), on STM32F4xx the backup
+  // registers are plain members of the RTC peripheral itself (RTC->BKP0R,
+  // no LL wrapper exists for them) - only backup domain write access needs
+  // enabling first, the RTC clock/calendar itself doesn't need to be running.
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+  LL_PWR_EnableBkUpAccess();
+
+  RTC->BKP0R = MIOS32_SYS_BOOTLOADER_MODE_MAGIC;
+
+  return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+//! Checks the bootloader mode request flag and clears it (one-shot).
+//! Only meant to be called by the bootloader itself, right at boot -
+//! the flag is consumed immediately, before the upload is known to succeed
+//! (the physical BSL_HOLD pin remains the fallback if it doesn't).
+//! \return 1 if the flag was set, 0 otherwise
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_SYS_BootloaderModeRequested(void)
+{
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+  LL_PWR_EnableBkUpAccess();
+
+  u32 requested = (RTC->BKP0R == MIOS32_SYS_BOOTLOADER_MODE_MAGIC);
+
+  RTC->BKP0R = 0;
+
+  return requested ? 1 : 0;
 }
 
 

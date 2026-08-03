@@ -34,7 +34,7 @@ extern void MIOS32_SRIO_CALLBACK_BEFORE_DIN_COMPARE(void);
 
 // DOUT SR registers in reversed (!) order (since DMA doesn't provide a decrement address function)
 // Note that also the bits are in reversed order compared to PIC based MIOS
-// As long as the array is accessed via MIOS32_DOUT_* functions, they programmer won't notice a difference!
+// As long as the array is accessed via MIOS32_SROUT_* functions, they programmer won't notice a difference!
 volatile u8 mios32_srio_dout[MIOS32_SRIO_NUM_DOUT_PAGES][MIOS32_SRIO_NUM_SR];
 
 // DIN values of last scan
@@ -103,7 +103,7 @@ s32 MIOS32_SRIO_Init(u32 mode)
   num_sr = MIOS32_SRIO_NUM_SR;
 
   // clear chains
-  // will be done again in MIOS32_DIN_Init and MIOS32_DOUT_Init
+  // will be done again in MIOS32_SRIN_Init and MIOS32_SROUT_Init
   // we don't reference to these functions here to allow the programmer to remove/replace these driver modules)
   for(i=0; i<MIOS32_SRIO_NUM_SR; ++i) {
 #if MIOS32_SRIO_NUM_DOUT_PAGES == 1
@@ -204,7 +204,7 @@ u32 MIOS32_SRIO_DebounceGet(void)
 /////////////////////////////////////////////////////////////////////////////
 //! Sets the debounce counter reload value for the DIN SR registers which are 
 //! not assigned to rotary encoders (or other drivers which get use of
-//! MIOS32_DIN_SRChangedGetAndClear()) to debounce low-quality buttons.
+//! MIOS32_SRIN_SRChangedGetAndClear()) to debounce low-quality buttons.
 //!
 //! Debouncing is realized in the following way: on every button movement 
 //! the debounce preload value will be loaded into the debounce counter 
@@ -243,7 +243,7 @@ s32 MIOS32_SRIO_DebounceSet(u16 _debounce_time)
 /////////////////////////////////////////////////////////////////////////////
 //! Internally used function to start the debounce delay after a button
 //! has been moved.<BR>
-//! This function is used by MIOS32_DIN_Handler(), there is no need to use
+//! This function is used by MIOS32_SRIN_Handler(), there is no need to use
 //! it in a common application.
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////

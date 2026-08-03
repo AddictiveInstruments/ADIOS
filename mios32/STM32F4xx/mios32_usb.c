@@ -1106,7 +1106,7 @@ const uint8_t MSG_UNREC_ERROR[]        = "[USBH_USR] UNRECOVERED ERROR STATE\n";
 static void USBH_USR_Init(void)
 {
 #ifdef MIOS32_MIDI_USBH_DEBUG
-  // Debug Output via UART0 in Host Mode
+  // Debug Output via DIN0 in Host Mode
   if( USB_OTG_IsHostMode(&USB_OTG_FS_dev) ) {
     USB_HOST_prev_debug_port = MIOS32_MIDI_DebugPortGet();
     MIOS32_MIDI_DebugPortSet(MIOS32_MIDI_USBH_DEBUG_PORT);
@@ -1125,7 +1125,7 @@ static void USBH_USR_Init(void)
 static void USBH_USR_DeviceAttached(void)
 {
 #ifdef MIOS32_MIDI_USBH_DEBUG
-  // Debug Output via UART0 in Host Mode
+  // Debug Output via DIN0 in Host Mode
   if( USB_OTG_IsHostMode(&USB_OTG_FS_dev) ) {
     USB_HOST_prev_debug_port = MIOS32_MIDI_DebugPortGet();
     MIOS32_MIDI_DebugPortSet(MIOS32_MIDI_USBH_DEBUG_PORT);
@@ -1383,7 +1383,7 @@ static int USBH_USR_Application(void)
 static void USBH_USR_DeInit(void)
 {
 #ifdef MIOS32_MIDI_USBH_DEBUG
-  // Debug Output via UART0 in Host Mode
+  // Debug Output via DIN0 in Host Mode
   if( USB_OTG_IsHostMode(&USB_OTG_FS_dev) ) {
     //MIOS32_MIDI_DebugPortSet(USB_HOST_prev_debug_port);
   }

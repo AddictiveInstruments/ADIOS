@@ -2,9 +2,8 @@
 //! \defgroup MIOS32_UTILS
 //!
 //! Delay / Timer / Stopwatch / Sign-of-life (SOF) LED utility functions for
-//! MIOS32 (merged 2026-08-01 from the former mios32_delay.c, mios32_timer.c,
-//! mios32_stopwatch.c - each still independently opt-in via its own
-//! MIOS32_USE_x define, see below).
+//! MIOS32 - each independently opt-in via its own MIOS32_USE_x define, see
+//! below.
 //!
 //! \{
 /* ==========================================================================
@@ -105,33 +104,78 @@ s32 MIOS32_DELAY_Wait_uS(u16 uS)
 
 #define NUM_TIMERS 3
 
-#define TIMER0_BASE                 TIM2
-#define TIMER0_RCC   RCC_APB1Periph_TIM2
-#define TIMER0_IRQ                  TIM2_IRQn
-#define TIMER0_IRQ_HANDLER     void TIM2_IRQHandler(void)
+// TIM1/TIM3/TIM16 - confirmed present on every STM32G0 tier (verified via
+// each tier's CMSIS device header, from the smallest 2-USART G030/G031 up
+// to the 6-USART+2xLPUART G0B1/G0C1) - unlike the former defaults TIM2/
+// TIM5, missing below the 4-USART tier, and doesn't collide with
+// MIOS32_DELAY (TIM14) or MIOS32_STOPWATCH (TIM17). This whole module was
+// previously left-over STM32 Standard Peripheral Library (SPL) code -
+// RCC_APB1Periph_TIM2, TIM_ITConfig(), TIM_TimeBaseInit() etc - none of
+// which exist in the STM32G0xx LL driver at all (nor does TIM8, referenced
+// in the old RCC-bus check); it would fail to compile on every G0 chip the
+// moment a project defined MIOS32_USE_TIMER, regardless of tier - nobody
+// ever had, so it was never caught. Rewritten against LL below.
+// Override all five (_BASE/_RCC/_RCC_ENABLE/_IRQ/_IRQ_HANDLER) together per
+// slot if one of these conflicts with something else on your hardware.
+#ifndef TIMER0_BASE
+#define TIMER0_BASE                 TIM1
+#endif
+#ifndef TIMER0_RCC
+#define TIMER0_RCC                  LL_APB2_GRP1_PERIPH_TIM1
+#endif
+#ifndef TIMER0_RCC_ENABLE
+#define TIMER0_RCC_ENABLE()         LL_APB2_GRP1_EnableClock(TIMER0_RCC)
+#endif
+#ifndef TIMER0_IRQ
+#define TIMER0_IRQ                  TIM1_BRK_UP_TRG_COM_IRQn
+#endif
+#ifndef TIMER0_IRQ_HANDLER
+#define TIMER0_IRQ_HANDLER          void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
+#endif
 
+#ifndef TIMER1_BASE
 #define TIMER1_BASE                 TIM3
-#define TIMER1_RCC   RCC_APB1Periph_TIM3
+#endif
+#ifndef TIMER1_RCC
+#define TIMER1_RCC                  LL_APB1_GRP1_PERIPH_TIM3
+#endif
+#ifndef TIMER1_RCC_ENABLE
+#define TIMER1_RCC_ENABLE()         LL_APB1_GRP1_EnableClock(TIMER1_RCC)
+#endif
+#ifndef TIMER1_IRQ
 #define TIMER1_IRQ                  TIM3_IRQn
-#define TIMER1_IRQ_HANDLER     void TIM3_IRQHandler(void)
+#endif
+#ifndef TIMER1_IRQ_HANDLER
+#define TIMER1_IRQ_HANDLER          void TIM3_IRQHandler(void)
+#endif
 
-#define TIMER2_BASE                 TIM5
-#define TIMER2_RCC   RCC_APB1Periph_TIM5
-#define TIMER2_IRQ                  TIM5_IRQn
-#define TIMER2_IRQ_HANDLER     void TIM5_IRQHandler(void)
+#ifndef TIMER2_BASE
+#define TIMER2_BASE                 TIM16
+#endif
+#ifndef TIMER2_RCC
+#define TIMER2_RCC                  LL_APB2_GRP1_PERIPH_TIM16
+#endif
+#ifndef TIMER2_RCC_ENABLE
+#define TIMER2_RCC_ENABLE()         LL_APB2_GRP1_EnableClock(TIMER2_RCC)
+#endif
+#ifndef TIMER2_IRQ
+#define TIMER2_IRQ                  TIM16_IRQn
+#endif
+#ifndef TIMER2_IRQ_HANDLER
+#define TIMER2_IRQ_HANDLER          void TIM16_IRQHandler(void)
+#endif
 
-// timers clocked at CPU/2 clock
+// timers clocked at CPU clock
 #define TIMER_TIM_PERIPHERAL_FRQ (MIOS32_SYS_CPU_FREQUENCY)
 
-static TIM_TypeDef *timer_base[NUM_TIMERS] = { TIMER0_BASE, TIMER1_BASE, TIMER2_BASE };
-static u32 timer_rcc[NUM_TIMERS] = { TIMER0_RCC, TIMER1_RCC, TIMER2_RCC };
+static TIM_TypeDef * const timer_base[NUM_TIMERS] = { TIMER0_BASE, TIMER1_BASE, TIMER2_BASE };
 static const u32 timer_irq_chn[NUM_TIMERS] = { TIMER0_IRQ, TIMER1_IRQ, TIMER2_IRQ };
 static void (*timer_callback[NUM_TIMERS])(void);
 
 /////////////////////////////////////////////////////////////////////////////
 //! Initialize a timer
 //! \param[in] timer (0..2)<BR>
-//!     Timer allocation on STM32: 0=TIM2, 1=TIM3, 2=TIM5
+//!     Timer allocation: 0=TIM1, 1=TIM3, 2=TIM16 (see TIMERn_BASE overrides above)
 //! \param[in] period in uS accuracy (1..65536)
 //! \param[in] _irq_handler (function name)
 //! \param[in] irq_priority: one of these values:
@@ -168,31 +212,36 @@ s32 MIOS32_TIMER_Init(u8 timer, u32 period, void (*_irq_handler)(void), u8 irq_p
   if( period < 1 || period >= 65537 )
     return -2;
 
-  // enable timer clock
-  if( timer_base[timer] == TIM1 || timer_base[timer] == TIM8 )
-    RCC_APB2PeriphClockCmd(timer_rcc[timer], ENABLE);
-  else
-    RCC_APB1PeriphClockCmd(timer_rcc[timer], ENABLE);
+  // enable timer clock (per-slot bus differs: TIM1/TIM16 on APB2, TIM3 on APB1)
+  switch( timer ) {
+  case 0: TIMER0_RCC_ENABLE(); break;
+  case 1: TIMER1_RCC_ENABLE(); break;
+  case 2: TIMER2_RCC_ENABLE(); break;
+  }
 
   // disable interrupt (if active from previous configuration)
-  TIM_ITConfig(timer_base[timer], TIM_IT_Update, DISABLE);
+  LL_TIM_DisableIT_UPDATE(timer_base[timer]);
 
   // copy callback function
   timer_callback[timer] = _irq_handler;
 
   // time base configuration
-  TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
-  TIM_TimeBaseStructure.TIM_Period = period-1;
-  TIM_TimeBaseStructure.TIM_Prescaler = (TIMER_TIM_PERIPHERAL_FRQ/1000000)-1; // for 1 uS accuracy
-  TIM_TimeBaseStructure.TIM_ClockDivision = 0;
-  TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
-  TIM_TimeBaseInit(timer_base[timer], &TIM_TimeBaseStructure);
+  LL_TIM_InitTypeDef TIM_TimeBaseStructure;
+  TIM_TimeBaseStructure.Prescaler = (TIMER_TIM_PERIPHERAL_FRQ/1000000)-1; // for 1 uS accuracy
+  TIM_TimeBaseStructure.CounterMode = LL_TIM_COUNTERMODE_UP;
+  TIM_TimeBaseStructure.Autoreload = period-1;
+  TIM_TimeBaseStructure.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1;
+  // only meaningful for TIM1 (the sole advanced/repetition-counter-capable
+  // instance among the three slots) - explicitly zeroed rather than left
+  // uninitialised, since LL_TIM_Init() does write it there.
+  TIM_TimeBaseStructure.RepetitionCounter = 0;
+  LL_TIM_Init(timer_base[timer], &TIM_TimeBaseStructure);
 
   // enable interrupt
-  TIM_ITConfig(timer_base[timer], TIM_IT_Update, ENABLE);
+  LL_TIM_EnableIT_UPDATE(timer_base[timer]);
 
   // enable counter
-  TIM_Cmd(timer_base[timer], ENABLE);
+  LL_TIM_EnableCounter(timer_base[timer]);
 
   // enable global interrupt
   MIOS32_IRQ_Install(timer_irq_chn[timer], irq_priority);
@@ -209,7 +258,7 @@ s32 MIOS32_TIMER_Init(u8 timer, u32 period, void (*_irq_handler)(void), u8 irq_p
 //!   MIOS32_TIMER_ReInit(0, 2000);
 //! \endcode
 //! \param[in] timer (0..2)<BR>
-//!     Timer allocation on STM32: 0=TIM2, 1=TIM3, 2=TIM5
+//!     Timer allocation: 0=TIM1, 1=TIM3, 2=TIM16 (see TIMERn_BASE overrides above)
 //! \param[in] period in uS accuracy (1..65536)
 //! \return 0 if initialisation passed
 //! \return if invalid timer number
@@ -226,12 +275,13 @@ s32 MIOS32_TIMER_ReInit(u8 timer, u32 period)
     return -2;
 
   // time base configuration
-  TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
-  TIM_TimeBaseStructure.TIM_Period = period - 1;
-  TIM_TimeBaseStructure.TIM_Prescaler = (TIMER_TIM_PERIPHERAL_FRQ/1000000)-1; // for 1 uS accuracy
-  TIM_TimeBaseStructure.TIM_ClockDivision = 0;
-  TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
-  TIM_TimeBaseInit(timer_base[timer], &TIM_TimeBaseStructure);
+  LL_TIM_InitTypeDef TIM_TimeBaseStructure;
+  TIM_TimeBaseStructure.Prescaler = (TIMER_TIM_PERIPHERAL_FRQ/1000000)-1; // for 1 uS accuracy
+  TIM_TimeBaseStructure.CounterMode = LL_TIM_COUNTERMODE_UP;
+  TIM_TimeBaseStructure.Autoreload = period-1;
+  TIM_TimeBaseStructure.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1;
+  TIM_TimeBaseStructure.RepetitionCounter = 0;
+  LL_TIM_Init(timer_base[timer], &TIM_TimeBaseStructure);
 
   return 0; // no error
 }
@@ -255,7 +305,7 @@ s32 MIOS32_TIMER_DeInit(u8 timer)
     return -1; // invalid timer selected
 
   // deinitialize timer
-  TIM_DeInit(timer_base[timer]);
+  LL_TIM_DeInit(timer_base[timer]);
 
   return 0; // no error
 }
@@ -264,11 +314,11 @@ s32 MIOS32_TIMER_DeInit(u8 timer)
 //! Interrupt handlers
 //! \note don't call them directly from application
 /////////////////////////////////////////////////////////////////////////////
-#ifndef MIOS32_DONT_ALLOCATE_TIM2_IRQn
+#ifndef MIOS32_DONT_ALLOCATE_TIM1_IRQn
 TIMER0_IRQ_HANDLER
 {
-  if( TIM_GetITStatus(TIMER0_BASE, TIM_IT_Update) != RESET ) {
-    TIM_ClearITPendingBit(TIMER0_BASE, TIM_IT_Update);
+  if( LL_TIM_IsActiveFlag_UPDATE(TIMER0_BASE) ) {
+    LL_TIM_ClearFlag_UPDATE(TIMER0_BASE);
     timer_callback[0]();
   }
 }
@@ -277,18 +327,18 @@ TIMER0_IRQ_HANDLER
 #ifndef MIOS32_DONT_ALLOCATE_TIM3_IRQn
 TIMER1_IRQ_HANDLER
 {
-  if( TIM_GetITStatus(TIMER1_BASE, TIM_IT_Update) != RESET ) {
-    TIM_ClearITPendingBit(TIMER1_BASE, TIM_IT_Update);
+  if( LL_TIM_IsActiveFlag_UPDATE(TIMER1_BASE) ) {
+    LL_TIM_ClearFlag_UPDATE(TIMER1_BASE);
     timer_callback[1]();
   }
 }
 #endif
 
-#ifndef MIOS32_DONT_ALLOCATE_TIM5_IRQn
+#ifndef MIOS32_DONT_ALLOCATE_TIM16_IRQn
 TIMER2_IRQ_HANDLER
 {
-  if( TIM_GetITStatus(TIMER2_BASE, TIM_IT_Update) != RESET ) {
-    TIM_ClearITPendingBit(TIMER2_BASE, TIM_IT_Update);
+  if( LL_TIM_IsActiveFlag_UPDATE(TIMER2_BASE) ) {
+    LL_TIM_ClearFlag_UPDATE(TIMER2_BASE);
     timer_callback[2]();
   }
 }
@@ -302,19 +352,25 @@ TIMER2_IRQ_HANDLER
 /////////////////////////////////////////////////////////////////////////////
 #if defined(MIOS32_USE_STOPWATCH)
 
-// single default timer - override all three together in your project's
-// mios32_config.h if TIM6 is unavailable/conflicts on your hardware. The
-// clock-enable is a compile-time macro (not a runtime STOPWATCH_TIMER_BASE
-// comparison) so switching timers costs nothing at runtime and doesn't pull
-// in both LL_APBx_GRP1_EnableClock() calls into the binary.
+// single default timer - TIM17, confirmed present on EVERY STM32G0 chip
+// tier (verified via each tier's CMSIS device header, from the smallest
+// 2-USART G030/G031 up to the 6-USART+2xLPUART G0B1/G0C1) - unlike the
+// former default TIM6, which doesn't exist at all below the 6-USART tier
+// (found via a real G030K6 build failing on it). Doesn't collide with
+// MIOS32_DELAY (TIM14) or MIOS32_TIMER's default table (TIM2/TIM3/TIM5,
+// itself not universal either - TIM1/TIM16 left free for the application).
+// Override all three together in your project's mios32_config.h if TIM17
+// conflicts with something else on your hardware (STOPWATCH_TIMER_RCC_
+// ENABLE must call the LL_APBx_GRP1_EnableClock() matching whichever bus
+// your chosen timer sits on - TIM17 is on APB2, unlike TIM6's APB1).
 #ifndef STOPWATCH_TIMER_BASE
-#define STOPWATCH_TIMER_BASE                 TIM6
+#define STOPWATCH_TIMER_BASE                 TIM17
 #endif
 #ifndef STOPWATCH_TIMER_RCC
-#define STOPWATCH_TIMER_RCC   LL_APB1_GRP1_PERIPH_TIM6
+#define STOPWATCH_TIMER_RCC   LL_APB2_GRP1_PERIPH_TIM17
 #endif
 #ifndef STOPWATCH_TIMER_RCC_ENABLE
-#define STOPWATCH_TIMER_RCC_ENABLE() LL_APB1_GRP1_EnableClock(STOPWATCH_TIMER_RCC)
+#define STOPWATCH_TIMER_RCC_ENABLE() LL_APB2_GRP1_EnableClock(STOPWATCH_TIMER_RCC)
 #endif
 
 // timers clocked at CPU/2 clock
@@ -418,7 +474,7 @@ u32 MIOS32_STOPWATCH_ValueGet(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// MIOS32_SOF - sign-of-life LED (2026-08-01, new)
+// MIOS32_SOF - sign-of-life LED
 // A single GPIO toggled as a heartbeat - project-configurable pin, meant as
 // a lightweight replacement for mios32_board.c's fixed on-board LED.
 /////////////////////////////////////////////////////////////////////////////

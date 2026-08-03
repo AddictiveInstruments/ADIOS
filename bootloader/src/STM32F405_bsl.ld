@@ -14,6 +14,11 @@ MEMORY
   EXTMEMB3 (rx) : ORIGIN = 0x00000000, LENGTH = 0
 }
 
+/* exposes the RAM region size to C code (MIOS32_SYS_RAMSizeGet()) without a
+   per-processor #elif chain - STM32 has no hardware register for this,
+   unlike FLASH size (electronic signature) */
+PROVIDE ( _ram_size = LENGTH(RAM) ) ;
+
 /* higher address of the user mode stack */
 _estack = 0x20005000;
 

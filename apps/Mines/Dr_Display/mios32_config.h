@@ -66,7 +66,8 @@
 #define MIOS32_DONT_USE_ENC28J60
 
 // calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
-//#define MIOS32_DONT_USE_FREERTOS
+// opt-in, renamed from MIOS32_DONT_USE_FREERTOS
+//#define MIOS32_APP_USE_FREERTOS
 
 #if 0
 // Following settings allow to customize the USB device descriptor

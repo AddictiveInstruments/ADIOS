@@ -1,20 +1,11 @@
 // $Id: mios32_spi.c 1938 2014-01-19 17:13:43Z tk $
 //! \defgroup MIOS32_SPI
 //!
-//! Hardware Abstraction Layer for SPI ports of STM32F4
+//! Hardware Abstraction Layer for SPI ports of STM32F4 (MBHP_DIPCOREF4)
 //!
-//! Three ports are provided at J16 (SPI0), J8/9 (SPI1) and J19 (SPI2) of the
-//! MBHP_CORE_STM32F4 module..
-//!
-//! J16 provides SPI + a CS line at 3V, and is normaly connected to a SD Card
-//! or/and an Ethernet Interface like ENC28J60.
-//!
-//! J8/9 provides SPI + a CS line at 5V.
-//! It is normally connected to the SRIO chain to scan DIN/DOUT modules.
-//!
-//! J19 provides SPI + a CS line at 5V.
-//! It's some kind of general purpose SPI, and used to communicate with
-//! various MBHP modules, such as MBHP_AOUT* and MBHP_AINSER*
+//! Three ports are provided: SPI0 (SPI1 peripheral), SPI1 (SPI2 peripheral)
+//! and SPI2 (SPI3 peripheral). Each port has a single CS line under manual
+//! GPIO control.
 //!
 //! If SPI low-level functions should be used to access other peripherals,
 //! please ensure that the appr. MIOS32_* drivers are disabled (e.g.
@@ -50,11 +41,10 @@
 // (not part of mios32_spi.h file, since overruling would lead to a hardware
 // dependency in MIOS32 applications)
 //
-// 2026-08-01: each port has a single CS line, always plain GPIO (never an
-// alternate function, even in slave mode - this driver never uses the SPI
-// peripheral's own hardware NSS). The 2nd CS line some MBHP_CORE_STM32F4
-// connectors physically provide (RCLK2) has been dropped from this shared
-// driver - project code needing a 2nd CS drives that GPIO directly.
+// Each port has a single CS line, always plain GPIO (never an alternate
+// function, even in slave mode - this driver never uses the SPI
+// peripheral's own hardware NSS). A project needing a 2nd CS line per
+// port drives that GPIO directly itself.
 /////////////////////////////////////////////////////////////////////////////
 
 #define MIOS32_SPI0_PTR        SPI1
@@ -69,22 +59,39 @@
 #define MIOS32_SPI0_DMA_TX_STREAM LL_DMA_STREAM_3
 #define MIOS32_SPI0_DMA_RX_CLEAR_FLAGS() { LL_DMA_ClearFlag_TC2(DMA2); LL_DMA_ClearFlag_TE2(DMA2); LL_DMA_ClearFlag_HT2(DMA2); LL_DMA_ClearFlag_FE2(DMA2); }
 #define MIOS32_SPI0_DMA_TX_CLEAR_FLAGS() { LL_DMA_ClearFlag_TC3(DMA2); LL_DMA_ClearFlag_TE3(DMA2); LL_DMA_ClearFlag_HT3(DMA2); LL_DMA_ClearFlag_FE3(DMA2); }
-# if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
-#define MIOS32_SPI0_CS_PORT    GPIOB
-#define MIOS32_SPI0_CS_PIN     LL_GPIO_PIN_2
-#elif defined(MIOS32_BOARD_MBHP_DIPCOREF4)
+#ifndef MIOS32_SPI0_CS_PORT
 #define MIOS32_SPI0_CS_PORT    GPIOA
+#endif
+#ifndef MIOS32_SPI0_CS_PIN
 #define MIOS32_SPI0_CS_PIN     LL_GPIO_PIN_4
 #endif
+#ifndef MIOS32_SPI0_SCLK_PORT
 #define MIOS32_SPI0_SCLK_PORT  GPIOA
+#endif
+#ifndef MIOS32_SPI0_SCLK_PIN
 #define MIOS32_SPI0_SCLK_PIN   LL_GPIO_PIN_5
+#endif
+#ifndef MIOS32_SPI0_SCLK_AF
 #define MIOS32_SPI0_SCLK_AF    LL_GPIO_AF_5
+#endif
+#ifndef MIOS32_SPI0_MISO_PORT
 #define MIOS32_SPI0_MISO_PORT  GPIOA
+#endif
+#ifndef MIOS32_SPI0_MISO_PIN
 #define MIOS32_SPI0_MISO_PIN   LL_GPIO_PIN_6
+#endif
+#ifndef MIOS32_SPI0_MISO_AF
 #define MIOS32_SPI0_MISO_AF    LL_GPIO_AF_5
+#endif
+#ifndef MIOS32_SPI0_MOSI_PORT
 #define MIOS32_SPI0_MOSI_PORT  GPIOA
+#endif
+#ifndef MIOS32_SPI0_MOSI_PIN
 #define MIOS32_SPI0_MOSI_PIN   LL_GPIO_PIN_7
+#endif
+#ifndef MIOS32_SPI0_MOSI_AF
 #define MIOS32_SPI0_MOSI_AF    LL_GPIO_AF_5
+#endif
 
 
 #define MIOS32_SPI1_PTR        SPI2
@@ -99,29 +106,37 @@
 #define MIOS32_SPI1_DMA_TX_STREAM LL_DMA_STREAM_4
 #define MIOS32_SPI1_DMA_RX_CLEAR_FLAGS() { LL_DMA_ClearFlag_TC3(DMA1); LL_DMA_ClearFlag_TE3(DMA1); LL_DMA_ClearFlag_HT3(DMA1); LL_DMA_ClearFlag_FE3(DMA1); }
 #define MIOS32_SPI1_DMA_TX_CLEAR_FLAGS() { LL_DMA_ClearFlag_TC4(DMA1); LL_DMA_ClearFlag_TE4(DMA1); LL_DMA_ClearFlag_HT4(DMA1); LL_DMA_ClearFlag_FE4(DMA1); }
-# if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
+#ifndef MIOS32_SPI1_CS_PORT
 #define MIOS32_SPI1_CS_PORT    GPIOB
-#define MIOS32_SPI1_CS_PIN     LL_GPIO_PIN_12
-#define MIOS32_SPI1_SCLK_PORT  GPIOB
-#define MIOS32_SPI1_SCLK_PIN   LL_GPIO_PIN_13
-#define MIOS32_SPI1_SCLK_AF    LL_GPIO_AF_5
-#define MIOS32_SPI1_MISO_PORT  GPIOB
-#define MIOS32_SPI1_MISO_PIN   LL_GPIO_PIN_14
-#define MIOS32_SPI1_MISO_AF    LL_GPIO_AF_5
-#define MIOS32_SPI1_MOSI_PORT  GPIOB
-#define MIOS32_SPI1_MOSI_PIN   LL_GPIO_PIN_15
-#define MIOS32_SPI1_MOSI_AF    LL_GPIO_AF_5
-#elif defined(MIOS32_BOARD_MBHP_DIPCOREF4)
-#define MIOS32_SPI1_CS_PORT    GPIOB
+#endif
+#ifndef MIOS32_SPI1_CS_PIN
 #define MIOS32_SPI1_CS_PIN     LL_GPIO_PIN_1
+#endif
+#ifndef MIOS32_SPI1_SCLK_PORT
 #define MIOS32_SPI1_SCLK_PORT  GPIOB
+#endif
+#ifndef MIOS32_SPI1_SCLK_PIN
 #define MIOS32_SPI1_SCLK_PIN   LL_GPIO_PIN_13
+#endif
+#ifndef MIOS32_SPI1_SCLK_AF
 #define MIOS32_SPI1_SCLK_AF    LL_GPIO_AF_5
+#endif
+#ifndef MIOS32_SPI1_MISO_PORT
 #define MIOS32_SPI1_MISO_PORT  GPIOC
+#endif
+#ifndef MIOS32_SPI1_MISO_PIN
 #define MIOS32_SPI1_MISO_PIN   LL_GPIO_PIN_2
+#endif
+#ifndef MIOS32_SPI1_MISO_AF
 #define MIOS32_SPI1_MISO_AF    LL_GPIO_AF_5
+#endif
+#ifndef MIOS32_SPI1_MOSI_PORT
 #define MIOS32_SPI1_MOSI_PORT  GPIOC
+#endif
+#ifndef MIOS32_SPI1_MOSI_PIN
 #define MIOS32_SPI1_MOSI_PIN   LL_GPIO_PIN_3
+#endif
+#ifndef MIOS32_SPI1_MOSI_AF
 #define MIOS32_SPI1_MOSI_AF    LL_GPIO_AF_5
 #endif
 
@@ -137,17 +152,39 @@
 #define MIOS32_SPI2_DMA_TX_STREAM LL_DMA_STREAM_5
 #define MIOS32_SPI2_DMA_RX_CLEAR_FLAGS() { LL_DMA_ClearFlag_TC2(DMA1); LL_DMA_ClearFlag_TE2(DMA1); LL_DMA_ClearFlag_HT2(DMA1); LL_DMA_ClearFlag_FE2(DMA1); }
 #define MIOS32_SPI2_DMA_TX_CLEAR_FLAGS() { LL_DMA_ClearFlag_TC5(DMA1); LL_DMA_ClearFlag_TE5(DMA1); LL_DMA_ClearFlag_HT5(DMA1); LL_DMA_ClearFlag_FE5(DMA1); }
+#ifndef MIOS32_SPI2_CS_PORT
 #define MIOS32_SPI2_CS_PORT    GPIOA
+#endif
+#ifndef MIOS32_SPI2_CS_PIN
 #define MIOS32_SPI2_CS_PIN     LL_GPIO_PIN_15
+#endif
+#ifndef MIOS32_SPI2_SCLK_PORT
 #define MIOS32_SPI2_SCLK_PORT  GPIOB
+#endif
+#ifndef MIOS32_SPI2_SCLK_PIN
 #define MIOS32_SPI2_SCLK_PIN   LL_GPIO_PIN_3
+#endif
+#ifndef MIOS32_SPI2_SCLK_AF
 #define MIOS32_SPI2_SCLK_AF    LL_GPIO_AF_5
+#endif
+#ifndef MIOS32_SPI2_MISO_PORT
 #define MIOS32_SPI2_MISO_PORT  GPIOB
+#endif
+#ifndef MIOS32_SPI2_MISO_PIN
 #define MIOS32_SPI2_MISO_PIN   LL_GPIO_PIN_4
+#endif
+#ifndef MIOS32_SPI2_MISO_AF
 #define MIOS32_SPI2_MISO_AF    LL_GPIO_AF_5
+#endif
+#ifndef MIOS32_SPI2_MOSI_PORT
 #define MIOS32_SPI2_MOSI_PORT  GPIOB
+#endif
+#ifndef MIOS32_SPI2_MOSI_PIN
 #define MIOS32_SPI2_MOSI_PIN   LL_GPIO_PIN_5
+#endif
+#ifndef MIOS32_SPI2_MOSI_AF
 #define MIOS32_SPI2_MOSI_AF    LL_GPIO_AF_5
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // Local Defines
@@ -423,9 +460,6 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
       return -1; // disabled SPI port
 #else
       if( slave ) {
-#if !defined(MIOS32_BOARD_MBHP_DIPCOREF4)
-	return -3; // slave mode not supported for this pin
-#else
 	// SCLK and DOUT are inputs assigned to alternate functions
 	GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
 	GPIO_InitStructure.Pin  = MIOS32_SPI0_SCLK_PIN;
@@ -438,7 +472,6 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
 	GPIO_InitStructure.Pin  = MIOS32_SPI0_MISO_PIN;
 	GPIO_InitStructure.Alternate = MIOS32_SPI0_MISO_AF;
 	LL_GPIO_Init(MIOS32_SPI0_MISO_PORT, &GPIO_InitStructure);
-#endif
       } else {
 	// SCLK and DOUT are outputs assigned to alternate functions
 	GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
@@ -448,19 +481,6 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
 	GPIO_InitStructure.Pin  = MIOS32_SPI0_MOSI_PIN;
 	GPIO_InitStructure.Alternate = MIOS32_SPI0_MOSI_AF;
 	LL_GPIO_Init(MIOS32_SPI0_MOSI_PORT, &GPIO_InitStructure);
-
-#if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
-	// set RE3=1 to ensure that the on-board MEMs is disabled
-	GPIO_InitStructure.Mode = LL_GPIO_MODE_OUTPUT;
-	GPIO_InitStructure.Pin = LL_GPIO_PIN_3;
-	LL_GPIO_Init(GPIOE, &GPIO_InitStructure);
-	MIOS32_SYS_STM_PINSET_1(GPIOE, LL_GPIO_PIN_3);
-	GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
-#elif defined(MIOS32_BOARD_MBHP_DIPCOREF4)
-	// nothing to do.
-#else
-# warning "Please doublecheck if RE3 has to be set to 1 to disable MEMs"
-#endif
 
 	// DIN is input with pull-up
 	GPIO_InitStructure.Pull = LL_GPIO_PULL_UP;
@@ -481,22 +501,7 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
       return -1; // disabled SPI port
 #else
       if( slave ) {
-#if defined(MIOS32_BOARD_MBHP_DIPCOREF4)
 	return -3; // slave mode not supported for this pin
-#else
-	// SCLK and DOUT are inputs assigned to alternate functions
-	GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
-	GPIO_InitStructure.Pin  = MIOS32_SPI1_SCLK_PIN;
-	GPIO_InitStructure.Alternate = MIOS32_SPI1_SCLK_AF;
-	LL_GPIO_Init(MIOS32_SPI1_SCLK_PORT, &GPIO_InitStructure);
-	GPIO_InitStructure.Pin  = MIOS32_SPI1_MOSI_PIN;
-	GPIO_InitStructure.Alternate = MIOS32_SPI1_MOSI_AF;
-	LL_GPIO_Init(MIOS32_SPI1_MOSI_PORT, &GPIO_InitStructure);
-	// DOUT is output assigned to alternate function
-	GPIO_InitStructure.Pin  = MIOS32_SPI1_MISO_PIN;
-	GPIO_InitStructure.Alternate = MIOS32_SPI1_MISO_AF;
-	LL_GPIO_Init(MIOS32_SPI1_MISO_PORT, &GPIO_InitStructure);
-#endif
       } else {
 	// SCLK and DIN are inputs
 	GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
@@ -587,14 +592,16 @@ s32 MIOS32_SPI_IO_Init(u8 spi, mios32_spi_pin_driver_t spi_pin_driver)
 //! </UL>
 //! \param[in] spi_prescaler configures the SPI speed:
 //! <UL>
-//!   <LI>MIOS32_SPI_PRESCALER_2: sets clock rate 23.4 nS @ 84 MHz (42.67 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_4: sets clock rate 46,8 nS @ 84 MHz (21.33 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_8: sets clock rate 93.8 nS @ 84 MHz (10.67 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_16: sets clock rate 187 nS @ 84 MHz (5.333 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_32: sets clock rate 375 nS @ 84 MHz (2.667 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_64: sets clock rate 750 nS @ 84 MHz (1.333 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_128: sets clock rate 1.5 uS @ 84 MHz (0.667 MBit/s)
-//!   <LI>MIOS32_SPI_PRESCALER_256: sets clock rate 3 uS @ 84 MHz (0.333 MBit/s)
+//! (SPI0 is clocked from the 84 MHz default APB2 bus on this family; SPI1/
+//! SPI2 sit on APB1 at 42 MHz - exactly half these rates):
+//!   <LI>MIOS32_SPI_PRESCALER_2: sets clock rate 23.8 nS @ 84 MHz (42 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_4: sets clock rate 47.6 nS @ 84 MHz (21 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_8: sets clock rate 95.2 nS @ 84 MHz (10.5 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_16: sets clock rate 190.5 nS @ 84 MHz (5.25 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_32: sets clock rate 381 nS @ 84 MHz (2.625 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_64: sets clock rate 762 nS @ 84 MHz (1.3125 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_128: sets clock rate 1.52 uS @ 84 MHz (0.65625 MBit/s)
+//!   <LI>MIOS32_SPI_PRESCALER_256: sets clock rate 3.05 uS @ 84 MHz (0.328125 MBit/s)
 //! </UL>
 //! \return 0 if no error
 //! \return -1 if disabled SPI port selected
@@ -658,11 +665,6 @@ s32 MIOS32_SPI_TransferModeInit(u8 spi, mios32_spi_mode_t spi_mode, mios32_spi_p
 #ifndef MIOS32_USE_SPI0
       return -1; // disabled SPI port
 #else
-#if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
-      if( SPI_InitStructure.Mode == LL_SPI_MODE_SLAVE ) {
-	return -3; // slave mode not supported for this SPI
-      }
-#endif
       u16 prev_cr1 = MIOS32_SPI0_PTR->CR1;
 
       LL_SPI_Disable(MIOS32_SPI0_PTR);
@@ -685,11 +687,9 @@ s32 MIOS32_SPI_TransferModeInit(u8 spi, mios32_spi_mode_t spi_mode, mios32_spi_p
 #ifndef MIOS32_USE_SPI1
       return -1; // disabled SPI port
 #else
-#if defined(MIOS32_BOARD_MBHP_DIPCOREF4)
       if( SPI_InitStructure.Mode == LL_SPI_MODE_SLAVE ) {
         return -3; // slave mode not supported for this SPI
       }
-#endif
       u16 prev_cr1 = MIOS32_SPI1_PTR->CR1;
 
       LL_SPI_Disable(MIOS32_SPI1_PTR);

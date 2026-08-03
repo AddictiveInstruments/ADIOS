@@ -64,13 +64,28 @@ if [ -z "$MIOS32_PATH" ]; then
     exit 1
 fi
 
-BSL_DIR="$MIOS32_PATH/bootloader/src"
+# canonicalize to an absolute path for OUR OWN file operations (write_header,
+# log redirection, etc) - a deeply relative BSL_DIR (e.g.
+# "../../../bootloader/src", the case for a project 3 levels below
+# MIOS32_PATH) has been observed to fail redirection ("> $BSL_DIR/....log")
+# under some sh.exe builds, even though the same relative path works fine
+# for plain `cd`/`make -f`.
+BSL_DIR="$(cd "$MIOS32_PATH/bootloader/src" && pwd)"
 BSL_MAKEFILE="Makefile.bsl_$CHIP"
 BIN_FILE="$BSL_DIR/project_build/project.bin"
 
+# the bootloader's own sub-make needs MIOS32_PATH relative to ITS OWN
+# directory (bootloader/src is always exactly 2 levels below the repo
+# root) - NOT the inherited value, which is relative to whatever depth the
+# CALLING project sits at (e.g. "../../.." for a project 3 levels deep) and
+# would resolve one directory too far up once this script cd's into
+# bootloader/src. An absolute MIOS32_PATH would avoid that mismatch too, but
+# GNU Make's rule parser chokes on a Windows drive-letter colon ("E:/...")
+# embedded in the absolute source paths mios32.mk builds from it - so this
+# one sub-make specifically needs the fixed, always-correct relative value.
 build_bootloader () {
-    ( cd "$BSL_DIR" && make -f "$BSL_MAKEFILE" > /tmp/gen_bsl_boundary_build.log 2>&1 ) || {
-        echo "Bootloader build failed, see /tmp/gen_bsl_boundary_build.log"
+    ( cd "$BSL_DIR" && MIOS32_PATH=../.. make -f "$BSL_MAKEFILE" > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
+        echo "Bootloader build failed, see $BSL_DIR/gen_bsl_boundary_build.log"
         exit 1
     }
     if [ ! -f "$BIN_FILE" ]; then

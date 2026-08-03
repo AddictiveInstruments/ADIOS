@@ -51,28 +51,36 @@
 #define STM32G0
 #endif /* STM32G0 */
 
-/* Uncomment the line below according to the target STM32G0 device used in your
-   application
-  */
-
-
-  /* #define STM32G0B0xx */   /*!< STM32G0B0xx Devices */
-  /* #define STM32G0B1xx */   /*!< STM32G0B1xx Devices */
-  /* #define STM32G0C1xx */   /*!< STM32G0C1xx Devices */
-#if MIOS32_PROCESSOR==STM32G070CB
+/* Device selection - driven by MIOS32_PROCESSOR_xxx (defined via
+   -DMIOS32_PROCESSOR_$(PROCESSOR) in mios32/mios32.mk, same macro family
+   MIOS32_PROCESSOR selection uses everywhere else in this codebase, e.g.
+   mios32_board.c). NOT a bare "MIOS32_PROCESSOR==STM32G070CB" style value
+   comparison: MIOS32_PROCESSOR itself (no suffix) and the bare RHS tokens
+   (STM32G070CB etc) are never actually defined as macros anywhere in the
+   real build, so that comparison used to silently evaluate as 0==0 (true)
+   for EVERY G0 build regardless of which processor was actually selected -
+   every non-G070CB chip (G030K6, G031K8, G050K8) was silently compiled
+   against STM32G070xx's peripheral set instead of its own. Found via a real
+   G030K6 build referencing TIM6 (STM32G0xx MIOS32_STOPWATCH default timer,
+   which doesn't exist in silicon on that chip) without a compile error -
+   the preprocessed output showed TIM6 resolving to a real address, proving
+   the wrong device header was in effect. */
+#if defined(MIOS32_PROCESSOR_STM32G070CB)
   #define STM32G070xx    /*!< STM32G070xx Devices */
   /* #define STM32G071xx */   /*!< STM32G071xx Devices */
   /* #define STM32G081xx */   /*!< STM32G081xx Devices */
-#elif MIOS32_PROCESSOR==STM32G050K8
+#elif defined(MIOS32_PROCESSOR_STM32G050K8)
 #define STM32G050xx   /*!< STM32G050xx Devices */
   /* #define STM32G051xx */   /*!< STM32G051xx Devices */
   /* #define STM32G061xx */   /*!< STM32G061xx Devices */
-  /* #define STM32G030xx */   /*!< STM32G030xx Devices */
-#elif MIOS32_PROCESSOR==STM32G031K8
+#elif defined(MIOS32_PROCESSOR_STM32G030K6)
+#define STM32G030xx    /*!< STM32G030xx Devices */
+#elif defined(MIOS32_PROCESSOR_STM32G031K8)
  #define STM32G031xx
   /* #define STM32G041xx */   /*!< STM32G041xx Devices */
+#else
+#error "Unknown/not yet wired MIOS32_PROCESSOR for STM32G0xx - add a branch above (see mios32/mios32.mk for how MIOS32_PROCESSOR_xxx is defined, and programming_models/traditional/programming_model.mk for the list of processors with a real LD_FILE/startup file)."
 #endif
-//#endif
 
 /*  Tip: To avoid modifying this file each time you need to switch between these
         devices, you can define the device in your toolchain compiler preprocessor.

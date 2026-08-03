@@ -13,7 +13,7 @@ LCD       =     dummy
 # Source Files, include paths and libraries
 ################################################################################
 
-THUMB_SOURCE    = startup_stm32g050.c \
+THUMB_SOURCE    = $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_stm32g050.c \
 				main.c \
 				bsl_sysex.c
 

@@ -21,14 +21,13 @@
 
 
 
-#ifndef MIOS32_DONT_USE_FREERTOS
+#if MIOS32_APP_USE_FREERTOS
 #include <FreeRTOS.h>
 #include <portmacro.h>
 #endif
 
 // this module is indispensable (the CPU can't run without it - clock, vector
-// table, timebase) - always compiled, no MIOS32_DONT_USE_SYS/MIOS32_USE_SYS
-// toggle (removed 2026-08-01, a toggle here would just be a footgun).
+// table, timebase) - always compiled, no on/off toggle.
 
 // specified in .ld file
 extern u32 mios32_sys_isr_vector;
@@ -73,9 +72,16 @@ s32 MIOS32_SYS_Init(u32 mode)
   // currently only mode 0 supported
   if( mode != 0 )
     return -1; // unsupported mode
-  /** Disable the internal Pull-Up in Dead Battery pins of UCPD peripheral
+  /** Disable the internal Pull-Up in Dead Battery pins of UCPD peripheral -
+   * only on chips whose SYSCFG_CFGR1 register actually has the strobe bits
+   * (LL_SYSCFG_DisableDBATT itself is guarded the same way in
+   * stm32g0xx_ll_system.h) - found missing on STM32G030xx, which lacks
+   * both bits entirely (unlike STM32G070xx, which defines
+   * SYSCFG_CFGR1_UCPD1_STROBE even without a physical UCPD1 peripheral).
   */
+#if defined(SYSCFG_CFGR1_UCPD1_STROBE) || defined(SYSCFG_CFGR1_UCPD2_STROBE)
   LL_SYSCFG_DisableDBATT(LL_SYSCFG_UCPD1_STROBE | LL_SYSCFG_UCPD2_STROBE);
+#endif
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
   LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
@@ -171,7 +177,7 @@ s32 MIOS32_SYS_Init(u32 mode)
 s32 MIOS32_SYS_Reset(void)
 {
   // disable all RTOS tasks
-#ifndef MIOS32_DONT_USE_FREERTOS
+#if MIOS32_APP_USE_FREERTOS
   portENTER_CRITICAL(); // port specific FreeRTOS function to disable tasks (nested)
 #endif
 

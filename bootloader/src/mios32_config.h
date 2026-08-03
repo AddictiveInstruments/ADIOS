@@ -22,8 +22,8 @@
 #define MIOS32_USE_STOPWATCH
 
 #define MIOS32_DONT_USE_SRIO
-#define MIOS32_DONT_USE_DIN
-#define MIOS32_DONT_USE_DOUT
+#define MIOS32_DONT_USE_SRIN
+#define MIOS32_DONT_USE_SROUT
 #define MIOS32_DONT_USE_ENC
 #define MIOS32_DONT_USE_AIN
 #define MIOS32_DONT_USE_MF
@@ -46,7 +46,15 @@
 #define MIOS32_DONT_USE_ENC28J60
 
 // calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
-#define MIOS32_DONT_USE_FREERTOS
+// MIOS32_APP_USE_FREERTOS is opt-in (renamed from MIOS32_DONT_USE_FREERTOS),
+// numeric (0/1) with a RAM/FLASH-tiered default in mios32_sys.h - MUST be
+// forced to 0 explicitly here rather than left to that default: on a
+// non-small-tier chip (e.g. this bootloader built for G070CB) the tier
+// default would be 1, and mios32_sys.c would then try to #include
+// <FreeRTOS.h> - a header this bootloader's own Makefile never puts on the
+// include path (its main.c is a bare super-loop, never went through the
+// FreeRTOS-based programming model to begin with, on ANY chip it targets).
+#define MIOS32_APP_USE_FREERTOS 0
 
 #if defined(MIOS32_FAMILY_STM32F4xx)
 #if 0
@@ -78,10 +86,12 @@
 
 #else
 // the default MIDI port for MIDI output
-#define MIOS32_MIDI_DEFAULT_PORT UART0
+#define MIOS32_MIDI_DEFAULT_PORT DIN0
 // the default MIDI port for debugging output via MIOS32_MIDI_SendDebugMessage
-#define MIOS32_MIDI_DEBUG_PORT UART0
+#define MIOS32_MIDI_DEBUG_PORT DIN0
 
+#define MIOS32_USE_UART0
+#define MIOS32_USE_UART_MIDI
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
 #endif
@@ -98,9 +108,7 @@
 # define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 #endif
 
-// to save some additional memory for STM32F4:
 #if defined(MIOS32_FAMILY_STM32F4xx)
-#define MIOS32_UART_NUM 1
 #define MIOS32_BOARD_J15_LED_NUM 1
 
 #endif
@@ -109,16 +117,20 @@
 #if defined(MIOS32_FAMILY_STM32G0xx)
 // debug messages default to USB0 (mios32_midi.h) which is disabled on this
 // family/project - route them to UART0 instead so they're actually visible.
-#define MIOS32_MIDI_DEFAULT_PORT UART0
-#define MIOS32_MIDI_DEBUG_PORT UART0
+#define MIOS32_MIDI_DEFAULT_PORT DIN0
+#define MIOS32_MIDI_DEBUG_PORT DIN0
+#define MIOS32_USE_UART0
+#define MIOS32_USE_UART_MIDI
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
+// UART0 (USART3) TX runs through an external 3V3->5V transistor stage on
+// this board that inverts the signal - see the module-level comment in
+// mios32_uart.c.
+#define MIOS32_UART0_TX_INVERTED
 # define MIOS32_SYS_DONT_INIT_RTC
-// TEMPORARILY disabled (2026-07-31) to diagnose the SysEx upload failure -
-// re-enable once resolved to save flash on production builds.
+// left enabled for now (costs some flash) - define this to strip debug
+// message support once you no longer need it:
 // # define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-// to save some additional memory for STM32G0:
-#define MIOS32_UART_NUM 1
 #define MIOS32_BOARD_J15_LED_NUM 1
 
 // reserved flash size for the bootloader itself.

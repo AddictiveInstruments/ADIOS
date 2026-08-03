@@ -22,9 +22,44 @@
 #include <app_lcd.h>
 #endif
 
+// ===========================================================================
+// MIOS32_CORE_USE_FREERTOS (see mios32_sys.h for the auto-derived default,
+// tiered by RAM/FLASH budget - RAM<=8K or FLASH<=32K defaults this OFF):
+// decides how the application Hooks below are scheduled.
+//
+//   - 1: the traditional FreeRTOS model - TASK_Hooks and TASK_MIDI_Hooks
+//     run as two SEPARATE, PREEMPTIVELY SCHEDULED tasks. If an application
+//     hook (APP_Tick, a DIN/ENC/AIN/COM callback...) blocks or runs long,
+//     MIDI keeps being processed on schedule regardless, since
+//     TASK_MIDI_Hooks can still preempt it.
+//
+//   - 0: a bare-metal super-loop, no FreeRTOS kernel involved at all here
+//     (see MIOS32_APP_USE_FREERTOS for the kernel-presence switch,
+//     independent of this one) - timed by a dedicated SysTick handler
+//     instead of the FreeRTOS tick (MIOS32_STOPWATCH is deliberately NOT
+//     used for this: it must stay free for the application's own timing
+//     needs). The two Hooks collapse into ONE sequential 1mS block - THIS
+//     REMOVES THE ISOLATION DESCRIBED ABOVE: a slow/blocking application
+//     hook now delays MIDI processing too, since everything runs on the
+//     same single thread of execution with nothing left to preempt it.
+//     Worth it on the smallest chips only because of what FreeRTOS itself
+//     costs there - measured empirically at ~83% of a full G030K6 build,
+//     and roughly half the total RAM on G031K8 (heap alone, before any
+//     application code) - see apps/templates/app_skeleton/mios32_config.h
+//     for the full writeup.
+//
+// Both switches are numeric (0/1), not plain #define presence - checked
+// with "#if", not "#ifdef" - specifically so a project CAN override either
+// one to 0 even where the RAM/FLASH tier would otherwise default it to 1
+// (a bare #undef can't express "explicitly off" vs. "undecided, apply the
+// tier default"). Override in your own mios32_config.h, e.g.
+// "#define MIOS32_CORE_USE_FREERTOS 0".
+// ===========================================================================
+#if MIOS32_CORE_USE_FREERTOS
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -35,9 +70,12 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Task Priorities and stack sizes
+// Task Priorities and stack sizes (MIOS32_CORE_USE_FREERTOS only - a bare
+// super-loop has no separate task stacks, everything runs on the single
+// main() stack sized by the linker script)
 /////////////////////////////////////////////////////////////////////////////
 
+#if MIOS32_CORE_USE_FREERTOS
 #define PRIORITY_TASK_HOOKS		( tskIDLE_PRIORITY + 3 )
 
 #ifndef MIOS32_TASK_HOOKS_STACK_SIZE
@@ -46,13 +84,23 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 #ifndef MIOS32_TASK_MIDI_HOOKS_STACK_SIZE
 #define MIOS32_TASK_MIDI_HOOKS_STACK_SIZE (configMINIMAL_STACK_SIZE*4)
 #endif
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
 // Local prototypes
 /////////////////////////////////////////////////////////////////////////////
+#if MIOS32_CORE_USE_FREERTOS
 static void TASK_Hooks(void *pvParameters);
 static void TASK_MIDI_Hooks(void *pvParameters);
+#endif
+static void MIOS32_CORE_NonMIDI_Tick(void);
+#if !defined(MIOS32_DONT_USE_MIDI)
+static void MIOS32_CORE_MIDI_Tick(void);
+#endif
+#if !MIOS32_CORE_USE_FREERTOS
+static void MIOS32_CORE_BareLoop_Run(void);
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -101,7 +149,7 @@ int main(void)
 #ifndef MIOS32_DONT_USE_BOARD
   MIOS32_BOARD_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_SPI
+#ifdef MIOS32_USE_SPI
   MIOS32_SPI_Init(0);
 #endif
 #ifndef MIOS32_DONT_USE_SRIO
@@ -171,6 +219,7 @@ int main(void)
 # endif
 #endif
 
+#if MIOS32_CORE_USE_FREERTOS
   // start the task which calls the application hooks
   xTaskCreate(TASK_Hooks, "Hooks", (MIOS32_TASK_HOOKS_STACK_SIZE)/4, NULL, PRIORITY_TASK_HOOKS, NULL);
 #if !defined(MIOS32_DONT_USE_MIDI)
@@ -182,6 +231,12 @@ int main(void)
 
   // Will only get here if there was not enough heap space to create the idle task
   return 0;
+#else
+  // bare-metal super-loop - see the MIOS32_CORE_USE_FREERTOS module-level
+  // comment above for what this trades away.
+  MIOS32_CORE_BareLoop_Run(); // never returns
+  return 0; // never reached
+#endif
 }
 
 
@@ -202,6 +257,7 @@ void SRIO_ServiceFinish(void)
 #endif
 }
 
+#if MIOS32_CORE_USE_FREERTOS
 void vApplicationTickHook(void)
 {
 #if !defined(MIOS32_DONT_USE_TIMESTAMP)
@@ -226,8 +282,67 @@ void vApplicationIdleHook(void)
   APP_Background();
 
 }
+#endif
 
 
+/////////////////////////////////////////////////////////////////////////////
+// Shared 1mS hook bodies - the ONE place that defines what runs each
+// millisecond, called from either the FreeRTOS tasks below or the
+// bare-metal super-loop further down (MIOS32_CORE_USE_FREERTOS=0) -
+// deliberately factored out so the two scheduling modes can never drift
+// apart from each other.
+/////////////////////////////////////////////////////////////////////////////
+#if !defined(MIOS32_DONT_USE_MIDI)
+static void MIOS32_CORE_MIDI_Tick(void)
+{
+  // handle timeout/expire counters and USB packages
+  MIOS32_MIDI_Periodic_mS();
+
+  // check for incoming MIDI packages and call hook
+  MIOS32_MIDI_Receive_Handler(APP_MIDI_NotifyPackage);
+
+  // optional application specific hook
+  // helps to save memory (re-use the TASK_Hooks for other purposes...)
+  APP_MIDI_Tick();
+}
+#endif
+
+static void MIOS32_CORE_NonMIDI_Tick(void)
+{
+#if !defined(MIOS32_DONT_USE_USB_HOST) || !defined(MIOS32_DONT_USE_USB_HS_HOST)
+  // process USB Host, only others than USB MIDI
+#ifndef MIOS32_DONT_PROCESS_USB_HOST
+  MIOS32_USB_HOST_Process();
+#endif
+#endif
+
+#if !defined(MIOS32_DONT_USE_DIN) && !defined(MIOS32_DONT_USE_SRIO)
+  // check for DIN pin changes, call APP_DIN_NotifyToggle on each toggled pin
+  MIOS32_DIN_Handler(APP_DIN_NotifyToggle);
+
+  // check for encoder changes, call APP_ENC_NotifyChanged on each change
+# ifndef MIOS32_DONT_USE_ENC
+  MIOS32_ENC_Handler(APP_ENC_NotifyChange);
+# endif
+#endif
+
+#if !defined(MIOS32_DONT_USE_AIN) && !defined(MIOS32_DONT_SERVICE_AIN)
+  // check for AIN pin changes, call APP_AIN_NotifyChange on each pin change
+  MIOS32_AIN_Handler(APP_AIN_NotifyChange);
+#endif
+
+#if !defined(MIOS32_DONT_USE_COM)
+  // check for incoming COM messages
+  MIOS32_COM_Receive_Handler();
+#endif
+
+  // optional APP_Tick() hook
+  // helps to save memory (re-use the TASK_Hooks for other purposes...)
+  APP_Tick();
+}
+
+
+#if MIOS32_CORE_USE_FREERTOS
 /////////////////////////////////////////////////////////////////////////////
 // MIDI task (separated from TASK_Hooks() to ensure parallel handling of
 // MIDI events if a hook in TASK_Hooks() blocks)
@@ -243,21 +358,13 @@ static void TASK_MIDI_Hooks(void *pvParameters)
   while( 1 ) {
     vTaskDelayUntil(&xLastExecutionTime, 1 / portTICK_RATE_MS);
 
-    // skip delay gap if we had to wait for more than 5 ticks to avoid 
+    // skip delay gap if we had to wait for more than 5 ticks to avoid
     // unnecessary repeats until xLastExecutionTime reached xTaskGetTickCount() again
     portTickType xCurrentTickCount = xTaskGetTickCount();
     if( xLastExecutionTime < (xCurrentTickCount-5) )
       xLastExecutionTime = xCurrentTickCount;
 
-    // handle timeout/expire counters and USB packages
-    MIOS32_MIDI_Periodic_mS();
-
-    // check for incoming MIDI packages and call hook
-    MIOS32_MIDI_Receive_Handler(APP_MIDI_NotifyPackage);
-
-    // optional application specific hook
-    // helps to save memory (re-use the TASK_Hooks for other purposes...)
-    APP_MIDI_Tick();
+    MIOS32_CORE_MIDI_Tick();
   }
 }
 #endif
@@ -277,45 +384,122 @@ static void TASK_Hooks(void *pvParameters)
   while( 1 ) {
     vTaskDelayUntil(&xLastExecutionTime, 1 / portTICK_RATE_MS);
 
-    // skip delay gap if we had to wait for more than 5 ticks to avoid 
+    // skip delay gap if we had to wait for more than 5 ticks to avoid
     // unnecessary repeats until xLastExecutionTime reached xTaskGetTickCount() again
     portTickType xCurrentTickCount = xTaskGetTickCount();
     if( xLastExecutionTime < (xCurrentTickCount-5) )
       xLastExecutionTime = xCurrentTickCount;
 
-#if !defined(MIOS32_DONT_USE_USB_HOST) || !defined(MIOS32_DONT_USE_USB_HS_HOST)
-    // process USB Host, only others than USB MIDI
-#ifndef MIOS32_DONT_PROCESS_USB_HOST
-    MIOS32_USB_HOST_Process();
-#endif
-#endif
-
-#if !defined(MIOS32_DONT_USE_DIN) && !defined(MIOS32_DONT_USE_SRIO)
-    // check for DIN pin changes, call APP_DIN_NotifyToggle on each toggled pin
-    MIOS32_DIN_Handler(APP_DIN_NotifyToggle);
-
-    // check for encoder changes, call APP_ENC_NotifyChanged on each change
-# ifndef MIOS32_DONT_USE_ENC
-    MIOS32_ENC_Handler(APP_ENC_NotifyChange);
-# endif
-#endif
-
-#if !defined(MIOS32_DONT_USE_AIN) && !defined(MIOS32_DONT_SERVICE_AIN)
-    // check for AIN pin changes, call APP_AIN_NotifyChange on each pin change
-    MIOS32_AIN_Handler(APP_AIN_NotifyChange);
-#endif
-
-#if !defined(MIOS32_DONT_USE_COM)
-    // check for incoming COM messages
-    MIOS32_COM_Receive_Handler();
-#endif
-
-    // optional APP_Tick() hook
-    // helps to save memory (re-use the TASK_Hooks for other purposes...)
-    APP_Tick();
+    MIOS32_CORE_NonMIDI_Tick();
   }
 }
+#endif
 
+
+#if !MIOS32_CORE_USE_FREERTOS
+/////////////////////////////////////////////////////////////////////////////
+// Bare-metal super-loop (MIOS32_CORE_USE_FREERTOS=0) - replaces
+// vTaskStartScheduler()/TASK_Hooks/TASK_MIDI_Hooks/vApplicationTickHook/
+// vApplicationIdleHook above. Timed by a dedicated SysTick handler rather
+// than FreeRTOS's tick or MIOS32_STOPWATCH (kept free for the application -
+// see the module-level comment near the top of this file).
+/////////////////////////////////////////////////////////////////////////////
+
+static volatile u32 mios32_core_tick_ms;
+
+// dedicated to this super-loop's own timebase - nothing else in mios32/
+// common or the family drivers touches SysTick (MIOS32_DELAY uses a TIM
+// peripheral, MIOS32_STOPWATCH another, MIOS32_TIMER its own table), so
+// this can't collide with anything the application or MIOS32 itself does.
+void SysTick_Handler(void)
+{
+  ++mios32_core_tick_ms;
+}
+
+extern void _abort(void); // defined further below in this file
+
+#if MIOS32_CORE_USE_CANARI
+// Stack-overflow canary - the bare-metal replacement for FreeRTOS's
+// configCHECK_FOR_STACK_OVERFLOW (see MIOS32_CORE_USE_CANARI in
+// mios32_sys.h). Only ONE canary needed: only one stack left once tasks
+// are gone, unlike FreeRTOS's per-task watermarking.
+#define MIOS32_CORE_CANARY_PATTERN 0xa5a5a5a5
+
+extern u32 _estack;      // top of stack (linker symbol, see the .ld file)
+extern u32 __Stack_Init; // bottom of the reserved stack region (ditto)
+
+static void MIOS32_CORE_Canary_Init(void)
+{
+  // fill everything below the CURRENT stack pointer with the pattern -
+  // deliberately stops there rather than filling the whole region blindly,
+  // so this can't clobber a stack frame already in active use at the point
+  // this runs (main() itself, and whatever it already called into).
+  u32 *p = &__Stack_Init;
+  u32 *sp = (u32 *)__get_MSP();
+  while( p < sp )
+    *p++ = MIOS32_CORE_CANARY_PATTERN;
+}
+
+static void MIOS32_CORE_Canary_Check(void)
+{
+  if( __Stack_Init != MIOS32_CORE_CANARY_PATTERN ) {
+#ifndef MIOS32_DONT_USE_MIDI
+    MIOS32_MIDI_SendDebugMessage("======================\n");
+    MIOS32_MIDI_SendDebugMessage("!!! STACK OVERFLOW !!!\n");
+    MIOS32_MIDI_SendDebugMessage("(bare-metal canary, MIOS32_CORE_USE_CANARI)\n");
+    MIOS32_MIDI_SendDebugMessage("======================\n");
+#endif
+    _abort();
+  }
+}
+#endif
+
+static void MIOS32_CORE_BareLoop_Run(void)
+{
+  // 1mS tick, matching FreeRTOS's own configTICK_RATE_HZ=1000 in the other
+  // mode - MIOS32_SYS_CPU_FREQUENCY (not the runtime SystemCoreClock
+  // variable) to stay consistent with how FreeRTOSConfig.h's own
+  // configCPU_CLOCK_HZ is derived.
+  SysTick_Config(MIOS32_SYS_CPU_FREQUENCY / 1000);
+
+#if MIOS32_CORE_USE_CANARI
+  MIOS32_CORE_Canary_Init();
+#endif
+
+  u32 last_tick = mios32_core_tick_ms;
+  while( 1 ) {
+    u32 now = mios32_core_tick_ms;
+    if( now != last_tick ) {
+      // catches up to "now" in one shot rather than replaying every missed
+      // mS if a previous iteration ran long - same intent as the
+      // "skip delay gap" logic in TASK_Hooks/TASK_MIDI_Hooks above.
+      last_tick = now;
+
+#if !defined(MIOS32_DONT_USE_TIMESTAMP)
+      MIOS32_TIMESTAMP_Inc();
+#endif
+#if !defined(MIOS32_DONT_USE_SRIO) && !defined(MIOS32_DONT_SERVICE_SRIO_SCAN)
+      APP_SRIO_ServicePrepare();
+      MIOS32_SRIO_ScanStart(SRIO_ServiceFinish);
+#endif
+
+      MIOS32_CORE_NonMIDI_Tick();
+#if !defined(MIOS32_DONT_USE_MIDI)
+      MIOS32_CORE_MIDI_Tick();
+#endif
+
+#if MIOS32_CORE_USE_CANARI
+      MIOS32_CORE_Canary_Check();
+#endif
+    }
+
+    // replaces vApplicationIdleHook() - called as often as possible between
+    // 1mS blocks, same as FreeRTOS calls it whenever nothing else is ready
+    // to run.
+    APP_Background();
+  }
+}
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////

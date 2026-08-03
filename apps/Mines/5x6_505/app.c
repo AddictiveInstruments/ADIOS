@@ -118,7 +118,7 @@ void APP_Init(void)
 	TR5X6_ROM_HOST();
 	// initialize all LEDs
 	MIOS32_BOARD_LED_Init(0xffffffff);
-	
+
 	// initialize LCD Bus Decoder.
 	TR5X6_DECOD_Init();
 
@@ -229,8 +229,8 @@ void APP_MIDI_Tick(void)
 /////////////////////////////////////////////////////////////////////////////
 void APP_MIDI_NotifyPackage(mios32_midi_port_t port, mios32_midi_package_t midi_package)
 {
-	if(port==UART1){
-		if(normal_start)MIOS32_MIDI_SendPackage(UART0,  midi_package);
+	if(port==DIN1){
+		if(normal_start)MIOS32_MIDI_SendPackage(DIN0,  midi_package);
 	}
 }
 
@@ -244,7 +244,7 @@ static s32 NOTIFY_MIDI_Rx(mios32_midi_port_t port, u8 midi_byte)
 //#if 0
 	// check for MIDI clock fom TR
 	if(normal_start){
-		if(port==UART1){
+		if(port==DIN1){
 			if( midi_byte == 0xf8 ) {
 
 
@@ -298,7 +298,7 @@ static s32 NOTIFY_MIDI_Rx(mios32_midi_port_t port, u8 midi_byte)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
 {
-	if(port==UART1){
+	if(port==DIN1){
 		MIOS32_UART_TxBufferPut(0, midi_in);
 	}else{
 		// App sysex parser
@@ -1685,9 +1685,6 @@ static void TASK_TFT_Periodic(void *pvParameters)
 void EXTI4_15_IRQHandler(void){
 	// callback for DECOD function
 	TR5X6_DECOD_EXTI_LCD_Callback();
-	// callback for UART TX bypass option
-	//MIOS32_UART_TX_BypassCallback();
-
 }
 void EXTI2_3_IRQHandler(void){
 	// callback for DECOD function

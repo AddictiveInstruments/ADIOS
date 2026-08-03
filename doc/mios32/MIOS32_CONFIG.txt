@@ -46,7 +46,14 @@ into your local mios32_config.h file
 #define MIOS32_DONT_USE_ENC28J60
 
 // calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
-#define MIOS32_DONT_USE_FREERTOS
+// opt-in on STM32F4xx/STM32G0xx (renamed from MIOS32_DONT_USE_FREERTOS),
+// numeric (0/1, not plain presence) so a project can force it either way
+// regardless of the RAM/FLASH-tiered default in mios32_sys.h - see there,
+// and programming_models/traditional/main.c's MIOS32_CORE_USE_FREERTOS for
+// the separate switch controlling how the application Hooks are scheduled.
+// Other families (STM32F10x, LPC17xx, MIOSJUCE) still use the old opt-out
+// name.
+#define MIOS32_APP_USE_FREERTOS 1
 
 // Stack size for FreeRTOS tasks as defined by the programming model
 // Note that each task maintains it's own stack!
