@@ -21,9 +21,11 @@
 #   0) if bootloader/src/cpu_bsl.ld doesn't exist yet (fresh checkout), seed
 #      one from the template using the safety-minimum boundary, so pass 1
 #      below has something to link against
-#   1) build the bootloader for the given chip (Makefile.bsl_<CHIP>) - pass 1,
-#      to measure its size (whatever boundary value cpu_bsl.ld currently
-#      holds does not affect the bootloader's own compiled code size)
+#   1) build the bootloader for the given chip (the single generic
+#      bootloader/src/Makefile.bsl, with PROCESSOR passed on its command
+#      line) - pass 1, to measure its size (whatever boundary value
+#      cpu_bsl.ld currently holds does not affect the bootloader's own
+#      compiled code size)
 #   2) measure the real compiled size of project_build/project.bin
 #   3) round it up to the next flash erase-granularity boundary (page for
 #      G0xx, sector for F4xx), clamped to a safety MINIMUM because STM32G0xx
@@ -137,7 +139,11 @@ TOTAL_FLASH=$(( (FLASH_BSL_K + FLASH_K) * 1024 ))
 # under some sh.exe builds, even though the same relative path works fine
 # for plain `cd`/`make -f`.
 BSL_DIR="$(cd "$MIOS32_PATH/bootloader/src" && pwd)"
-BSL_MAKEFILE="Makefile.bsl_$CHIP"
+# ONE generic bootloader Makefile for every chip/family (2026-08-05, replaced
+# the per-chip Makefile.bsl_STM32xxx copies) - the chip is passed to it as a
+# make variable instead of being baked into a separate file per SKU, so a new
+# chip needs no new file here.
+BSL_MAKEFILE="Makefile.bsl"
 BIN_FILE="$BSL_DIR/project_build/project.bin"
 # generated .ld files live inside each side's own project_build/ (the
 # gitignored make-target build dir, not the source directory) - same reasoning
@@ -223,7 +229,7 @@ else
 fi
 
 build_bootloader () {
-    ( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
+    ( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
         echo "Bootloader build failed, see $BSL_DIR/gen_bsl_boundary_build.log"
         exit 1
     }
@@ -249,8 +255,8 @@ build_bootloader () {
 #     map, even different family) would otherwise silently get reused for
 #     pass 1 here, at best wasting a build, at worst linking pass 1 against
 #     the wrong MEMORY block entirely.
-# bootloader/src/project_build is SHARED by every Makefile.bsl_<CHIP> (there's
-# only one bootloader/src directory for all chips/families) - make's default
+# bootloader/src/project_build is SHARED by every chip (one generic
+# Makefile.bsl, one bootloader/src directory) - make's default
 # dependency tracking follows source file mtimes only, not CFLAGS/-D changes,
 # so a stale .o compiled for a DIFFERENT chip/family in a PREVIOUS invocation
 # would otherwise be silently reused here even though its FAMILY defines no
@@ -258,7 +264,7 @@ build_bootloader () {
 # seed below, not after: cleanall's `clean:` target is `rm -rf $(PROJECT_OUT)`,
 # which would otherwise delete the cpu_bsl.ld the seed step just wrote, now
 # that it lives inside project_build/ too (2026-08-04).
-( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" cleanall > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
+( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" cleanall > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
     echo "Bootloader cleanall failed, see $BSL_DIR/gen_bsl_boundary_build.log"
     exit 1
 }

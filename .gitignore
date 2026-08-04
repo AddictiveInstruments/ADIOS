@@ -123,6 +123,13 @@ cpu_app.ld
 mios32_bsl_boundary.h
 gen_bsl_boundary_build.log
 
+# Machine-local symlink bootstrapped by gen_bsl_boundary.sh, standing in for
+# the repo root in the bootloader's own sub-make so THUMB_SOURCE paths built
+# from it never contain a literal ".." (which would otherwise walk object
+# files back out of $(PROJECT_OUT) on every build - see that script's
+# comment for the full story)
+.repo_root
+
 # Compiled bootloader/app binaries/hex files copied out of project_build/
 # (regenerable)
 *.bin
@@ -130,3 +137,4 @@ gen_bsl_boundary_build.log
 
 # Embedded bootloader blobs regenerated from the .bin above (etc/gen_bsl_boundary.sh)
 mios32/STM32G0xx/mios32_bsl_*.inc
+mios32/STM32F4xx/mios32_bsl_*.inc
