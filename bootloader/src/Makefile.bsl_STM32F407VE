@@ -1,23 +1,31 @@
 # $Id: Makefile.bsl_MBHP_CORE_STM32 562 2009-05-22 22:35:29Z tk $
 
 ################################################################################
-# following setup is static for DIPCOREF4 module
+# following setup is static for the STM32F407VE bootloader (Waveshare F407VE
+# test board - see apps/Bruno/f407_test). BOARD stays MBHP_DIPCOREF4: F4xx
+# never gets its own per-board #ifdef chain, one fixed default for all
+# STM32F4xx hardware (see mios32/STM32F4xx/mios32_board.c).
 ################################################################################
 
-PROCESSOR =		STM32G031K8
-FAMILY    = 	STM32G0xx
-BOARD	  = 	STM32G031K8
+
+PROCESSOR =		STM32F407VE
+MIOS32_PROCESSOR_STM32F407VE = DEFINED
+FAMILY    = 	STM32F4xx
+MIOS32_FAMILY_STM32F4xx = DEFINED
+BOARD	  = 	MBHP_DIPCOREF4
+MIOS32_BOARD_MBHP_DIPCOREF4 = DEFINED
 LCD       =     dummy
+
 
 ################################################################################
 # Source Files, include paths and libraries
 ################################################################################
 
-THUMB_SOURCE    = $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_stm32g031.c \
+THUMB_SOURCE    = $(MIOS32_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c \
 				main.c \
 				bsl_sysex.c
 
-# (following source stubs not relevant for Cortex M0+ derivatives)
+# (following source stubs not relevant for Cortex M3 derivatives)
 THUMB_AS_SOURCE =
 ARM_SOURCE      =
 ARM_AS_SOURCE   =

@@ -64,7 +64,7 @@ SECTIONS
 	. = ALIGN(4);
         KEEP(*(.mios32_bsl))
 	. = ALIGN(4);
-    } >FLASH
+    } >FLASH_BSL
  
     /* for Cortex devices, the beginning of the startup code is stored in the .isr_vector section, which goes to FLASH */
     .isr_vector :

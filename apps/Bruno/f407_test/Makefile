@@ -1,17 +1,29 @@
 # $Id: Makefile 1820 2013-09-01 15:44:33Z tk $
 
 ################################################################################
-# f407_test - first hardware bring-up test for a Waveshare STM32F407VE board
-# on the ST-Link JTAG/SWD. No bootloader involved (flashed directly via SWD
-# at 0x08000000, see ld/STM32F407VE_noboot.ld) - same pattern as
-# apps/Bruno/g030k6_test for STM32G0xx. BOARD stays MBHP_DIPCOREF4: F4xx
-# never gets its own per-board #ifdef chain in mios32_board.c, one fixed
-# default for all STM32F4xx hardware (see mios32/STM32F4xx/mios32_board.c).
+# f407_test - real dynamic bootloader/app boundary test on a Waveshare
+# STM32F407VE board, on the ST-Link JTAG/SWD. First-ever real F4 hardware
+# validation of etc/gen_bsl_boundary.sh's F4 support (extended 2026-08-04) -
+# same rationale as apps/Bruno/g030k6_test on the G0 side: bring-up alone
+# (bare, no bootloader) only proves the chip/board works, not that the
+# dynamic boundary mechanism itself works on real F4 silicon. Permanently
+# pinned (no env-var indirection) like 5x6_505. BOARD stays MBHP_DIPCOREF4:
+# F4xx never gets its own per-board #ifdef chain in mios32_board.c, one
+# fixed default for all STM32F4xx hardware (see
+# mios32/STM32F4xx/mios32_board.c).
 ################################################################################
-PROCESSOR ?=	STM32F407VE
-FAMILY    ?= 	STM32F4xx
-BOARD	  ?= 	MBHP_DIPCOREF4
-LCD       ?=   universal
+PROCESSOR =	STM32F407VE
+FAMILY    =	STM32F4xx
+BOARD	  =	MBHP_DIPCOREF4
+LCD       =	universal
+
+# opt into the real dynamic bootloader/app flash boundary mechanism - see
+# programming_model.mk and etc/gen_bsl_boundary.sh for the full explanation.
+# STM32F407VE has no exact-named .ld template (only the package-less
+# STM32F407xE.ld reference-library one) - programming_model.mk's own
+# LD_FILE_EXACT/LD_FILE_FALLBACK derivation already resolves to that file
+# automatically, no override needed here.
+MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
 
 
 ################################################################################
@@ -50,10 +62,6 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 
 # sources of programming model
 include $(MIOS32_PATH)/programming_models/traditional/programming_model.mk
-
-# override: no bootloader in this test project, vector table needs to sit
-# at the fixed physical boot address 0x08000000 - see ld/STM32F407VE_noboot.ld
-LD_FILE = ld/STM32F407VE_noboot.ld
 
 # application specific LCD driver (selected via makefile variable)
 include $(MIOS32_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk

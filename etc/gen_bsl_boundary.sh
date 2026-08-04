@@ -57,7 +57,16 @@
 # see step 4/6 above.
 #
 # Usage:
-#   gen_bsl_boundary.sh <CHIP> <TOTAL_FLASH_BYTES> <LD_TEMPLATE> <PROJECT_DIR> [PAGE_SIZE] [PADDING_BYTES] [MIN_BOUNDARY]
+#   gen_bsl_boundary.sh <CHIP> <LD_TEMPLATE> <PROJECT_DIR> [PAGE_SIZE] [PADDING_BYTES] [MIN_BOUNDARY]
+#
+# TOTAL_FLASH_BYTES is not a caller-supplied argument (2026-08-05) - it is
+# derived from $LD_TEMPLATE's own MEMORY block instead (FLASH_BSL length +
+# FLASH length), so a project's Makefile never has to restate its chip's
+# total flash size by hand. Every .ld template in etc/ld/ - both the handful
+# of exact-named ones actively wired to real projects, and the package-less
+# reference library covering every other G0/F4 SKU - consistently express
+# these lengths in K-suffixed form (e.g. "10K", "118K"), so a single parser
+# handles both sets uniformly.
 #
 # PAGE_SIZE/MIN_BOUNDARY default to family-appropriate values inferred from
 # the CHIP name (STM32F4* -> 16384/16384 sector granularity, everything else
@@ -73,11 +82,10 @@
 set -e
 
 CHIP="$1"
-TOTAL_FLASH="$2"
-LD_TEMPLATE="$3"
-PROJECT_DIR="$4"
+LD_TEMPLATE="$2"
+PROJECT_DIR="$3"
 
-# family-appropriate erase-granularity defaults, overridable via $5/$7
+# family-appropriate erase-granularity defaults, overridable via $4/$6
 case "$CHIP" in
     STM32F4*)
         FAMILY_DIR="STM32F4xx"
@@ -91,12 +99,12 @@ case "$CHIP" in
         ;;
 esac
 
-PAGE_SIZE="${5:-$DEFAULT_PAGE_SIZE}"
-PADDING_BYTES="${6:-0}"
-MIN_BOUNDARY="${7:-$DEFAULT_MIN_BOUNDARY}"
+PAGE_SIZE="${4:-$DEFAULT_PAGE_SIZE}"
+PADDING_BYTES="${5:-0}"
+MIN_BOUNDARY="${6:-$DEFAULT_MIN_BOUNDARY}"
 
 if [ -z "$PROJECT_DIR" ]; then
-    echo "Usage: gen_bsl_boundary.sh <CHIP> <TOTAL_FLASH_BYTES> <LD_TEMPLATE> <PROJECT_DIR> [PAGE_SIZE] [PADDING_BYTES] [MIN_BOUNDARY]"
+    echo "Usage: gen_bsl_boundary.sh <CHIP> <LD_TEMPLATE> <PROJECT_DIR> [PAGE_SIZE] [PADDING_BYTES] [MIN_BOUNDARY]"
     exit 1
 fi
 
@@ -104,6 +112,23 @@ if [ -z "$MIOS32_PATH" ]; then
     echo "MIOS32_PATH must be exported first"
     exit 1
 fi
+
+if [ ! -f "$LD_TEMPLATE" ]; then
+    echo "LD_TEMPLATE not found: $LD_TEMPLATE"
+    exit 1
+fi
+
+# --- derive TOTAL_FLASH_BYTES from the template's own MEMORY block - see the
+#     usage comment above. The FLASH_BSL pattern is checked first and is
+#     specific enough (requires the literal "_BSL" right after "FLASH") that
+#     it can never accidentally match the plain "FLASH (rx)" line below it.
+FLASH_BSL_K=$(sed -n -E 's/^[[:space:]]*FLASH_BSL[[:space:]]*\(rx\)[[:space:]]*:.*LENGTH[[:space:]]*=[[:space:]]*([0-9]+)K.*/\1/p' "$LD_TEMPLATE" | head -1)
+FLASH_K=$(sed -n -E 's/^[[:space:]]*FLASH[[:space:]]*\(rx\)[[:space:]]*:.*LENGTH[[:space:]]*=[[:space:]]*([0-9]+)K.*/\1/p' "$LD_TEMPLATE" | head -1)
+if [ -z "$FLASH_BSL_K" ] || [ -z "$FLASH_K" ]; then
+    echo "Could not parse K-suffixed FLASH_BSL/FLASH LENGTH out of $LD_TEMPLATE"
+    exit 1
+fi
+TOTAL_FLASH=$(( (FLASH_BSL_K + FLASH_K) * 1024 ))
 
 # canonicalize to an absolute path for OUR OWN file operations (write_header,
 # log redirection, etc) - a deeply relative BSL_DIR (e.g.
@@ -114,8 +139,16 @@ fi
 BSL_DIR="$(cd "$MIOS32_PATH/bootloader/src" && pwd)"
 BSL_MAKEFILE="Makefile.bsl_$CHIP"
 BIN_FILE="$BSL_DIR/project_build/project.bin"
-BSL_LD_FILE="$BSL_DIR/cpu_bsl.ld"
-APP_LD_FILE="$PROJECT_DIR/cpu_app.ld"
+# generated .ld files live inside each side's own project_build/ (the
+# gitignored make-target build dir, not the source directory) - same reasoning
+# as the bootloader/src stray-directory fix earlier: keep every regenerated-
+# every-build artifact contained in one place instead of scattered next to
+# real source files. Created here (not left for `make`'s own `dirs:` target)
+# because this script runs via $(shell ...) at Makefile PARSE time, before
+# any recipe - including `dirs:` - has had a chance to run.
+mkdir -p "$BSL_DIR/project_build" "$PROJECT_DIR/project_build"
+BSL_LD_FILE="$BSL_DIR/project_build/cpu_bsl.ld"
+APP_LD_FILE="$PROJECT_DIR/project_build/cpu_app.ld"
 
 # --- write one variant of the generated linker script from the shared
 #     per-chip template. $1 = output path, $2 = "bsl" or "app".
@@ -152,10 +185,45 @@ write_ld () {
 # would resolve one directory too far up once this script cd's into
 # bootloader/src. An absolute MIOS32_PATH would avoid that mismatch too, but
 # GNU Make's rule parser chokes on a Windows drive-letter colon ("E:/...")
-# embedded in the absolute source paths mios32.mk builds from it - so this
-# one sub-make specifically needs the fixed, always-correct relative value.
+# embedded in the absolute source paths mios32.mk builds from it.
+#
+# A literal relative value ("../..") doesn't work either though: THUMB_SOURCE
+# paths built from it (e.g. "../../mios32/STM32G0xx/mios32_sys.c") carry
+# real ".." segments, and common.mk's object rule just prefixes $(PROJECT_OUT)
+# onto whatever source path it's given - it doesn't textually contain that
+# ".."; mkdir -p/gcc -o resolve it as a real upward directory walk, scattering
+# mios32/etc/drivers directories one level above bootloader/src on every
+# single build (found & fixed 2026-08-04, after being found once already
+# earlier this project and mistakenly assumed fixed).
+#
+# Fix: a same-directory symlink, bootstrapped once if missing, standing in
+# for the repo root - "REPO_ROOT_LINK/mios32/..." has the same "path depth"
+# as "../../mios32/..." to the OS, but contains no ".." token for Make/mkdir
+# to walk out on, so the mirrored object tree stays correctly inside
+# $(PROJECT_OUT). Falls back to a literal ".." value on platforms where a
+# symlink can't be created (e.g. Windows without Developer Mode/admin) -
+# the stray directories reappearing there is a cosmetic wart, not a build
+# failure, and preferable to a hard error on every build.
+REPO_ROOT_LINK="$BSL_DIR/.repo_root"
+if [ ! -e "$REPO_ROOT_LINK" ]; then
+    # MSYS's default symlink mode silently produces something $BSL_MAKEFILE's
+    # sub-make can't actually use as a directory (confirmed 2026-08-04: `ln -s`
+    # "succeeds" - exit 0, no error - but the result fails `test -L` and
+    # doesn't behave as a real directory link). winsymlinks:nativestrict
+    # forces a real Windows symlink (needs Developer Mode or an elevated
+    # shell - same requirement as any Windows symlink, not specific to this
+    # script) - falls through to the ".." fallback below if that's not
+    # available either.
+    MSYS=winsymlinks:nativestrict ln -s "$MIOS32_PATH" "$REPO_ROOT_LINK" 2>/dev/null || true
+fi
+if [ -L "$REPO_ROOT_LINK" ]; then
+    BSL_SUBMAKE_MIOS32_PATH=".repo_root"
+else
+    BSL_SUBMAKE_MIOS32_PATH="../.."
+fi
+
 build_bootloader () {
-    ( cd "$BSL_DIR" && MIOS32_PATH=../.. make -f "$BSL_MAKEFILE" > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
+    ( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
         echo "Bootloader build failed, see $BSL_DIR/gen_bsl_boundary_build.log"
         exit 1
     }
@@ -181,21 +249,25 @@ build_bootloader () {
 #     map, even different family) would otherwise silently get reused for
 #     pass 1 here, at best wasting a build, at worst linking pass 1 against
 #     the wrong MEMORY block entirely.
-BOOTSTRAP_SIZE=32768
-echo "Seeding $BSL_LD_FILE from $LD_TEMPLATE at $BOOTSTRAP_SIZE bytes (link-only placeholder for pass 1)"
-BOUNDARY=$BOOTSTRAP_SIZE
-write_ld "$BSL_LD_FILE" "bsl"
-
 # bootloader/src/project_build is SHARED by every Makefile.bsl_<CHIP> (there's
 # only one bootloader/src directory for all chips/families) - make's default
 # dependency tracking follows source file mtimes only, not CFLAGS/-D changes,
 # so a stale .o compiled for a DIFFERENT chip/family in a PREVIOUS invocation
 # would otherwise be silently reused here even though its FAMILY defines no
-# longer match. Always start from a clean slate.
-( cd "$BSL_DIR" && MIOS32_PATH=../.. make -f "$BSL_MAKEFILE" cleanall > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
+# longer match. Always start from a clean slate - and BEFORE the bootstrap
+# seed below, not after: cleanall's `clean:` target is `rm -rf $(PROJECT_OUT)`,
+# which would otherwise delete the cpu_bsl.ld the seed step just wrote, now
+# that it lives inside project_build/ too (2026-08-04).
+( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" cleanall > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
     echo "Bootloader cleanall failed, see $BSL_DIR/gen_bsl_boundary_build.log"
     exit 1
 }
+mkdir -p "$BSL_DIR/project_build"
+
+BOOTSTRAP_SIZE=32768
+echo "Seeding $BSL_LD_FILE from $LD_TEMPLATE at $BOOTSTRAP_SIZE bytes (link-only placeholder for pass 1)"
+BOUNDARY=$BOOTSTRAP_SIZE
+write_ld "$BSL_LD_FILE" "bsl"
 
 echo "=== Pass 1: building bootloader for $CHIP to measure its real size ==="
 build_bootloader

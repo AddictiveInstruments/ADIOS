@@ -116,6 +116,34 @@ THUMB_SOURCE += $(STARTUP_FILE)
 
 endif
 
+################################################################################
+# Automatic bootloader/app flash boundary (opt-in): a project sets
+#   MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
+# in its own Makefile BEFORE including this file to get a real, measured
+# bootloader/app split (etc/gen_bsl_boundary.sh) instead of a project-local
+# noboot .ld. Builds the bootloader for $(PROCESSOR), measures its real size,
+# and generates a project-local linker script (project_build/cpu_app.ld) + C
+# header (mios32_bsl_boundary.h, picked up automatically by mios32_sys.h) with
+# the boundary rounded to a flash page/sector - instead of a hand-picked
+# hardcoded constant. This also regenerates the bootloader's own linker
+# script and embedded-image .inc file, so the bootloader and app always agree
+# on the same boundary. Runs unconditionally on every make invocation - the
+# boundary can shift between builds as the bootloader's own code changes, so
+# a cached/stale generated .ld can't be trusted.
+#
+# LD_TEMPLATE reuses whatever $(LD_FILE) was already resolved to above
+# (LD_FILE_EXACT if this PROCESSOR has one, else LD_FILE_FALLBACK) - the same
+# file gen_bsl_boundary.sh reads to derive both TOTAL_FLASH_BYTES and the
+# generated cpu_app.ld/cpu_bsl.ld MEMORY layout. LD_FILE is then overridden to
+# the generated, per-build project_build/cpu_app.ld. PROJECT_DIR is
+# $(CURDIR) - the directory make was invoked from, i.e. the app's own folder -
+# so this generalizes to any project without hardcoding its path.
+################################################################################
+ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
+LD_TEMPLATE := $(LD_FILE)
+$(shell $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2)
+LD_FILE = $(CURDIR)/$(PROJECT_OUT)/cpu_app.ld
+endif
 
 THUMB_CPP_SOURCE += $(MIOS32_PATH)/programming_models/traditional/mini_cpp.cpp
 ifneq ($(MIOS32_APP_USE_FREERTOS),0)

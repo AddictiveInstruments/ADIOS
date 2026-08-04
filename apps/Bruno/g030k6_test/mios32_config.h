@@ -270,19 +270,6 @@
 // enable BSL enhancements in MIOS32 SysEx parser
 //#define MIOS32_MIDI_BSL_ENHANCEMENTS 0
 
-// exclude default BSL image from MIOS32 - no bootloader involved in this
-// test project, flashed directly via SWD at 0x08000000.
-#define MIOS32_DONT_INCLUDE_BSL
-
-// no bootloader reservation needed here (see MIOS32_DONT_INCLUDE_BSL above) -
-// NOT 0x0 though: mios32_sys.h computes MIOS32_SYS_ADDR_BSL_INFO_BEGIN as
-// (0x08000000 + MIOS32_APP_FLASH_START_ADDR - 0x100) - with 0x0 that
-// underflows below 0x08000000 into invalid memory, and MIOS32_MIDI_Init()
-// reads from that computed address unconditionally -> HardFault, silently
-// swallowed by the empty HardFault_Handler() in main.c -> looks exactly
-// like a hang. 0x100 keeps the subtraction landing exactly on 0x08000000.
-#define MIOS32_APP_FLASH_START_ADDR 0x100
-
 // to save memory on STM32 build:
 #if defined(MIOS32_FAMILY_STM32F4xx)
 # define MIOS32_SYS_DONT_INIT_RTC

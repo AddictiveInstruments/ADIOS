@@ -139,6 +139,17 @@
 #endif
 
 
+// dynamic bootloader/app flash boundary (opt-in, MIOS32_USE_DYNAMIC_BSL_BOUNDARY
+// in the project's own Makefile - see programming_model.mk and
+// etc/gen_bsl_boundary.sh): if that mechanism generated a project-local
+// mios32_bsl_boundary.h, pull it in here so MIOS32_APP_FLASH_START_ADDR is
+// defined before it's used below. __has_include makes this a silent no-op
+// for every project that doesn't use the mechanism (noboot .ld projects,
+// the bootloader's own build) instead of requiring a per-project #include.
+#if __has_include("mios32_bsl_boundary.h")
+#include "mios32_bsl_boundary.h"
+#endif
+
 // location of the Device ID and USB device name
 // The bootloader update tool allows to change these values from MIOS terminal
 #if defined(MIOS32_FAMILY_STM32F10x)

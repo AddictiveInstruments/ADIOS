@@ -1,16 +1,24 @@
 # $Id: Makefile 1820 2013-09-01 15:44:33Z tk $
 
 ################################################################################
-# following setup taken from environment variables
+# g030k6_test - real dynamic bootloader/app boundary test on a Nucleo-G030K6
+# (onboard user LED on PC6, see MIOS32_SOF_LED_PORT/PIN override in
+# mios32_config.h). Deliberately the SMALLEST chip in the reference library
+# (32K flash, 8K RAM, "small tier" FreeRTOS-off) - the tightest, most
+# revealing test of etc/gen_bsl_boundary.sh: the bootloader's own minimum
+# boundary (10240 bytes) already eats a third of total flash here, unlike
+# STM32G070CB (5x6_505's chip, 128K flash) where that same minimum is
+# comfortable margin. Permanently pinned (no env-var indirection) like
+# 5x6_505 - this project exists specifically to exercise the mechanism on
+# real hardware, not to be repointed at a different chip.
 ################################################################################
+PROCESSOR =	STM32G030K6
+FAMILY    =	STM32G0xx
+BOARD	  =	STM32G0GENERIC
 
-# g030k6_test - hardware smoke test for the MIOS32_CORE_USE_FREERTOS bare-
-# metal path on a Nucleo-G030K6 (onboard user LED on PC6, see
-# MIOS32_SOF_LED_PORT/PIN override in mios32_config.h)
-PROCESSOR ?=	STM32G030K6
-FAMILY    ?= 	STM32G0xx
-BOARD	  ?= 	STM32G0GENERIC
-LCD       ?=   universal
+# opt into the real dynamic bootloader/app flash boundary mechanism - see
+# programming_model.mk and etc/gen_bsl_boundary.sh for the full explanation.
+MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
 
 
 ################################################################################
@@ -50,12 +58,15 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 # sources of programming model
 include $(MIOS32_PATH)/programming_models/traditional/programming_model.mk
 
-# override: no bootloader in this test project, vector table needs to sit
-# at the fixed physical boot address 0x08000000 - see ld/STM32G030K6_noboot.ld
-LD_FILE = ld/STM32G030K6_noboot.ld
-
-# application specific LCD driver (selected via makefile variable)
-include $(MIOS32_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk
+# no application LCD driver: MIOS32_DONT_USE_LCD is set in mios32_config.h,
+# which guards out every APP_LCD_* call inside mios32_lcd.c (see the
+# #if !defined(MIOS32_DONT_USE_LCD) wrapping its whole body) - so no
+# app_lcd module is ever actually called here. Compiling one in anyway
+# (there's no minimal/dummy option in modules/app_lcd/, only real,
+# sizeable physical-controller drivers) was pure dead weight - on this
+# chip specifically, enough to overflow the available app flash after the
+# bootloader's own reservation (found 2026-08-04 converting this project
+# to the real dynamic-boundary mechanism).
 
 # common make rules
 # Please keep this include statement at the end of this Makefile. Add new modules above.

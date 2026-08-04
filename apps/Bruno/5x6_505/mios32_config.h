@@ -104,11 +104,6 @@
 // exclude default BSL image from MIOS32
 //#define MIOS32_DONT_INCLUDE_BSL
 
-// reserved flash size (offset from 0x08000000) for the bootloader on this project.
-// auto-computed from the real compiled bootloader size by the Makefile
-// (see etc/gen_bsl_boundary.sh) - do not hardcode this value anymore.
-#include "mios32_bsl_boundary.h"
-
 // to save memory on STM32 build:
 #if defined(MIOS32_FAMILY_STM32F4xx)
 # define MIOS32_SYS_DONT_INIT_RTC

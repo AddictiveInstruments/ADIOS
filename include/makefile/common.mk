@@ -109,6 +109,35 @@ Debug: all
 release: all
 Release: all
 
+################################################################################
+# Automatic bootloader/app production deliverables (opt-in - set
+# MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1 in the app's own Makefile before
+# including programming_model.mk, see that file's own comment and
+# etc/gen_bsl_boundary.sh for the full mechanism). Two files, named after
+# this app's own directory (not the CPU, not the generic $(PROJECT) name):
+#   1) <app>_full_bsl_app.bin - combined bootloader+app image for one-shot SWD
+#      flashing of a fresh board. project_build/$(PROJECT).bin already IS
+#      this: mios32_bsl.c embeds an exact copy of the bootloader ahead of the
+#      real app code at the generated boundary - copied here under an
+#      explicit name so it's never confused with the app-only artifact below.
+#   2) <app>_app_only.hex - app code only (embedded bootloader copy excluded)
+#      for injecting via MIOS Studio without touching SWD, the normal
+#      end-user/field update path.
+# This "all:" statement has no recipe body - Make merges its prerequisite
+# list into the "all:" rule above instead of conflicting with it.
+################################################################################
+ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
+DYNAMIC_BSL_APP_NAME = $(notdir $(CURDIR))
+
+all: $(DYNAMIC_BSL_APP_NAME)_full_bsl_app.bin $(DYNAMIC_BSL_APP_NAME)_app_only.hex
+
+$(DYNAMIC_BSL_APP_NAME)_full_bsl_app.bin: project_build/$(PROJECT).bin
+	cp $< $@
+
+$(DYNAMIC_BSL_APP_NAME)_app_only.hex: project_build/$(PROJECT).elf
+	$(OBJCOPY) --remove-section=.mios32_bsl -O ihex $< $@
+endif
+
 # create the output directories
 dirs:
 	@-if [ ! -e $(PROJECT_OUT) ]; then mkdir $(PROJECT_OUT); fi;
