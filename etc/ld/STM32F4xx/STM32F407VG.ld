@@ -1,5 +1,5 @@
-/* $Id: STM32F407VG.ld 1969 2014-03-07 21:51:01Z tk $
-Linker script for STM32F103RE
+/* Linker script template for STM32F407VG - source of truth consumed by
+   etc/gen_bsl_boundary.sh to generate cpu_app.ld/cpu_bsl.ld at build time.
 Based on scripts from Raisonance
 */
 
@@ -7,11 +7,17 @@ Based on scripts from Raisonance
 MEMORY
 {
   RAM (xrw) :     ORIGIN = 0x20000000, LENGTH = 192K
-  FLASH_SECTOR0(rx) : ORIGIN = 0x08000000, LENGTH = 16K /* Bootloader */
-  FLASH_SECTOR1(rx) : ORIGIN = 0x08004000, LENGTH = 16K /* Vectors */
-  FLASH_SECTOR2(rx) : ORIGIN = 0x08008000, LENGTH = 16K /* EEPROM Emulation Page 0 (only used by $MIOS32_PATH/modules/eeprom/STM32F4xx/eeprom.c) */
-  FLASH_SECTOR3(rx) : ORIGIN = 0x0800c000, LENGTH = 16K /* EEPROM Emulation Page 1 (only used by $MIOS32_PATH/modules/eeprom/STM32F4xx/eeprom.c) */
-  FLASH(rx)         : ORIGIN = 0x08010000, LENGTH = 960K
+  /* First flash sector (16K, sector-erase granularity - F4 flash can't be
+     erased at finer resolution than a whole sector, unlike G0xx's uniform
+     2K pages). FLASH_BSL/FLASH origins+lengths are rewritten by
+     etc/gen_bsl_boundary.sh at build time to match the bootloader's real
+     size, rounded up to a whole number of 16K sectors - do not edit by
+     hand, this is just the fallback template. No more FLASH_SECTOR2/3
+     EEPROM-emulation reservation (dropped 2026-08 - module no longer used,
+     any future flash-write need goes through direct LL_FLASH_* calls like
+     tr5x6_rom.c does, not this vestigial StdPeriph-era EEPROM emulation). */
+  FLASH_BSL (rx) : ORIGIN = 0x08000000, LENGTH = 16K
+  FLASH (rx)     : ORIGIN = 0x08004000, LENGTH = 1008K
   FLASHB1 (rx) :  ORIGIN = 0x00000000, LENGTH = 0
   EXTMEMB0 (rx) : ORIGIN = 0x00000000, LENGTH = 0
   EXTMEMB1 (rx) : ORIGIN = 0x00000000, LENGTH = 0
@@ -131,8 +137,8 @@ SECTIONS
 	. = ALIGN(4);
         KEEP(*(.mios32_bsl))
 	. = ALIGN(4);
-    } >FLASH_SECTOR0
- 
+    } >FLASH_BSL
+
     /* for Cortex devices, the beginning of the startup code is stored in the .isr_vector section, which goes to FLASH */
     .isr_vector :
     {
@@ -140,7 +146,7 @@ SECTIONS
 	. = ALIGN(4);
         KEEP(*(.isr_vector))            /* Startup code */
 	. = ALIGN(4);
-    } >FLASH_SECTOR1
+    } >FLASH
 
     /* used in MIOS32_SYS to set the start vector */
     PROVIDE ( mios32_sys_isr_vector = _mios32_sys_isr_vector );

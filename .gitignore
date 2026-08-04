@@ -101,6 +101,10 @@ dkms.conf
 .svn/
 */.svn/
 
+# macOS Finder metadata
+.DS_Store
+._.DS_Store
+
 # Per-project build output directories (make target)
 project_build/
 *.dd
@@ -108,12 +112,21 @@ project_build/
 *.sym
 *.dep
 
-# Per-project generated linker scripts / boundary headers (etc/gen_bsl_boundary.sh)
-*_generated.ld
+# Generated linker scripts / boundary headers (etc/gen_bsl_boundary.sh) -
+# regenerated on every single make invocation by design, never meant to be
+# stable/committed. Fixed names since 2026-08-04 (was per-chip
+# "${CHIP}_generated.ld", accumulating stale copies if the target chip
+# changed mid-project) - cpu_bsl.ld lives in bootloader/src/, cpu_app.ld in
+# each project's own directory.
+cpu_bsl.ld
+cpu_app.ld
 mios32_bsl_boundary.h
+gen_bsl_boundary_build.log
 
-# Compiled bootloader/app binaries copied out of project_build/ (regenerable)
+# Compiled bootloader/app binaries/hex files copied out of project_build/
+# (regenerable)
 *.bin
+*.hex
 
 # Embedded bootloader blobs regenerated from the .bin above (etc/gen_bsl_boundary.sh)
 mios32/STM32G0xx/mios32_bsl_*.inc

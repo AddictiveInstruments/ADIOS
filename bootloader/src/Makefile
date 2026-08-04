@@ -6,8 +6,8 @@
 all: STM32G031K8 
 
 MBHP_DIPCOREF4:
-	make -f Makefile.bsl_MBHP_DIPCOREF4 cleanall
-	make -f Makefile.bsl_MBHP_DIPCOREF4
+	make -f Makefile.bsl_STM32F405RG cleanall
+	make -f Makefile.bsl_STM32F405RG
 	mv project_build/project.bin project_MBHP_DIPCOREF4.bin
 	perl gen_inc_file.pl project_MBHP_DIPCOREF4.bin ../../mios32/STM32F4xx/mios32_bsl_MBHP_DIPCOREF4.inc mios32_bsl_image mios32_bsl
 	perl gen_inc_file.pl project_MBHP_DIPCOREF4.bin ../updater/bsl_image_MBHP_DIPCOREF4.inc bsl_image 0

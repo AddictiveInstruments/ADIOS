@@ -8,7 +8,7 @@
  *  Copyright (C) 2008 Thorsten Klose (tk@midibox.org)
  *  Licensed for personal non-commercial use only.
  *  All other rights reserved.
- * 
+ *
  * ==========================================================================
  */
 
@@ -23,12 +23,13 @@
 // doesn't have access to a JTAG interface or COM port + MBHP_LTC module
 // to recover the BSL
 #ifndef MIOS32_DONT_INCLUDE_BSL
-# if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
-#  include "mios32_bsl_STM32F4DISCOVERY.inc"
-# elif defined(MIOS32_BOARD_MBHP_DIPCOREF4)
-#  include "mios32_bsl_MBHP_DIPCOREF4.inc"
+// MIOS32_BSL_INC_FILE is defined by the generated mios32_bsl_boundary.h
+// (see etc/gen_bsl_boundary.sh) - the project already knows which single,
+// fixed chip it's built for, so it directly names the matching .inc file
+// instead of re-deriving it here from a separate MIOS32_BOARD_xxx define.
+# ifdef MIOS32_BSL_INC_FILE
+#  include MIOS32_BSL_INC_FILE
 # else
-#  warning "This MIOS32_PROCESSOR isn't prepared in mios32_bsl.c - selecting bootloader of STM32F4DISCOVERY"
-#  include "mios32_bsl_STM32F4DISCOVERY.inc"
+#  error "MIOS32_BSL_INC_FILE not defined - run etc/gen_bsl_boundary.sh for this project first (see apps/Bruno/5x6_505/Makefile for an example), or define MIOS32_DONT_INCLUDE_BSL if this project doesn't need an embedded bootloader image."
 # endif
 #endif /* MIOS32_DONT_INCLUDE_BSL */

@@ -141,11 +141,13 @@
 
 // location of the Device ID and USB device name
 // The bootloader update tool allows to change these values from MIOS terminal
-#if defined(MIOS32_FAMILY_STM32F10x) || defined(MIOS32_FAMILY_STM32F4xx)
+#if defined(MIOS32_FAMILY_STM32F10x)
 # define MIOS32_SYS_ADDR_BSL_INFO_BEGIN    0x08003f00
-#elif defined(MIOS32_FAMILY_STM32G0xx)
+#elif defined(MIOS32_FAMILY_STM32F4xx) || defined(MIOS32_FAMILY_STM32G0xx)
 // last 256 bytes before the (dynamic, per-project) bootloader/app boundary -
-// must move together with MIOS32_APP_FLASH_START_ADDR, never a fixed address
+// must move together with MIOS32_APP_FLASH_START_ADDR, never a fixed address.
+// F4xx: boundary is sector-granular (16K), rounds to a whole number of
+// flash sectors - see etc/gen_bsl_boundary.sh. G0xx: page-granular (2K).
 # define MIOS32_SYS_ADDR_BSL_INFO_BEGIN    (0x08000000 + MIOS32_APP_FLASH_START_ADDR - 0x100)
 #elif defined(MIOS32_FAMILY_LPC17xx)
 # define MIOS32_SYS_ADDR_BSL_INFO_BEGIN    0x00003f00

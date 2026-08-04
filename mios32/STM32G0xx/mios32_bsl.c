@@ -30,6 +30,6 @@
 # ifdef MIOS32_BSL_INC_FILE
 #  include MIOS32_BSL_INC_FILE
 # else
-#  error "MIOS32_BSL_INC_FILE not defined - run etc/gen_bsl_boundary.sh for this project first (see apps/Mines/5x6_505/Makefile for an example), or define MIOS32_DONT_INCLUDE_BSL if this project doesn't need an embedded bootloader image."
+#  error "MIOS32_BSL_INC_FILE not defined - run etc/gen_bsl_boundary.sh for this project first (see apps/Bruno/5x6_505/Makefile for an example), or define MIOS32_DONT_INCLUDE_BSL if this project doesn't need an embedded bootloader image."
 # endif
 #endif /* MIOS32_DONT_INCLUDE_BSL */

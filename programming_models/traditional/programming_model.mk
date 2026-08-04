@@ -1,8 +1,6 @@
 # $Id: programming_model.mk 2424 2016-11-03 00:44:05Z tk $
 # defines rules building the programming model
 
-# philetaylor - changed to use umm_malloc and added MemMang to the include dirs.
-
 # where is FreeRTOS located
 
 FREE_RTOS      =    $(MIOS32_PATH)/FreeRTOS
@@ -37,10 +35,42 @@ C_INCLUDE += 	-I $(MIOS32_PATH)/programming_models/traditional \
 		-I $(FREE_RTOS)/Source/portable/GCC/ARM_CM3 \
 		-I $(FREE_RTOS)/Source/portable/MemMang \
 
-# required by FreeRTOS to select the port
+# Every PROCESSOR value in this codebase follows ST's fixed 11-character
+# format: 9-char line prefix (STM32 + 2-char family + 3-char line code, e.g.
+# STM32G041 or STM32F407) + 1-char package letter + 1-char density code
+# (e.g. STM32G041K8 = G041 line, K package, 8 density). This lets us derive
+# the right reference .ld/startup file for ANY chip mechanically instead of
+# hand-listing every SKU here and having to revisit this file each time a
+# new one is added to etc/ld or etc/startup.
+#
+# .ld naming (etc/ld/$(FAMILY)/) is NOT uniform though: the handful of
+# chips actively used by a real project so far (5x6_505, the bootloader
+# targets) keep their exact PROCESSOR name (e.g. STM32G070CB.ld) - a .ld's
+# content never depends on package anyway, so the much larger reference
+# library added 2026-08-04 (etc/gen_bsl_boundary.sh's completion pass, ST's
+# own CubeIDE MCU database as source) uses a package-less name instead
+# (STM32<line>x<density>.ld, e.g. STM32G041x8.ld - "x" is ST's own
+# placeholder for "any package", same convention as their CMSIS headers) to
+# avoid dozens of byte-identical duplicate files. LD_FILE below tries the
+# exact name first (covers the chips already wired to real Makefiles) and
+# falls back to the derived package-less name for everything else.
+#
+# Startup file naming (etc/startup/$(FAMILY)/) has no such split - every
+# chip in a subfamily (same first 9 PROCESSOR characters, regardless of
+# package/density) shares the exact same vector table, so the file is
+# always startup_<lowercased 9-char line prefix>.c with no exceptions to
+# special-case.
+LD_FILE_EXACT    = $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(PROCESSOR).ld
+LD_FILE_FALLBACK = $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(shell echo $(PROCESSOR) | sed -E 's/^(.{9}).(.)$$/\1x\2/').ld
+STARTUP_FILE     = $(MIOS32_PATH)/etc/startup/$(FAMILY)/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
+
 ifeq ($(FAMILY),STM32F4xx)
 CFLAGS    +=    -DGCC_ARMCM3
-LD_FILE   = 	$(MIOS32_PATH)/etc/ld/$(FAMILY)/STM32F405RG.ld
+ifneq (,$(wildcard $(LD_FILE_EXACT)))
+LD_FILE = $(LD_FILE_EXACT)
+else
+LD_FILE = $(LD_FILE_FALLBACK)
+endif
 # add modules to thumb sources
 THUMB_SOURCE += \
 		$(MIOS32_PATH)/programming_models/traditional/main.c
@@ -55,20 +85,17 @@ THUMB_SOURCE += \
 		$(FREE_RTOS)/Source/portable/MemMang/heap_4.c
 endif
 
+# single canonical startup shared by the whole F4xx family (unlike G0xx
+# below) - the Cortex-M4 vector table layout doesn't vary by subfamily the
+# way G0's does, confirmed against ST's own CMSIS gcc templates (only one
+# GCC startup .s exists anywhere in ST's F4xx device pack).
 THUMB_SOURCE += $(MIOS32_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c
 endif
 ifeq ($(FAMILY),STM32G0xx)
-ifeq ($(PROCESSOR),STM32G030K6)
-LD_FILE   = 	$(MIOS32_PATH)/etc/ld/$(FAMILY)/STM32G030K6.ld 
-endif
-ifeq ($(PROCESSOR),STM32G031K8)
-LD_FILE   = 	$(MIOS32_PATH)/etc/ld/$(FAMILY)/STM32G031K8.ld 
-endif
-ifeq ($(PROCESSOR),STM32G050K8)
-LD_FILE   = 	$(MIOS32_PATH)/etc/ld/$(FAMILY)/STM32G050K8.ld 
-endif
-ifeq ($(PROCESSOR),STM32G070CB)
-LD_FILE   = 	$(MIOS32_PATH)/etc/ld/$(FAMILY)/STM32G070CB.ld 
+ifneq (,$(wildcard $(LD_FILE_EXACT)))
+LD_FILE = $(LD_FILE_EXACT)
+else
+LD_FILE = $(LD_FILE_FALLBACK)
 endif
 CFLAGS    +=    -DGCC_ARMCM0
 # add modules to thumb sources
@@ -85,18 +112,7 @@ THUMB_SOURCE += \
 		$(FREE_RTOS)/Source/portable/MemMang/heap_4.c
 endif
 
-ifeq ($(PROCESSOR),STM32G030K6)
-THUMB_SOURCE += $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_stm32g030.c
-endif
-ifeq ($(PROCESSOR),STM32G031K8)
-THUMB_SOURCE += $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_stm32g031.c
-endif
-ifeq ($(PROCESSOR),STM32G050K8)
-THUMB_SOURCE += $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_stm32g050.c
-endif
-ifeq ($(PROCESSOR),STM32G070CB)
-THUMB_SOURCE += $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_stm32g070.c
-endif
+THUMB_SOURCE += $(STARTUP_FILE)
 
 endif
 

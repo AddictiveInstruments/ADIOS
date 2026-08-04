@@ -381,7 +381,7 @@ int main(void)
 
   // branch to application if reset vector is valid (should be inside flash range)
 #if defined(MIOS32_FAMILY_STM32F10x) || defined(MIOS32_FAMILY_STM32F4xx) || defined(MIOS32_FAMILY_STM32G0xx)
-#if defined (MIOS32_FAMILY_STM32G0xx)
+#if defined (MIOS32_FAMILY_STM32G0xx) || defined(MIOS32_FAMILY_STM32F4xx)
   u32 *reset_vector = (u32 *)(0x08000000 + MIOS32_APP_FLASH_START_ADDR + 4);
 #else
   u32 *reset_vector = (u32 *)0x08004004;
@@ -428,7 +428,7 @@ int main(void)
 #endif
     }
 
-#if defined (MIOS32_FAMILY_STM32G0xx)
+#if defined (MIOS32_FAMILY_STM32G0xx) || defined(MIOS32_FAMILY_STM32F4xx)
   u32 *stack_pointer = (u32 *)(0x08000000 + MIOS32_APP_FLASH_START_ADDR);
 #else
   u32 *stack_pointer = (u32 *)0x08004000;

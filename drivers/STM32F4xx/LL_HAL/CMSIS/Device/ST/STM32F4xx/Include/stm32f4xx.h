@@ -52,44 +52,31 @@ extern "C" {
 #define STM32F4
 #endif /* STM32F4 */
 
-/* Uncomment the line below according to the target STM32 device used in your
-   application
-  */
-#if !defined (STM32F405xx) && !defined (STM32F415xx) && !defined (STM32F407xx) && !defined (STM32F417xx) && \
-    !defined (STM32F427xx) && !defined (STM32F437xx) && !defined (STM32F429xx) && !defined (STM32F439xx) && \
-    !defined (STM32F401xC) && !defined (STM32F401xE) && !defined (STM32F410Tx) && !defined (STM32F410Cx) && \
-    !defined (STM32F410Rx) && !defined (STM32F411xE) && !defined (STM32F446xx) && !defined (STM32F469xx) && \
-    !defined (STM32F479xx) && !defined (STM32F412Cx) && !defined (STM32F412Rx) && !defined (STM32F412Vx) && \
-    !defined (STM32F412Zx) && !defined (STM32F413xx) && !defined (STM32F423xx)
+/* Device selection - driven by MIOS32_PROCESSOR_xxx (defined via
+   -DMIOS32_PROCESSOR_$(PROCESSOR) in mios32/mios32.mk), same pattern
+   already used on STM32G0xx (see stm32g0xx.h in the sibling family
+   directory) after a real silent-wrong-device-header bug was found there
+   (a G030K6 build compiling clean against G070xx's peripheral set, only
+   caught because it referenced a timer G030K6 doesn't actually have).
+   The original ST template here had the exact same class of bug, just
+   never caught: whenever NONE of the STM32F4xxxx macros below were
+   pre-defined, it fell through to an UNCONDITIONAL "#define STM32F405xx"
+   default - meaning every F4 build, regardless of the real target chip,
+   silently compiled against F405's device header. Confirmed 2026-08-04:
+   the F407VE bring-up that day built and ran correctly on real hardware
+   only because F405/F407/F415/F417 happen to share a close-enough
+   peripheral set for what MIOS32 currently touches (GPIO/UART/basic
+   timers) - it would have silently miscompiled against a chip with a
+   materially different peripheral set (F429, F446, F469, ...). */
+#if defined(MIOS32_PROCESSOR_STM32F405RG)
 #define STM32F405xx   /*!< STM32F405RG, STM32F405VG and STM32F405ZG Devices */
-/* #define STM32F415xx */   /*!< STM32F415RG, STM32F415VG and STM32F415ZG Devices */
-/* #define STM32F407xx */   /*!< STM32F407VG, STM32F407VE, STM32F407ZG, STM32F407ZE, STM32F407IG  and STM32F407IE Devices */
-/* #define STM32F417xx */   /*!< STM32F417VG, STM32F417VE, STM32F417ZG, STM32F417ZE, STM32F417IG and STM32F417IE Devices */
-/* #define STM32F427xx */   /*!< STM32F427VG, STM32F427VI, STM32F427ZG, STM32F427ZI, STM32F427IG and STM32F427II Devices */
-/* #define STM32F437xx */   /*!< STM32F437VG, STM32F437VI, STM32F437ZG, STM32F437ZI, STM32F437IG and STM32F437II Devices */
-/* #define STM32F429xx */   /*!< STM32F429VG, STM32F429VI, STM32F429ZG, STM32F429ZI, STM32F429BG, STM32F429BI, STM32F429NG,
-                                 STM32F439NI, STM32F429IG  and STM32F429II Devices */
-/* #define STM32F439xx */   /*!< STM32F439VG, STM32F439VI, STM32F439ZG, STM32F439ZI, STM32F439BG, STM32F439BI, STM32F439NG,
-                                 STM32F439NI, STM32F439IG and STM32F439II Devices */
-/* #define STM32F401xC */   /*!< STM32F401CB, STM32F401CC, STM32F401RB, STM32F401RC, STM32F401VB and STM32F401VC Devices */
-/* #define STM32F401xE */   /*!< STM32F401CD, STM32F401RD, STM32F401VD, STM32F401CE, STM32F401RE and STM32F401VE Devices */
-/* #define STM32F410Tx */   /*!< STM32F410T8 and STM32F410TB Devices */
-/* #define STM32F410Cx */   /*!< STM32F410C8 and STM32F410CB Devices */
-/* #define STM32F410Rx */   /*!< STM32F410R8 and STM32F410RB Devices */
-/* #define STM32F411xE */   /*!< STM32F411CC, STM32F411RC, STM32F411VC, STM32F411CE, STM32F411RE and STM32F411VE Devices */
-/* #define STM32F446xx */   /*!< STM32F446MC, STM32F446ME, STM32F446RC, STM32F446RE, STM32F446VC, STM32F446VE, STM32F446ZC,
-                                 and STM32F446ZE Devices */
-/* #define STM32F469xx */   /*!< STM32F469AI, STM32F469II, STM32F469BI, STM32F469NI, STM32F469AG, STM32F469IG, STM32F469BG,
-                                 STM32F469NG, STM32F469AE, STM32F469IE, STM32F469BE and STM32F469NE Devices */
-/* #define STM32F479xx */   /*!< STM32F479AI, STM32F479II, STM32F479BI, STM32F479NI, STM32F479AG, STM32F479IG, STM32F479BG
-                                 and STM32F479NG Devices */
-/* #define STM32F412Cx */   /*!< STM32F412CEU and STM32F412CGU Devices */
-/* #define STM32F412Zx */   /*!< STM32F412ZET, STM32F412ZGT, STM32F412ZEJ and STM32F412ZGJ Devices */
-/* #define STM32F412Vx */   /*!< STM32F412VET, STM32F412VGT, STM32F412VEH and STM32F412VGH Devices */
-/* #define STM32F412Rx */   /*!< STM32F412RET, STM32F412RGT, STM32F412REY and STM32F412RGY Devices */
-/* #define STM32F413xx */   /*!< STM32F413CH, STM32F413MH, STM32F413RH, STM32F413VH, STM32F413ZH, STM32F413CG, STM32F413MG,
-                                 STM32F413RG, STM32F413VG and STM32F413ZG Devices */
-/* #define STM32F423xx */   /*!< STM32F423CH, STM32F423RH, STM32F423VH and STM32F423ZH Devices */
+#elif defined(MIOS32_PROCESSOR_STM32F407VG) || defined(MIOS32_PROCESSOR_STM32F407VE)
+/* VE (Waveshare bring-up board, 2026-08-04, real hardware) and VG share the
+   same F407 device header - only flash density differs, irrelevant to the
+   peripheral/register layout this macro selects. */
+#define STM32F407xx   /*!< STM32F407VG, STM32F407VE, STM32F407ZG, STM32F407ZE, STM32F407IG  and STM32F407IE Devices */
+#else
+#error "Unknown/not yet wired MIOS32_PROCESSOR for STM32F4xx - add a branch above (see mios32/mios32.mk for how MIOS32_PROCESSOR_xxx is defined, and programming_models/traditional/programming_model.mk for the list of processors with a real LD_FILE)."
 #endif
 
 /*  Tip: To avoid modifying this file each time you need to switch between these

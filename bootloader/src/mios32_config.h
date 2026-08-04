@@ -111,6 +111,19 @@
 #if defined(MIOS32_FAMILY_STM32F4xx)
 #define MIOS32_BOARD_J15_LED_NUM 1
 
+// reserved flash size for the bootloader itself.
+// auto-computed by etc/gen_bsl_boundary.sh from the bootloader's own compiled
+// size (see mios32_bsl_boundary.h, generated in this same directory), rounded
+// up to a whole number of 16K flash sectors (F4 erases at sector granularity,
+// unlike G0xx's uniform 2K pages) - the 0x4000 fallback below (one sector)
+// only applies before the first run of that script.
+#if __has_include("mios32_bsl_boundary.h")
+#include "mios32_bsl_boundary.h"
+#endif
+#ifndef MIOS32_APP_FLASH_START_ADDR
+#define MIOS32_APP_FLASH_START_ADDR 0x4000
+#endif
+
 #endif
 
 
