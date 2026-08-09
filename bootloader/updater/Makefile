@@ -105,9 +105,17 @@ include $(MIOS32_PATH)/include/makefile/common.mk
 
 
 ################################################################################
-# Deliverable: one self-contained hex per chip, named accordingly
+# Deliverables, named per chip:
+#   updater_<CHIP>.hex - the update tool itself (uploaded to the instrument
+#                        through its EXISTING bootloader, like any app)
+#   bsl_<CHIP>.hex     - the NEW bootloader image (uploaded to the RUNNING
+#                        updater, which stages and applies it) - straight
+#                        from the pass-2 bootloader this very build measured
 ################################################################################
-all: updater_$(PROCESSOR).hex
+all: updater_$(PROCESSOR).hex bsl_$(PROCESSOR).hex
 
 updater_$(PROCESSOR).hex: project_build/$(PROJECT).elf
+	$(OBJCOPY) -O ihex $< $@
+
+bsl_$(PROCESSOR).hex: $(MIOS32_PATH)/bootloader/src/project_build/$(PROJECT).elf
 	$(OBJCOPY) -O ihex $< $@

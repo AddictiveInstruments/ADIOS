@@ -141,13 +141,27 @@ Release: all
 ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
 DYNAMIC_BSL_APP_NAME = $(notdir $(CURDIR))
 
-all: $(DYNAMIC_BSL_APP_NAME)_full_bsl_app.bin $(DYNAMIC_BSL_APP_NAME)_app_only.hex
+all: $(DYNAMIC_BSL_APP_NAME)_full_bsl_app.bin $(DYNAMIC_BSL_APP_NAME)_app_only.hex $(DYNAMIC_BSL_APP_NAME)_bsl_updater.hex
 
 $(DYNAMIC_BSL_APP_NAME)_full_bsl_app.bin: project_build/$(PROJECT).bin
 	cp $< $@
 
 $(DYNAMIC_BSL_APP_NAME)_app_only.hex: project_build/$(PROJECT).elf
 	$(OBJCOPY) --remove-section=.mios32_bsl -O ihex $< $@
+
+# 3) <app>_bsl_updater.hex + <app>_bsl.hex - the BSL-update pair, matched to
+#    THIS app's chip and boundary (the updater is as chip/boundary-bound as
+#    the app itself, so it ships from here under the app's own name):
+#    upload <app>_bsl_updater.hex to the instrument first (through its
+#    existing bootloader, one click), then <app>_bsl.hex to the running
+#    updater, then <app>_app_only.hex again. Built by the updater's own
+#    Makefile (bootloader/updater/) for $(PROCESSOR); MIOS32_PATH is passed
+#    relative to THAT directory (always 2 levels deep), not inherited - an
+#    app-relative or CubeIDE-env value would resolve wrongly from there.
+$(DYNAMIC_BSL_APP_NAME)_bsl_updater.hex: project_build/$(PROJECT).elf
+	+$(MAKE) -C $(MIOS32_PATH)/bootloader/updater MIOS32_PATH=../.. PROCESSOR=$(PROCESSOR)
+	cp $(MIOS32_PATH)/bootloader/updater/updater_$(PROCESSOR).hex $@
+	cp $(MIOS32_PATH)/bootloader/updater/bsl_$(PROCESSOR).hex $(DYNAMIC_BSL_APP_NAME)_bsl.hex
 endif
 
 # create the output directories
