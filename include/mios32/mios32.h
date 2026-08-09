@@ -81,11 +81,10 @@ extern "C" {
 #include <mios32_usb_hid.h>
 #include <mios32_usb_com.h>
 #include <mios32_uart.h>
-#include <mios32_uart_midi.h>
+#include <mios32_din_midi.h>
 #include <mios32_spi_midi.h>
 #include <mios32_iic.h>
 #include <mios32_iic_bs.h>
-#include <mios32_iic_midi.h>
 #include <mios32_i2s.h>
 #include <mios32_timer.h>
 #include <mios32_stopwatch.h>

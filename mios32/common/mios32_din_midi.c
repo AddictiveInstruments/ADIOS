@@ -1,5 +1,5 @@
 // $Id: mios32_uart_midi.c 2312 2016-02-27 23:04:51Z tk $
-//! \defgroup MIOS32_UART_MIDI
+//! \defgroup MIOS32_DIN_MIDI
 //!
 //! UART MIDI layer for MIOS32
 //!
@@ -22,7 +22,7 @@
 #include <mios32.h>
 
 // this module can be optionally enabled in a local mios32_config.h file (included from mios32.h)
-#if defined(MIOS32_USE_UART_MIDI)
+#if defined(MIOS32_USE_DIN_MIDI)
 
 /////////////////////////////////////////////////////////////////////////////
 // Local Types
@@ -45,7 +45,7 @@ typedef struct {
   midi_rec_t rec;
   u8 rs_last;
   u16 rs_expire_ctr;
-} uart_midi_state_t;
+} din_midi_state_t;
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -60,135 +60,135 @@ typedef struct {
 // ports that don't exist on a given chip cost only a few bytes each (just
 // the pointer); the real savings come from not allocating the struct itself
 // for any port not compiled in via MIOS32_USE_UARTx.
-#define MIOS32_UART_MIDI_MAX_PORTS 16
+#define MIOS32_DIN_MIDI_MAX_PORTS 16
 
 #if defined(MIOS32_USE_UART0)
-static uart_midi_state_t uart0_midi_state;
+static din_midi_state_t din0_midi_state;
 #endif
 #if defined(MIOS32_USE_UART1)
-static uart_midi_state_t uart1_midi_state;
+static din_midi_state_t din1_midi_state;
 #endif
 #if defined(MIOS32_USE_UART2)
-static uart_midi_state_t uart2_midi_state;
+static din_midi_state_t din2_midi_state;
 #endif
 #if defined(MIOS32_USE_UART3)
-static uart_midi_state_t uart3_midi_state;
+static din_midi_state_t din3_midi_state;
 #endif
 #if defined(MIOS32_USE_UART4)
-static uart_midi_state_t uart4_midi_state;
+static din_midi_state_t din4_midi_state;
 #endif
 #if defined(MIOS32_USE_UART5)
-static uart_midi_state_t uart5_midi_state;
+static din_midi_state_t din5_midi_state;
 #endif
 #if defined(MIOS32_USE_UART6)
-static uart_midi_state_t uart6_midi_state;
+static din_midi_state_t din6_midi_state;
 #endif
 #if defined(MIOS32_USE_UART7)
-static uart_midi_state_t uart7_midi_state;
+static din_midi_state_t din7_midi_state;
 #endif
 #if defined(MIOS32_USE_UART8)
-static uart_midi_state_t uart8_midi_state;
+static din_midi_state_t din8_midi_state;
 #endif
 #if defined(MIOS32_USE_UART9)
-static uart_midi_state_t uart9_midi_state;
+static din_midi_state_t din9_midi_state;
 #endif
 #if defined(MIOS32_USE_UART10)
-static uart_midi_state_t uart10_midi_state;
+static din_midi_state_t din10_midi_state;
 #endif
 #if defined(MIOS32_USE_UART11)
-static uart_midi_state_t uart11_midi_state;
+static din_midi_state_t din11_midi_state;
 #endif
 #if defined(MIOS32_USE_UART12)
-static uart_midi_state_t uart12_midi_state;
+static din_midi_state_t din12_midi_state;
 #endif
 #if defined(MIOS32_USE_UART13)
-static uart_midi_state_t uart13_midi_state;
+static din_midi_state_t din13_midi_state;
 #endif
 #if defined(MIOS32_USE_UART14)
-static uart_midi_state_t uart14_midi_state;
+static din_midi_state_t din14_midi_state;
 #endif
 #if defined(MIOS32_USE_UART15)
-static uart_midi_state_t uart15_midi_state;
+static din_midi_state_t din15_midi_state;
 #endif
 
-static uart_midi_state_t * const uart_midi_state_ptr[MIOS32_UART_MIDI_MAX_PORTS] = {
+static din_midi_state_t * const din_midi_state_ptr[MIOS32_DIN_MIDI_MAX_PORTS] = {
 #if defined(MIOS32_USE_UART0)
-  &uart0_midi_state,
+  &din0_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART1)
-  &uart1_midi_state,
+  &din1_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART2)
-  &uart2_midi_state,
+  &din2_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART3)
-  &uart3_midi_state,
+  &din3_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART4)
-  &uart4_midi_state,
+  &din4_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART5)
-  &uart5_midi_state,
+  &din5_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART6)
-  &uart6_midi_state,
+  &din6_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART7)
-  &uart7_midi_state,
+  &din7_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART8)
-  &uart8_midi_state,
+  &din8_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART9)
-  &uart9_midi_state,
+  &din9_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART10)
-  &uart10_midi_state,
+  &din10_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART11)
-  &uart11_midi_state,
+  &din11_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART12)
-  &uart12_midi_state,
+  &din12_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART13)
-  &uart13_midi_state,
+  &din13_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART14)
-  &uart14_midi_state,
+  &din14_midi_state,
 #else
   NULL,
 #endif
 #if defined(MIOS32_USE_UART15)
-  &uart15_midi_state,
+  &din15_midi_state,
 #else
   NULL,
 #endif
@@ -196,24 +196,24 @@ static uart_midi_state_t * const uart_midi_state_ptr[MIOS32_UART_MIDI_MAX_PORTS]
 
 // running status optimisation enable/disable bitmask - one bit per port,
 // widened from the original u8 (only ever safe for 8 ports) to u16 since
-// this file now covers up to MIOS32_UART_MIDI_MAX_PORTS (16) ports; a u8
-// would silently truncate "1 << uart_port" to 0 for any port >= 8, breaking
+// this file now covers up to MIOS32_DIN_MIDI_MAX_PORTS (16) ports; a u8
+// would silently truncate "1 << din_port" to 0 for any port >= 8, breaking
 // RS optimisation for those ports without any compile-time warning.
 static u16 rs_optimisation;
 
-u8 uart_midi_act;	// those flags must be cleared once read
+u8 din_midi_act;	// those flags must be cleared once read
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
 
 
 // internal function to reset the record structure
-static s32 MIOS32_UART_MIDI_RecordReset(u8 uart_port)
+static s32 MIOS32_DIN_MIDI_RecordReset(u8 din_port)
 {
-  if( uart_port >= MIOS32_UART_MIDI_MAX_PORTS || uart_midi_state_ptr[uart_port] == NULL )
+  if( din_port >= MIOS32_DIN_MIDI_MAX_PORTS || din_midi_state_ptr[din_port] == NULL )
     return -1; // port not available
 
-  midi_rec_t *midix = &uart_midi_state_ptr[uart_port]->rec;
+  midi_rec_t *midix = &din_midi_state_ptr[din_port]->rec;
 
   midix->package.ALL = 0;
   midix->running_status = 0x00;
@@ -232,7 +232,7 @@ static s32 MIOS32_UART_MIDI_RecordReset(u8 uart_port)
 //! \return < 0 if initialisation failed
 //! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_MIDI_Init(u32 mode)
+s32 MIOS32_DIN_MIDI_Init(u32 mode)
 {
   int i;
 
@@ -242,16 +242,16 @@ s32 MIOS32_UART_MIDI_Init(u32 mode)
 
   // initialize MIDI record (RecordReset/RS_Reset silently skip any port
   // slot that's NULL - i.e. not compiled in via MIOS32_USE_UARTx)
-  for(i=0; i<MIOS32_UART_MIDI_MAX_PORTS; ++i)
-    MIOS32_UART_MIDI_RecordReset(i);
+  for(i=0; i<MIOS32_DIN_MIDI_MAX_PORTS; ++i)
+    MIOS32_DIN_MIDI_RecordReset(i);
 
   // enable running status optimisation by default for all ports
   // clear timeout counters
   rs_optimisation = ~0; // -> all-one
-  for(i=0; i<MIOS32_UART_MIDI_MAX_PORTS; ++i)
-    MIOS32_UART_MIDI_RS_Reset(i);
+  for(i=0; i<MIOS32_DIN_MIDI_MAX_PORTS; ++i)
+    MIOS32_DIN_MIDI_RS_Reset(i);
 
-  // this module is only compiled in if MIOS32_USE_UART_MIDI is set, so the
+  // this module is only compiled in if MIOS32_USE_DIN_MIDI is set, so the
   // U(S)ART interface is always wanted here - no need to gate on individual
   // port ASSIGNMENT values (they all default to 1 regardless of which ports
   // are actually enabled at the driver level, see mios32_uart.h)
@@ -264,14 +264,14 @@ s32 MIOS32_UART_MIDI_Init(u32 mode)
 
 /////////////////////////////////////////////////////////////////////////////
 //! This function can be used to determine, if a UART interface is available
-//! \param[in] uart_port UART number (0..15)
+//! \param[in] din_port UART number (0..15)
 //! \return 1: interface available
 //! \return 0: interface not available
 //! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_MIDI_CheckAvailable(u8 uart_port)
+s32 MIOS32_DIN_MIDI_CheckAvailable(u8 din_port)
 {
-  return MIOS32_UART_IsAssignedToMIDI(uart_port) >= 1; // UART assigned to MIDI?
+  return MIOS32_UART_IsAssignedToMIDI(din_port) >= 1; // UART assigned to MIDI?
 }
 
 
@@ -280,18 +280,18 @@ s32 MIOS32_UART_MIDI_CheckAvailable(u8 uart_port)
 //! MIDI OUT port to improve bandwidth if MIDI events with the same
 //! status byte are sent back-to-back.<BR>
 //! Note that the optimisation is enabled by default.
-//! \param[in] uart_port UART number (0..15)
+//! \param[in] din_port UART number (0..15)
 //! \param[in] enable 0=optimisation disabled, 1=optimisation enabled
 //! \return -1 if port not available
 //! \return 0 on success
 //! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_MIDI_RS_OptimisationSet(u8 uart_port, u8 enable)
+s32 MIOS32_DIN_MIDI_RS_OptimisationSet(u8 din_port, u8 enable)
 {
-  if( uart_port >= MIOS32_UART_MIDI_MAX_PORTS || uart_midi_state_ptr[uart_port] == NULL )
+  if( din_port >= MIOS32_DIN_MIDI_MAX_PORTS || din_midi_state_ptr[din_port] == NULL )
     return -1; // port not available
 
-  u16 mask = 1 << uart_port;
+  u16 mask = 1 << din_port;
   rs_optimisation &= ~mask;
   if( enable )
     rs_optimisation |= mask;
@@ -303,37 +303,37 @@ s32 MIOS32_UART_MIDI_RS_OptimisationSet(u8 uart_port, u8 enable)
 /////////////////////////////////////////////////////////////////////////////
 //! This function returns the running status optimisation enable/disable flag
 //! for the given MIDI OUT port.
-//! \param[in] uart_port UART number (0..15)
+//! \param[in] din_port UART number (0..15)
 //! \return -1 if port not available
 //! \return 0 if optimisation disabled
 //! \return 1 if optimisation enabled
 //! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_MIDI_RS_OptimisationGet(u8 uart_port)
+s32 MIOS32_DIN_MIDI_RS_OptimisationGet(u8 din_port)
 {
-  if( uart_port >= MIOS32_UART_MIDI_MAX_PORTS || uart_midi_state_ptr[uart_port] == NULL )
+  if( din_port >= MIOS32_DIN_MIDI_MAX_PORTS || din_midi_state_ptr[din_port] == NULL )
     return -1; // port not available
 
-  return (rs_optimisation & (1 << uart_port)) ? 1 : 0;
+  return (rs_optimisation & (1 << din_port)) ? 1 : 0;
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
 //! This function resets the current running status, so that it will be sent
 //! again with the next MIDI Out package.
-//! \param[in] uart_port UART number (0..15)
+//! \param[in] din_port UART number (0..15)
 //! \return -1 if port not available
 //! \return < 0 on errors
 //! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_MIDI_RS_Reset(u8 uart_port)
+s32 MIOS32_DIN_MIDI_RS_Reset(u8 din_port)
 {
-  if( uart_port >= MIOS32_UART_MIDI_MAX_PORTS || uart_midi_state_ptr[uart_port] == NULL )
+  if( din_port >= MIOS32_DIN_MIDI_MAX_PORTS || din_midi_state_ptr[din_port] == NULL )
     return -1; // port not available
 
   MIOS32_IRQ_Disable();
-  uart_midi_state_ptr[uart_port]->rs_last = 0xff;
-  uart_midi_state_ptr[uart_port]->rs_expire_ctr = 0;
+  din_midi_state_ptr[din_port]->rs_last = 0xff;
+  din_midi_state_ptr[din_port]->rs_expire_ctr = 0;
   MIOS32_IRQ_Enable();
 
   return 0;
@@ -350,13 +350,13 @@ s32 MIOS32_UART_MIDI_RS_Reset(u8 uart_port)
 //!
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_MIDI_Periodic_mS(void)
+s32 MIOS32_DIN_MIDI_Periodic_mS(void)
 {
-  u8 uart_port;
+  u8 din_port;
 
   MIOS32_IRQ_Disable();
-  for(uart_port=0; uart_port<MIOS32_UART_MIDI_MAX_PORTS; ++uart_port) {
-    uart_midi_state_t *state = uart_midi_state_ptr[uart_port];
+  for(din_port=0; din_port<MIOS32_DIN_MIDI_MAX_PORTS; ++din_port) {
+    din_midi_state_t *state = din_midi_state_ptr[din_port];
     if( state == NULL )
       continue;
 
@@ -374,31 +374,31 @@ s32 MIOS32_UART_MIDI_Periodic_mS(void)
       ++state->rec.timeout_ctr;
   }
   MIOS32_IRQ_Enable();
-  // (atomic operation not required in MIOS32_UART_MIDI_PackageSend_NonBlocking() due to single-byte accesses)
+  // (atomic operation not required in MIOS32_DIN_MIDI_PackageSend_NonBlocking() due to single-byte accesses)
 
   return 0; // no error
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
-//! This function sends a new MIDI package to the selected UART_MIDI port
-//! \param[in] uart_port UART_MIDI module number (0..15)
+//! This function sends a new MIDI package to the selected DIN_MIDI port
+//! \param[in] din_port DIN_MIDI module number (0..15)
 //! \param[in] package MIDI package
 //! \return 0: no error
-//! \return -1: UART_MIDI device not available
-//! \return -2: UART_MIDI buffer is full
+//! \return -1: DIN_MIDI device not available
+//! \return -2: DIN_MIDI buffer is full
 //!             caller should retry until buffer is free again
 //! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_MIDI_PackageSend_NonBlocking(u8 uart_port, mios32_midi_package_t package)
+s32 MIOS32_DIN_MIDI_PackageSend_NonBlocking(u8 din_port, mios32_midi_package_t package)
 {
   // exit if UART port not available
-  if( !MIOS32_UART_MIDI_CheckAvailable(uart_port) )
+  if( !MIOS32_DIN_MIDI_CheckAvailable(din_port) )
     return -1;
-  if( uart_port >= MIOS32_UART_MIDI_MAX_PORTS || uart_midi_state_ptr[uart_port] == NULL )
+  if( din_port >= MIOS32_DIN_MIDI_MAX_PORTS || din_midi_state_ptr[din_port] == NULL )
     return -1;
 
-  uart_midi_state_t *state = uart_midi_state_ptr[uart_port];
+  din_midi_state_t *state = din_midi_state_ptr[din_port];
 
   u8 len = mios32_midi_pcktype_num_bytes[package.cin];
   if( len ) {
@@ -407,13 +407,13 @@ s32 MIOS32_UART_MIDI_PackageSend_NonBlocking(u8 uart_port, mios32_midi_package_t
     if( state->rs_expire_ctr > 1000 ) {
       // the current RS is expired each second to ensure that a status byte will be sent
       // if the MIDI cable is (re)connected during runtime
-      MIOS32_UART_MIDI_RS_Reset(uart_port);
+      MIOS32_DIN_MIDI_RS_Reset(din_port);
 #if 0
       // for optional monitoring of the optimisation
-      MIOS32_MIDI_SendDebugMessage("[MIOS32_UART_MIDI:%d] RS 0x%02x expired!\n", uart_port);
+      MIOS32_MIDI_SendDebugMessage("[MIOS32_DIN_MIDI:%d] RS 0x%02x expired!\n", din_port);
 #endif
     } else {
-      if( (rs_optimisation & (1 << uart_port)) &&
+      if( (rs_optimisation & (1 << din_port)) &&
 	  package.cin >= NoteOff && package.cin <= PitchBend &&
 	  len > 1 ) { // (len check is a failsafe measure)
 	if( package.evnt0 == state->rs_last ) {
@@ -422,7 +422,7 @@ s32 MIOS32_UART_MIDI_PackageSend_NonBlocking(u8 uart_port, mios32_midi_package_t
 	  --len;
 #if 0
 	  // for optional monitoring of the optimisation
-	  MIOS32_MIDI_SendDebugMessage("[MIOS32_UART_MIDI:%d] RS optimized (%02x) %02x %02x\n", uart_port, package.evnt0, package.evnt1, package.evnt2);
+	  MIOS32_MIDI_SendDebugMessage("[MIOS32_DIN_MIDI:%d] RS optimized (%02x) %02x %02x\n", din_port, package.evnt0, package.evnt1, package.evnt2);
 #endif
 	} else {
 	  // new running status
@@ -437,7 +437,7 @@ s32 MIOS32_UART_MIDI_PackageSend_NonBlocking(u8 uart_port, mios32_midi_package_t
       state->rs_last = package.evnt0;
 
 
-    switch( MIOS32_UART_TxBufferPutMore(uart_port, buffer, len) ) {
+    switch( MIOS32_UART_TxBufferPutMore(din_port, buffer, len) ) {
       case  0: return  0; // transfer successfull
       case -2: return -2; // buffer full, request retry
       default: return -1; // UART error
@@ -449,19 +449,19 @@ s32 MIOS32_UART_MIDI_PackageSend_NonBlocking(u8 uart_port, mios32_midi_package_t
 }
 
 /////////////////////////////////////////////////////////////////////////////
-//! This function sends a new MIDI package to the selected UART_MIDI port
+//! This function sends a new MIDI package to the selected DIN_MIDI port
 //! (blocking function)
-//! \param[in] uart_port UART_MIDI module number (0..15)
+//! \param[in] din_port DIN_MIDI module number (0..15)
 //! \param[in] package MIDI package
 //! \return 0: no error
-//! \return -1: UART_MIDI device not available
+//! \return -1: DIN_MIDI device not available
 //! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_MIDI_PackageSend(u8 uart_port, mios32_midi_package_t package)
+s32 MIOS32_DIN_MIDI_PackageSend(u8 din_port, mios32_midi_package_t package)
 {
   s32 error;
 
-  while( (error=MIOS32_UART_MIDI_PackageSend_NonBlocking(uart_port, package)) == -2);
+  while( (error=MIOS32_DIN_MIDI_PackageSend_NonBlocking(din_port, package)) == -2);
 
   return error;
 }
@@ -469,27 +469,27 @@ s32 MIOS32_UART_MIDI_PackageSend(u8 uart_port, mios32_midi_package_t package)
 
 /////////////////////////////////////////////////////////////////////////////
 //! This function checks for a new package
-//! \param[in] uart_port UART_MIDI module number (0..15)
+//! \param[in] din_port DIN_MIDI module number (0..15)
 //! \param[out] package pointer to MIDI package (received package will be put into the given variable
 //! \return 0: no error
 //! \return -1: no package in buffer
 //! \return -10: incoming MIDI package timed out (incomplete package received)
 //! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_MIDI_PackageReceive(u8 uart_port, mios32_midi_package_t *package)
+s32 MIOS32_DIN_MIDI_PackageReceive(u8 din_port, mios32_midi_package_t *package)
 {
   // exit if UART port not available
-  if( !MIOS32_UART_MIDI_CheckAvailable(uart_port) )
+  if( !MIOS32_DIN_MIDI_CheckAvailable(din_port) )
     return -1;
-  if( uart_port >= MIOS32_UART_MIDI_MAX_PORTS || uart_midi_state_ptr[uart_port] == NULL )
+  if( din_port >= MIOS32_DIN_MIDI_MAX_PORTS || din_midi_state_ptr[din_port] == NULL )
     return -1;
 
   // parses the next incoming byte(s), stop until we got a complete MIDI event
   // (-> complete package) and forward it to the caller
-  midi_rec_t *midix = &uart_midi_state_ptr[uart_port]->rec;// simplify addressing of midi record
+  midi_rec_t *midix = &din_midi_state_ptr[din_port]->rec;// simplify addressing of midi record
   u8 package_complete = 0;
   s32 status;
-  while( !package_complete && (status=MIOS32_UART_RxBufferGet(uart_port)) >= 0 ) {
+  while( !package_complete && (status=MIOS32_UART_RxBufferGet(din_port)) >= 0 ) {
     u8 byte = (u8)status;
 
     if( byte & 0x80 ) { // new MIDI status
@@ -617,7 +617,7 @@ s32 MIOS32_UART_MIDI_PackageReceive(u8 uart_port, mios32_midi_package_t *package
   // incoming MIDI package timed out (incomplete package received)
   if( midix->wait_bytes && midix->timeout_ctr > 1000 ) { // 1000 mS = 1 second
     // stop waiting
-    MIOS32_UART_MIDI_RecordReset(uart_port);
+    MIOS32_DIN_MIDI_RecordReset(din_port);
     // notify that incomplete package has been received
     return -10;
   }
@@ -627,4 +627,4 @@ s32 MIOS32_UART_MIDI_PackageReceive(u8 uart_port, mios32_midi_package_t *package
 }
 
 
-#endif /* MIOS32_USE_UART_MIDI */
+#endif /* MIOS32_USE_DIN_MIDI */

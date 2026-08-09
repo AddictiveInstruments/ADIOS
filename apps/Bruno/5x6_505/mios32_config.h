@@ -48,7 +48,8 @@
 #define MIOS32_DONT_USE_AIN
 #define MIOS32_DONT_USE_MF
 //#define MIOS32_DONT_USE_LCD
-//#define MIOS32_DONT_USE_MIDI
+// (the MIDI core itself is always compiled - not optional, see mios32_midi.c;
+// only the transports are opt-in: MIOS32_USE_DIN_MIDI etc, further below)
 #define MIOS32_DONT_USE_OSC
 #define MIOS32_DONT_USE_COM
 //#define MIOS32_DONT_USE_USB
@@ -59,7 +60,6 @@
 
 #define MIOS32_DONT_USE_IIC
 #define MIOS32_DONT_USE_IIC_BS
-#define MIOS32_DONT_USE_IIC_MIDI
 //#define MIOS32_USE_I2S
 //#define MIOS32_DONT_USE_BOARD
 // mios32_utils.c - delay is indispensable (no toggle); timer/stopwatch/sof
@@ -110,10 +110,9 @@
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 #define MIOS32_BOARD_J15_LED_NUM 1
 
-// unfortunately!!! Only 584 bytes are missing, maybe the USB driver could be optimized by removing irrelevant code
 #define MIOS32_USE_UART0
 #define MIOS32_USE_UART1
-#define MIOS32_USE_UART_MIDI
+#define MIOS32_USE_DIN_MIDI
 #elif defined(MIOS32_FAMILY_STM32G0xx)
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
@@ -121,10 +120,9 @@
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 #define MIOS32_BOARD_J15_LED_NUM 1
 
-// unfortunately!!! Only 584 bytes are missing, maybe the USB driver could be optimized by removing irrelevant code
 #define MIOS32_USE_UART0
 #define MIOS32_USE_UART1
-#define MIOS32_USE_UART_MIDI
+#define MIOS32_USE_DIN_MIDI
 // UART0 (USART3) TX runs through an external 3V3->5V transistor stage on
 // this board that inverts the signal - every port defaults to normal
 // polarity in the common driver, this is the per-project override (see

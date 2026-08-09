@@ -26,9 +26,8 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/common/mios32_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_osc.c \
 	$(MIOS32_PATH)/mios32/common/mios32_com.c \
-	$(MIOS32_PATH)/mios32/common/mios32_uart_midi.c \
+	$(MIOS32_PATH)/mios32/common/mios32_din_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_spi_midi.c \
-	$(MIOS32_PATH)/mios32/common/mios32_iic_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_can_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_iic_bs.c \
 	$(MIOS32_PATH)/mios32/common/mios32_mf.c \

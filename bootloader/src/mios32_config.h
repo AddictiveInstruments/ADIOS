@@ -29,7 +29,8 @@
 #define MIOS32_DONT_USE_MF
 #define MIOS32_DONT_USE_LCD
 
-//#define MIOS32_DONT_USE_MIDI
+// (MIDI core is always compiled - not optional, see mios32_midi.c; only the
+// transports below are opt-in)
 #define MIOS32_DONT_USE_OSC
 #define MIOS32_DONT_USE_COM
 #define MIOS32_DONT_USE_USB
@@ -39,7 +40,6 @@
 //#define MIOS32_USE_USB_COM
 
 #define MIOS32_DONT_USE_IIC
-#define MIOS32_DONT_USE_IIC_MIDI
 //#define MIOS32_USE_I2S
 //#define MIOS32_DONT_USE_BOARD
 #define MIOS32_DONT_USE_SDCARD
@@ -81,8 +81,8 @@
 #define MIOS32_USB_MIDI_DATA_OUT_SIZE          64
 
 // unfortunately!!! Only 584 bytes are missing, maybe the USB driver could be optimized by removing irrelevant code
-# define MIOS32_DONT_USE_UART
-# define MIOS32_DONT_USE_UART_MIDI
+// (opt-in world: simply not defining MIOS32_USE_UART0/MIOS32_USE_DIN_MIDI
+// keeps the UART transport out - the old DONT_USE_UART* opt-outs are gone)
 
 #else
 // the default MIDI port for MIDI output
@@ -91,7 +91,7 @@
 #define MIOS32_MIDI_DEBUG_PORT DIN0
 
 #define MIOS32_USE_UART0
-#define MIOS32_USE_UART_MIDI
+#define MIOS32_USE_DIN_MIDI
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
 #endif
@@ -133,7 +133,7 @@
 #define MIOS32_MIDI_DEFAULT_PORT DIN0
 #define MIOS32_MIDI_DEBUG_PORT DIN0
 #define MIOS32_USE_UART0
-#define MIOS32_USE_UART_MIDI
+#define MIOS32_USE_DIN_MIDI
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
 // UART0 (USART3) TX runs through an external 3V3->5V transistor stage on

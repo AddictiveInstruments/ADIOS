@@ -95,9 +95,7 @@ static void TASK_Hooks(void *pvParameters);
 static void TASK_MIDI_Hooks(void *pvParameters);
 #endif
 static void MIOS32_CORE_NonMIDI_Tick(void);
-#if !defined(MIOS32_DONT_USE_MIDI)
 static void MIOS32_CORE_MIDI_Tick(void);
-#endif
 #if !MIOS32_CORE_USE_FREERTOS
 static void MIOS32_CORE_BareLoop_Run(void);
 #endif
@@ -173,9 +171,9 @@ int main(void)
 #ifndef MIOS32_DONT_USE_IIC_BS
   MIOS32_IIC_BS_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_MIDI
+  // the MIDI core is always initialized - it is not optional (2026-08-09,
+  // see mios32_midi.c): only the transports underneath are opt-in
   MIOS32_MIDI_Init(0);
-#endif
 #ifndef MIOS32_DONT_USE_USB
   MIOS32_USB_Init(0);
 #endif
@@ -222,9 +220,7 @@ int main(void)
 #if MIOS32_CORE_USE_FREERTOS
   // start the task which calls the application hooks
   xTaskCreate(TASK_Hooks, "Hooks", (MIOS32_TASK_HOOKS_STACK_SIZE)/4, NULL, PRIORITY_TASK_HOOKS, NULL);
-#if !defined(MIOS32_DONT_USE_MIDI)
   xTaskCreate(TASK_MIDI_Hooks, "MIDI_Hooks", (MIOS32_TASK_MIDI_HOOKS_STACK_SIZE)/4, NULL, PRIORITY_TASK_HOOKS, NULL);
-#endif
   //MIOS32_BOARD_LED_Set(1, 1);
   // start the scheduler
   vTaskStartScheduler();
@@ -292,7 +288,6 @@ void vApplicationIdleHook(void)
 // deliberately factored out so the two scheduling modes can never drift
 // apart from each other.
 /////////////////////////////////////////////////////////////////////////////
-#if !defined(MIOS32_DONT_USE_MIDI)
 static void MIOS32_CORE_MIDI_Tick(void)
 {
   // handle timeout/expire counters and USB packages
@@ -305,7 +300,6 @@ static void MIOS32_CORE_MIDI_Tick(void)
   // helps to save memory (re-use the TASK_Hooks for other purposes...)
   APP_MIDI_Tick();
 }
-#endif
 
 static void MIOS32_CORE_NonMIDI_Tick(void)
 {
@@ -347,7 +341,6 @@ static void MIOS32_CORE_NonMIDI_Tick(void)
 // MIDI task (separated from TASK_Hooks() to ensure parallel handling of
 // MIDI events if a hook in TASK_Hooks() blocks)
 /////////////////////////////////////////////////////////////////////////////
-#if !defined(MIOS32_DONT_USE_MIDI)
 static void TASK_MIDI_Hooks(void *pvParameters)
 {
   portTickType xLastExecutionTime;
@@ -367,7 +360,6 @@ static void TASK_MIDI_Hooks(void *pvParameters)
     MIOS32_CORE_MIDI_Tick();
   }
 }
-#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -443,12 +435,10 @@ static void MIOS32_CORE_Canary_Init(void)
 static void MIOS32_CORE_Canary_Check(void)
 {
   if( __Stack_Init != MIOS32_CORE_CANARY_PATTERN ) {
-#ifndef MIOS32_DONT_USE_MIDI
     MIOS32_MIDI_SendDebugMessage("======================\n");
     MIOS32_MIDI_SendDebugMessage("!!! STACK OVERFLOW !!!\n");
     MIOS32_MIDI_SendDebugMessage("(bare-metal canary, MIOS32_CORE_USE_CANARI)\n");
     MIOS32_MIDI_SendDebugMessage("======================\n");
-#endif
     _abort();
   }
 }
@@ -484,9 +474,7 @@ static void MIOS32_CORE_BareLoop_Run(void)
 #endif
 
       MIOS32_CORE_NonMIDI_Tick();
-#if !defined(MIOS32_DONT_USE_MIDI)
       MIOS32_CORE_MIDI_Tick();
-#endif
 
 #if MIOS32_CORE_USE_CANARI
       MIOS32_CORE_Canary_Check();
@@ -509,7 +497,6 @@ static void MIOS32_CORE_BareLoop_Run(void)
 /////////////////////////////////////////////////////////////////////////////
 void _abort(void)
 {
-#ifndef MIOS32_DONT_USE_MIDI
   // keep MIDI alive, so that program code can be updated
   u32 delay_ctr = 0;
   while( 1 ) {
@@ -528,19 +515,6 @@ void _abort(void)
       MIOS32_BOARD_LED_Set(1, ~MIOS32_BOARD_LED_Get());
     }
   }
-#else
-  u32 delay_ctr = 0;
-  while( 1 ) {
-    ++delay_ctr;
-
-    if( (delay_ctr % 1000000) == 0 ) {
-      // toggle board LED
-#ifndef MIOS32_DONT_USE_BOARD
-      MIOS32_BOARD_LED_Set(1, ~MIOS32_BOARD_LED_Get());
-#endif
-    }
-  }
-#endif
 }
 
 
@@ -563,10 +537,8 @@ void vApplicationMallocFailedHook(void)
   MIOS32_LCD_PrintString("Malloc Error!!! "); // 16 chars
 #endif
 
-#ifndef MIOS32_DONT_USE_MIDI
   // Note: message won't be sent if MIDI task cannot be created!
   MIOS32_MIDI_SendDebugMessage("FATAL: FreeRTOS Malloc Error!!!\n");
-#endif
 
   _abort();
 }
@@ -635,10 +607,8 @@ void exit(int par)
   MIOS32_LCD_PrintString("Goodbye!");
 #endif
 
-#ifndef MIOS32_DONT_USE_MIDI
   // Note: message won't be sent if MIDI task cannot be created!
   MIOS32_MIDI_SendDebugMessage("Goodbye!\n");
-#endif
 
   // pro forma: since this is a noreturn function, loop endless and call _abort (which will never exit)
   while( 1 )
@@ -674,7 +644,6 @@ void HardFault_Handler_c(unsigned int * hardfault_args)
   stacked_lr = ((unsigned long) hardfault_args[5]);
   stacked_pc = ((unsigned long) hardfault_args[6]);
   stacked_psr = ((unsigned long) hardfault_args[7]);
-#ifndef MIOS32_DONT_USE_MIDI
   MIOS32_MIDI_SendDebugMessage("Hard Fault PC = %08x\n", stacked_pc); // ensure that at least the PC will be sent
   MIOS32_MIDI_SendDebugMessage("==================\n");
   MIOS32_MIDI_SendDebugMessage("!!! HARD FAULT !!!\n");
@@ -692,7 +661,6 @@ void HardFault_Handler_c(unsigned int * hardfault_args)
   MIOS32_MIDI_SendDebugMessage("HFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED2C))));
   MIOS32_MIDI_SendDebugMessage("DFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED30))));
   MIOS32_MIDI_SendDebugMessage("AFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED3C))));
-#endif
 #ifndef MIOS32_DONT_USE_LCD
   // TODO: here we should select the normal font - but only if available!
   // MIOS32_LCD_FontInit((u8 *)GLCD_FONT_NORMAL);
@@ -725,12 +693,10 @@ void HardFault_Handler(void)
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
 
-#ifndef MIOS32_DONT_USE_MIDI
   MIOS32_MIDI_SendDebugMessage("======================\n");
   MIOS32_MIDI_SendDebugMessage("!!! STACK OVERFLOW !!!\n");
   MIOS32_MIDI_SendDebugMessage("======================\n");
   MIOS32_MIDI_SendDebugMessage("Function: %s\n", pcTaskName);
-#endif
 #ifndef MIOS32_DONT_USE_LCD
   // TODO: here we should select the normal font - but only if available!
   // MIOS32_LCD_FontInit((u8 *)GLCD_FONT_NORMAL);

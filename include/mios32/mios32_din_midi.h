@@ -11,8 +11,8 @@
  * ==========================================================================
  */
 
-#ifndef _MIOS32_UART_MIDI_H
-#define _MIOS32_UART_MIDI_H
+#ifndef _MIOS32_DIN_MIDI_H
+#define _MIOS32_DIN_MIDI_H
 
 /////////////////////////////////////////////////////////////////////////////
 // Global definitions
@@ -28,19 +28,19 @@
 // Prototypes
 /////////////////////////////////////////////////////////////////////////////
 
-extern s32 MIOS32_UART_MIDI_Init(u32 mode);
+extern s32 MIOS32_DIN_MIDI_Init(u32 mode);
 
-extern s32 MIOS32_UART_MIDI_CheckAvailable(u8 uart_port);
+extern s32 MIOS32_DIN_MIDI_CheckAvailable(u8 din_port);
 
-extern s32 MIOS32_UART_MIDI_RS_OptimisationSet(u8 uart_port, u8 enable);
-extern s32 MIOS32_UART_MIDI_RS_OptimisationGet(u8 uart_port);
-extern s32 MIOS32_UART_MIDI_RS_Reset(u8 uart_port);
+extern s32 MIOS32_DIN_MIDI_RS_OptimisationSet(u8 din_port, u8 enable);
+extern s32 MIOS32_DIN_MIDI_RS_OptimisationGet(u8 din_port);
+extern s32 MIOS32_DIN_MIDI_RS_Reset(u8 din_port);
 
-extern s32 MIOS32_UART_MIDI_Periodic_mS(void);
+extern s32 MIOS32_DIN_MIDI_Periodic_mS(void);
 
-extern s32 MIOS32_UART_MIDI_PackageSend_NonBlocking(u8 uart_port, mios32_midi_package_t package);
-extern s32 MIOS32_UART_MIDI_PackageSend(u8 uart_port, mios32_midi_package_t package);
-extern s32 MIOS32_UART_MIDI_PackageReceive(u8 uart_port, mios32_midi_package_t *package);
+extern s32 MIOS32_DIN_MIDI_PackageSend_NonBlocking(u8 din_port, mios32_midi_package_t package);
+extern s32 MIOS32_DIN_MIDI_PackageSend(u8 din_port, mios32_midi_package_t package);
+extern s32 MIOS32_DIN_MIDI_PackageReceive(u8 din_port, mios32_midi_package_t *package);
 
 
 
@@ -51,4 +51,4 @@ extern s32 MIOS32_UART_MIDI_PackageReceive(u8 uart_port, mios32_midi_package_t *
 
 
 
-#endif /* _MIOS32_UART_MIDI_H */
+#endif /* _MIOS32_DIN_MIDI_H */

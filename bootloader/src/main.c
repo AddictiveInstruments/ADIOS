@@ -318,7 +318,7 @@ int main(void)
   // send upload request to USB and UART MIDI
   ///////////////////////////////////////////////////////////////////////////
   if( !fastboot ) {
-#if !defined(MIOS32_DONT_USE_UART_MIDI)
+#if defined(MIOS32_USE_DIN_MIDI)
     BSL_SYSEX_SendUploadReq(DIN0);
 #endif
     if( usb_was_initialized )
