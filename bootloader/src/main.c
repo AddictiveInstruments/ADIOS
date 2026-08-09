@@ -285,18 +285,18 @@ int main(void)
   ///////////////////////////////////////////////////////////////////////////
   MIOS32_MIDI_Init(0); // will also initialise UART
 
-  // TEMPORARY DEBUG PROBE (2026-08-01): diagnosing a report that the BSL
-  // stays halted forever even though BSL_HOLD_STATE and the RTC backup flag
-  // both read 0 via SWD - print the boot-time snapshot to find out which
-  // term actually made hold_mode_active_after_reset true.
-  MIOS32_MIDI_SendDebugMessage("[BSL] HOLD_STATE=%d bootloader_mode_requested=%d hold_mode_active_after_reset=%d\n",
-			       BSL_HOLD_STATE, bootloader_mode_requested, hold_mode_active_after_reset);
-
   ///////////////////////////////////////////////////////////////////////////
   // initialize SysEx parser
   ///////////////////////////////////////////////////////////////////////////
 
   BSL_SYSEX_Init(0);
+
+  // relay the software-requested hold (RTC backup flag, consumed above) into
+  // the SysEx module: unlike the physical pin it has no manual release, so
+  // BSL_SYSEX_ReleaseHaltState() clears it on MIOS Studio's post-upload
+  // "reboot" query - otherwise a software-entered BSL could never fall
+  // through to the application (found 2026-08-09).
+  BSL_SYSEX_SoftHoldSet(bootloader_mode_requested);
 
 
   ///////////////////////////////////////////////////////////////////////////
@@ -359,16 +359,9 @@ int main(void)
       // directly by MIOS32 to enhance command set
       MIOS32_MIDI_Receive_Handler(NULL);
 
-      // TEMPORARY DEBUG PROBE (2026-08-01): print once, shortly after the
-      // normal 2s timeout should have elapsed, to see which condition is
-      // actually keeping the loop running if it doesn't exit as expected.
-      if( cnt == 25000 ) {
-	MIOS32_MIDI_SendDebugMessage("[BSL] still looping: stopwatch=%d halt=%d hold_active=%d HOLD_STATE=%d\n",
-				     cnt, BSL_SYSEX_HaltStateGet(), hold_mode_active_after_reset, BSL_HOLD_STATE);
-      }
     } while( MIOS32_STOPWATCH_ValueGet() < 20000 ||             // wait for 2 seconds
 	     BSL_SYSEX_HaltStateGet() ||                        // BSL not halted due to flash write operation
-	     (hold_mode_active_after_reset && (BSL_HOLD_STATE || bootloader_mode_requested))); // BSL not actively halted by pin/flag
+	     (hold_mode_active_after_reset && (BSL_HOLD_STATE || BSL_SYSEX_SoftHoldGet()))); // held by pin, or by the software request (released by Studio's post-upload reboot query)
   }
 
 #if defined(MIOS32_FAMILY_STM32F10x) || defined(MIOS32_FAMILY_STM32F4xx)

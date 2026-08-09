@@ -233,6 +233,13 @@ s32 MIOS32_SYS_Reset(void)
 s32 MIOS32_SYS_BootloaderModeRequest(void)
 {
   LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+  // RTCAPBEN gates ALL register access to the TAMP/RTC block on STM32G0
+  // (RM0454) - without it the backup-register write below is silently lost.
+  // Not covered by MIOS32_SYS_Init(): projects normally skip the RTC
+  // entirely via MIOS32_SYS_DONT_INIT_RTC, so it must be enabled here
+  // (found 2026-08-09: the request never survived into the bootloader,
+  // only the physical BSL_HOLD pin path worked).
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_RTC);
   LL_PWR_EnableBkUpAccess();
 
   LL_RTC_BKP_SetRegister(TAMP, LL_RTC_BKP_DR0, MIOS32_SYS_BOOTLOADER_MODE_MAGIC);
@@ -250,6 +257,9 @@ s32 MIOS32_SYS_BootloaderModeRequest(void)
 s32 MIOS32_SYS_BootloaderModeRequested(void)
 {
   LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+  // same RTCAPBEN requirement as MIOS32_SYS_BootloaderModeRequest() above -
+  // reads are gated too, without it this would never see the magic
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_RTC);
   LL_PWR_EnableBkUpAccess();
 
   u32 requested = (LL_RTC_BKP_GetRegister(TAMP, LL_RTC_BKP_DR0) == MIOS32_SYS_BOOTLOADER_MODE_MAGIC);

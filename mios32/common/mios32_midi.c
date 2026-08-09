@@ -1845,6 +1845,18 @@ static s32 MIOS32_MIDI_SYSEX_Cmd_Query(mios32_midi_port_t port, mios32_midi_syse
 			// release halt state (or sending upload request) instead of reseting the core
 			BSL_SYSEX_ReleaseHaltState();
 #else
+			// "wait" handshake (2026-08-09): acknowledge the reboot request
+			// BEFORE resetting - MIOS Studio's one-click update flow used to
+			// hear nothing at all between this query and the bootloader's
+			// upload request after reset, and its wait window expired during
+			// the reboot gap. On this ack (arg = 0x7f, echoing the query
+			// number) Studio extends its window and waits for the BSL's
+			// "ready" (the upload request). See UploadHandlerThread::run()
+			// in MIOS Studio.
+			MIOS32_MIDI_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_ACK, 0x7f);
+			// let the ack physically leave the wire before the reset kills
+			// the peripheral: the 9-byte SysEx takes ~2.9 mS at MIDI baudrate
+			MIOS32_DELAY_Wait_uS(10000);
 			// reset core (this will send an upload request)
 #if defined(MIOS32_FAMILY_STM32G0xx)
 			// tell the bootloader to stay resident after this reset, so the

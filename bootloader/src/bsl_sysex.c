@@ -136,6 +136,19 @@ static u8 sysex_buffer[BSL_SYSEX_BUFFER_SIZE] __attribute__ ((aligned (8)));
 
 static u8 halt_state;
 
+// software-requested hold (2026-08-09): mirror of the RTC-backup
+// "bootloader mode requested" flag, set by main() at boot. Unlike the
+// physical BSL_HOLD pin (which the user releases by hand), this one has no
+// physical release - it is cleared here, by MIOS Studio's post-upload
+// "reboot" query (see BSL_SYSEX_ReleaseHaltState below). Without that, a
+// software-entered bootloader could never fall through to the application.
+static u8 soft_hold;
+
+// set on the first write block - lets ReleaseHaltState() distinguish the
+// PRE-upload 0x7f query (Studio confirming BL mode - keep holding) from the
+// POST-upload one (Studio asking to start the app - release the soft hold)
+static u8 upload_started;
+
 
 /////////////////////////////////////////////////////////////////////////////
 // This function initializes the SysEx handler
@@ -148,6 +161,9 @@ s32 BSL_SYSEX_Init(u32 mode)
 	// set to one when writing flash to prevent the execution of application code
 	// so long flash hasn't been programmed completely
 	halt_state = 0;
+
+	soft_hold = 0;
+	upload_started = 0;
 
 	return 0; // no error
 }
@@ -163,6 +179,22 @@ s32 BSL_SYSEX_HaltStateGet(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
+// Software-requested hold state - set by main() from the RTC backup flag,
+// polled by main()'s wait loop (same role as the physical BSL_HOLD pin)
+/////////////////////////////////////////////////////////////////////////////
+s32 BSL_SYSEX_SoftHoldSet(u8 hold)
+{
+	soft_hold = hold;
+	return 0;
+}
+
+s32 BSL_SYSEX_SoftHoldGet(void)
+{
+	return soft_hold;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
 // Used by MIOS32_MIDI to release halt state instead of triggering a reset
 /////////////////////////////////////////////////////////////////////////////
 s32 BSL_SYSEX_ReleaseHaltState(void)
@@ -173,6 +205,12 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 
 	// clear halt state
 	halt_state = 0;
+
+	// the POST-upload "reboot" query also releases the software-requested
+	// hold, so the wait loop in main() can finally fall through to the app.
+	// The PRE-upload 0x7f (no write block seen yet) keeps holding.
+	if( upload_started )
+		soft_hold = 0;
 
 	return 0;
 }
@@ -337,6 +375,7 @@ s32 BSL_SYSEX_Cmd_WriteMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_
 		} else {
 			// enter halt state (can only be released via BSL reset)
 			halt_state = 1;
+			upload_started = 1;
 
 			// write received data into memory
 			s32 error;
