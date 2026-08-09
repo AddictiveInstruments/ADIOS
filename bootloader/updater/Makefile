@@ -4,13 +4,17 @@
 #
 # Uploaded through the EXISTING bootloader of a device like any application,
 # it then receives the NEW bootloader image over the same SysEx upload
-# protocol, relocated into a staging area (the live BSL region is untouched
-# during the whole transfer), and applies it in one short copy window on
-# MIOS Studio's final 0x7f query - preserving the persistent info block
-# (device ID, fastboot...) across the update. See BSL_UPDATER sections in
+# protocol and writes it DIRECTLY into the BSL region (no staging - see the
+# rationale in ../src/bsl_sysex.c), preserving the persistent info block
+# (device ID, fastboot...) across the update, and resets into the fresh
+# bootloader on MIOS Studio's final 0x7f. See the BSL_UPDATER sections in
 # ../src/bsl_sysex.c and ../src/main.c - this build reuses the bootloader's
 # own sources, only mios32_config.h (in THIS directory) and the -DBSL_UPDATER
 # switch differ.
+#
+# The output hex carries BOTH stages in disjoint address ranges: the tool
+# itself (its own window above the app origin) and the new bootloader image
+# (0x08000000..boundary). MIOS Studio runs the whole sequence from it.
 #
 #   make [PROCESSOR=STM32G070CB]     -> updater_<PROCESSOR>.hex
 #
@@ -77,7 +81,7 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE) -DBSL_UPDATER
 # Updater layout generation - the same two-pass boundary mechanism as every
 # app build, switched to updater mode: measures the CURRENT bootloader,
 # derives the boundary, and generates project_build/cpu_updater.ld (this
-# build's own window) + mios32_bsl_boundary.h (boundary + staging layout).
+# build's own window) + mios32_bsl_boundary.h (boundary + updater origin).
 ################################################################################
 LD_TEMPLATE_EXACT    = $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(PROCESSOR).ld
 LD_TEMPLATE_FALLBACK = $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(shell echo $(PROCESSOR) | sed -E 's/^(.{9}).(.)$$/\1x\2/').ld
@@ -105,17 +109,22 @@ include $(MIOS32_PATH)/include/makefile/common.mk
 
 
 ################################################################################
-# Deliverables, named per chip:
-#   updater_<CHIP>.hex - the update tool itself (uploaded to the instrument
-#                        through its EXISTING bootloader, like any app)
-#   bsl_<CHIP>.hex     - the NEW bootloader image (uploaded to the RUNNING
-#                        updater, which stages and applies it) - straight
-#                        from the pass-2 bootloader this very build measured
+# Deliverable: ONE hex per chip carrying BOTH stages of a BSL update - the
+# update tool (its own window above the app origin) AND the new bootloader
+# image (0x08000000..boundary, straight from the pass-2 bootloader this very
+# build measured). The two occupy disjoint address ranges, so a plain ihex
+# concatenation (EOF record of the first part stripped) is a valid file.
+# MIOS Studio splits it by the boundary: stage 1 uploads the tool through
+# the device's existing bootloader, then - recognizing the freshly booted
+# core as "UPDATER" (query 0x0b) - automatically uploads the image part,
+# which the updater writes into the BSL region directly, then triggers the
+# finalize. One file, one click.
 ################################################################################
-all: updater_$(PROCESSOR).hex bsl_$(PROCESSOR).hex
+all: updater_$(PROCESSOR).hex
 
 updater_$(PROCESSOR).hex: project_build/$(PROJECT).elf
-	$(OBJCOPY) -O ihex $< $@
-
-bsl_$(PROCESSOR).hex: $(MIOS32_PATH)/bootloader/src/project_build/$(PROJECT).elf
-	$(OBJCOPY) -O ihex $< $@
+	$(OBJCOPY) -O ihex $< $@.tool
+	$(OBJCOPY) -O ihex $(MIOS32_PATH)/bootloader/src/project_build/$(PROJECT).elf $@.payload
+	grep -v '^:00000001FF' $@.tool > $@
+	cat $@.payload >> $@
+	rm -f $@.tool $@.payload

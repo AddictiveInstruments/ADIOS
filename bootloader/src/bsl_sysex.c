@@ -140,12 +140,15 @@ static u8 halt_state;
 #ifdef BSL_UPDATER
 // BSL-update tool build (see bootloader/updater/): this "second bootloader",
 // linked in its own window above the normal app origin, receives the NEW
-// bootloader image over the standard SysEx upload protocol, RELOCATED into a
-// staging area (the real BSL region stays untouched during the whole
-// transfer - a MIDI glitch is just a block retry, zero risk), then copies
-// staging -> BSL region in one short window on MIOS Studio's final 0x7f.
-#ifndef MIOS32_UPDATER_STAGING_ADDR
-# error "BSL_UPDATER build without MIOS32_UPDATER_STAGING_ADDR - run via bootloader/updater/Makefile (etc/gen_bsl_boundary.sh updater mode generates it)"
+// bootloader image over the standard SysEx upload protocol and writes it
+// DIRECTLY into the BSL region - no staging (decision 2026-08-09: this is a
+// beta-tester-only operation, a power cut during the ~10s transfer is
+// accepted; every MIDI-level failure is covered by the per-block checksum,
+// the read-back verification and MIOS Studio's block retries). Studio
+// drives the whole two-stage sequence from ONE hex and finishes with 0x7f
+// (see BSL_SYSEX_ReleaseHaltState below).
+#ifndef MIOS32_UPDATER_ORIGIN_ADDR
+# error "BSL_UPDATER build without MIOS32_UPDATER_ORIGIN_ADDR - run via bootloader/updater/Makefile (etc/gen_bsl_boundary.sh updater mode generates it)"
 #endif
 // scan parameters for locating the OLD device's persistent info block:
 // candidate boundaries start at the family's minimum and advance by the
@@ -157,9 +160,21 @@ static u8 halt_state;
 # define BSL_UPDATER_SCAN_FIRST 16384
 # define BSL_UPDATER_SCAN_STEP  16384
 #endif
-// highest staged offset (exclusive) - bounds the apply-copy and qualifies
-// the staged image before applying
-static u32 staged_top;
+// RAM copy of the device's persistent info block (device ID, fastboot...),
+// captured at init BEFORE any write can destroy it - its flash page is also
+// a code page of the old bootloader. Restored at the NEW boundary position
+// by the final sequence.
+static u8 info_block[0x100] __attribute__ ((aligned (8)));
+static u8 info_found;
+
+// write window: the updater accepts writes EXCLUSIVELY inside the
+// bootloader region - exactly the range every normal BSL protects. Same
+// check in BSL_SYSEX_WriteMem, opposite role.
+# define BSL_FLASH_WRITE_FLOOR (0x08000000)
+# define BSL_FLASH_WRITE_CEIL  (0x08000000 + MIOS32_APP_FLASH_START_ADDR - 1)
+#else
+# define BSL_FLASH_WRITE_FLOOR FLASH_START_ADDR
+# define BSL_FLASH_WRITE_CEIL  FLASH_END_ADDR
 #endif
 
 // software-requested hold (2026-08-09): mirror of the RTC-backup
@@ -192,7 +207,23 @@ s32 BSL_SYSEX_Init(u32 mode)
 	upload_started = 0;
 
 #ifdef BSL_UPDATER
-	staged_top = 0;
+	// capture the device's persistent info block NOW - the first write block
+	// will start erasing the pages that hold it. The OLD boundary of this
+	// device may differ from the image being installed: scan the candidate
+	// positions for one of the block's 0x42 confirm markers.
+	info_found = 0;
+	{
+		u32 cand;
+		for(cand=BSL_UPDATER_SCAN_FIRST; cand<=(MIOS32_UPDATER_ORIGIN_ADDR-0x08000000) && !info_found; cand+=BSL_UPDATER_SCAN_STEP) {
+			u8 *block = (u8 *)(0x08000000 + cand - 0x100);
+			if( block[0xd0] == 0x42 || block[0xd2] == 0x42 || block[0xc0] == 0x42 ) {
+				int i;
+				for(i=0; i<0x100; ++i)
+					info_block[i] = block[i];
+				info_found = 1;
+			}
+		}
+	}
 #endif
 
 	return 0; // no error
@@ -224,178 +255,76 @@ s32 BSL_SYSEX_SoftHoldGet(void)
 }
 
 
+
 #ifdef BSL_UPDATER
 /////////////////////////////////////////////////////////////////////////////
-// Updater build: applies the staged bootloader image - the ONLY moment the
-// real BSL region is touched. Sequence: preserve the persistent info block
-// (device ID, fastboot... - found by scanning the candidate old-boundary
-// positions for their 0x42 confirm markers, since the OLD boundary of this
-// device may differ from the image being installed), erase [0, boundary),
-// program the staged image (all-0xFF doublewords skipped - G0 flash has ECC,
-// leaving them erased keeps them programmable later), restore the info block
-// at ITS NEW position, invalidate the first app page (the old application's
-// body was overwritten by this very updater - its stale entry vector must
-// not be executed; the fresh BSL will stay resident and announce an upload
-// request instead), verify, reset.
+// Updater build: MIOS Studio's 0x7f means "the bootloader image is fully
+// written - finish the update". Final sequence:
+//   1) restore the persistent info block (captured to RAM at init) at its
+//      NEW position, boundary-0x100 - the incoming image never covers that
+//      area (its code ends well before it), so it is still erased and
+//      programmable
+//   2) invalidate the first application page: the old app's entry vector is
+//      still there but its body was overwritten by this very updater - it
+//      must not be executed. The fresh bootloader will find an invalid
+//      vector, stay resident and announce an upload request instead.
+//   3) clear any pending entry override, ask the fresh BSL to stay resident
+//      (explicit, on top of 2), reset.
+// Before any image block has arrived, 0x7f just re-announces the upload
+// request like a waiting bootloader. The updater never falls through to an
+// application: its only exits are this sequence or a power cycle.
 /////////////////////////////////////////////////////////////////////////////
-static s32 BSL_UPDATER_Apply(void)
+s32 BSL_SYSEX_ReleaseHaltState(void)
 {
 	const u32 boundary = MIOS32_APP_FLASH_START_ADDR;
-	const u8 *staging = (u8 *)MIOS32_UPDATER_STAGING_ADDR;
-	u32 addr;
 
-	// --- 1) preserve the persistent info block: scan candidate boundaries
-	//     (every erase-granule position up to this updater's own origin) for
-	//     one of the 0x42 confirm markers of an existing block
-	static u8 info_block[0x100] __attribute__ ((aligned (8)));
-	u8 info_found = 0;
-	{
-		u32 cand;
-		for(cand=BSL_UPDATER_SCAN_FIRST; cand<=(MIOS32_UPDATER_ORIGIN_ADDR-0x08000000) && !info_found; cand+=BSL_UPDATER_SCAN_STEP) {
-			u8 *block = (u8 *)(0x08000000 + cand - 0x100);
-			if( block[0xd0] == 0x42 || block[0xd2] == 0x42 || block[0xc0] == 0x42 ) {
-				int i;
-				for(i=0; i<0x100; ++i)
-					info_block[i] = block[i];
-				info_found = 1;
-			}
-		}
-	}
+	// freshly written image plausible? (reset vector must point into the
+	// BSL region)
+	u32 new_reset_vector = *(u32 *)(0x08000000 + 4);
+	if( upload_started &&
+	    (new_reset_vector >> 24) == 0x08 &&
+	    new_reset_vector < (0x08000000 + boundary) ) {
 
-	MIOS32_IRQ_Disable();
+		MIOS32_IRQ_Disable();
 
-	// --- 2) erase the whole BSL region plus the first app page (see header
-	//     comment), program the staged image
-#if defined(MIOS32_FAMILY_STM32G0xx)
-	LL_FLASH_Unlock();
-	for(addr=0; addr<boundary+FLASH_PAGE_SIZE; addr+=FLASH_PAGE_SIZE) {
-		if( LL_FLASH_PageErase(LL_FLASH_BANK_1, addr/FLASH_PAGE_SIZE) != FLASH_COMPLETE ) {
-			LL_FLASH_Lock();
-			MIOS32_IRQ_Enable();
-			return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
-		}
-	}
-	{
-		u32 top = (staged_top + 7) & ~7;
-		for(addr=0; addr<top; addr+=8) {
-			uint64_t data = *(const uint64_t *)(staging + addr);
-			if( data == 0xffffffffffffffffULL )
-				continue; // keep truly erased (ECC: no double-programming later)
-			if( LL_FLASH_ProgramDoubleWord(0x08000000 + addr, data) != FLASH_COMPLETE ) {
-				LL_FLASH_Lock();
-				MIOS32_IRQ_Enable();
-				return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
-			}
-		}
-		// --- 3) restore the info block at its NEW position
+		// --- 1) restore the info block at its NEW position (skip if the
+		//     image unexpectedly extends into it - the BSL itself matters
+		//     more than the settings)
 		if( info_found ) {
-			for(addr=0; addr<0x100; addr+=8) {
-				uint64_t data = *(const uint64_t *)(info_block + addr);
-				if( data == 0xffffffffffffffffULL )
-					continue; // unset settings stay erased/unset
-				if( LL_FLASH_ProgramDoubleWord(0x08000000 + boundary - 0x100 + addr, data) != FLASH_COMPLETE )
-					break; // settings lost but the BSL itself is intact - carry on
-			}
+			BSL_SYSEX_WriteMem(0x08000000 + boundary - 0x100, 0x100, info_block);
 		}
-	}
-	LL_FLASH_Lock();
+
+		// --- 2) invalidate the first application page
+#if defined(MIOS32_FAMILY_STM32G0xx)
+		LL_FLASH_Unlock();
+		LL_FLASH_PageErase(LL_FLASH_BANK_1, boundary/FLASH_PAGE_SIZE);
+		LL_FLASH_Lock();
 #elif defined(MIOS32_FAMILY_STM32F4xx)
-	LL_FLASH_Unlock();
-	{
-		// sector 0 (the BSL region itself) first - deliberately NOT reachable
-		// through flash_sector_map (its base is faked to 0xffffffff there, as
-		// upload protection for the normal BSL) - then every mapped sector
-		// whose base lies within [0, boundary] (the "== boundary" one is the
-		// first app sector, invalidated on purpose - see header comment)
-		if( LL_FLASH_EraseSector(LL_FLASH_Sector_0, LL_FLASH_VOLTRG_3) != FLASH_COMPLETE ) {
-			LL_FLASH_Lock();
-			MIOS32_IRQ_Enable();
-			return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
-		}
-		int sector;
-		for(sector=1; sector<MAX_FLASH_SECTOR; ++sector) {
-			u32 sec_start = flash_sector_map[sector][0] - 0x08000000;
-			if( sec_start <= boundary ) {
-				if( LL_FLASH_EraseSector(flash_sector_map[sector][1], LL_FLASH_VOLTRG_3) != FLASH_COMPLETE ) {
-					LL_FLASH_Lock();
-					MIOS32_IRQ_Enable();
-					return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+		{
+			// erase the sector whose base is the boundary (the first app
+			// sector) - from the shared sector map
+			int sector;
+			LL_FLASH_Unlock();
+			for(sector=1; sector<MAX_FLASH_SECTOR; ++sector) {
+				if( flash_sector_map[sector][0] == 0x08000000 + boundary ) {
+					LL_FLASH_EraseSector(flash_sector_map[sector][1], LL_FLASH_VOLTRG_3);
+					break;
 				}
 			}
+			LL_FLASH_Lock();
 		}
-	}
-	{
-		u32 top = (staged_top + 3) & ~3;
-		for(addr=0; addr<top; addr+=4) {
-			u32 data = *(const u32 *)(staging + addr);
-			if( data == 0xffffffffUL )
-				continue;
-			if( LL_FLASH_ProgramWord(0x08000000 + addr, data) != FLASH_COMPLETE ) {
-				LL_FLASH_Lock();
-				MIOS32_IRQ_Enable();
-				return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
-			}
-		}
-		if( info_found ) {
-			for(addr=0; addr<0x100; addr+=4) {
-				u32 data = *(const u32 *)(info_block + addr);
-				if( data == 0xffffffffUL )
-					continue;
-				if( LL_FLASH_ProgramWord(0x08000000 + boundary - 0x100 + addr, data) != FLASH_COMPLETE )
-					break;
-			}
-		}
-	}
-	LL_FLASH_Lock();
 #else
 # error "BSL_UPDATER not implemented for this family"
 #endif
 
-	// --- 4) verify the copied image against staging
-	for(addr=0; addr<staged_top; ++addr) {
-		if( *(u8 *)(0x08000000 + addr) != staging[addr] ) {
-			MIOS32_IRQ_Enable();
-			return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
-		}
+		// --- 3) hand over to the fresh bootloader
+		MIOS32_SYS_AppEntryOverrideSet(0);
+		MIOS32_SYS_BootloaderModeRequest();
+		MIOS32_SYS_Reset();
+		return 0; // never reached
 	}
 
-	// --- 5) hand over: clear any pending entry override, ask the FRESH
-	//     bootloader to stay resident (it would anyway - the first app page
-	//     was invalidated above - this just makes it explicit), reset
-	MIOS32_SYS_AppEntryOverrideSet(0);
-	MIOS32_SYS_BootloaderModeRequest();
-	MIOS32_SYS_Reset();
-
-	return 0; // never reached
-}
-
-/////////////////////////////////////////////////////////////////////////////
-// Updater build: Studio's 0x7f means "apply the staged image" once a
-// plausible image has been staged - before that, behave like a waiting
-// bootloader (announce the upload request). The updater never falls through
-// to an application by itself: it exits exclusively through a successful
-// apply (reset) or a power cycle.
-/////////////////////////////////////////////////////////////////////////////
-s32 BSL_SYSEX_ReleaseHaltState(void)
-{
-	// staged image plausible? needs at least a vector table, whose reset
-	// vector must point inside the BSL region being installed
-	u32 staged_reset_vector = (staged_top >= 8) ? *(u32 *)(MIOS32_UPDATER_STAGING_ADDR + 4) : 0;
-	if( staged_top >= 8 &&
-	    (staged_reset_vector >> 24) == 0x08 &&
-	    staged_reset_vector < (0x08000000 + MIOS32_APP_FLASH_START_ADDR) ) {
-		s32 status = BSL_UPDATER_Apply(); // no return on success (reset)
-
-		// apply failed - report and keep waiting (Studio may retry)
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-		MIOS32_MIDI_SendDebugMessage("[UPDATER] apply FAILED (%d) - staged image kept, retry possible\n", status);
-#endif
-		BSL_SYSEX_SendAck(MIOS32_MIDI_DebugPortGet(), MIOS32_MIDI_SYSEX_DISACK, -status);
-		halt_state = 0;
-		return status;
-	}
-
-	// nothing (valid) staged yet: announce ourselves like a waiting BSL
+	// nothing (valid) written yet: announce ourselves like a waiting BSL
 	BSL_SYSEX_SendUploadReq(DIN0);
 	BSL_SYSEX_SendUploadReq(USB0);
 	halt_state = 0;
@@ -631,26 +560,9 @@ s32 BSL_SYSEX_Cmd_WriteMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_
 			halt_state = 1;
 			upload_started = 1;
 
-#ifdef BSL_UPDATER
-			// updater build: the ONLY acceptable upload is a bootloader image
-			// - addresses inside [0x08000000, boundary) - and it is RELOCATED
-			// into the staging area (the live BSL region is never written
-			// during the transfer). Everything else is rejected: this tool
-			// updates the bootloader, nothing else.
-			if( sysex_addr < 0x08000000 ||
-			    sysex_addr + sysex_len > 0x08000000 + MIOS32_APP_FLASH_START_ADDR ) {
-				BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE);
-				break;
-			}
-			{
-				u32 staged_end = (sysex_addr - 0x08000000) + sysex_len;
-				if( staged_end > staged_top )
-					staged_top = staged_end;
-			}
-			sysex_addr = sysex_addr - 0x08000000 + MIOS32_UPDATER_STAGING_ADDR;
-#endif
-
-			// write received data into memory
+			// write received data into memory (the updater build accepts
+			// exclusively the bootloader region, every other build exclusively
+			// the range above it - see BSL_FLASH_WRITE_FLOOR/CEIL)
 			s32 error;
 			if( (error = BSL_SYSEX_WriteMem(sysex_addr, sysex_len, sysex_buffer)) ) {
 				// write failed - return negated error status
@@ -824,7 +736,7 @@ s32 BSL_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
 static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 {
 	// check for flash memory range
-	if( addr >= FLASH_START_ADDR && addr <= FLASH_END_ADDR ) {
+	if( addr >= BSL_FLASH_WRITE_FLOOR && addr <= BSL_FLASH_WRITE_CEIL ) {
 
 #if defined(MIOS32_FAMILY_STM32G0xx)
 		// check for alignment
@@ -913,7 +825,15 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 		{
 			int sector;
 			for(sector=0; sector<MAX_FLASH_SECTOR; ++sector) {
+#ifdef BSL_UPDATER
+				// updater build writes sector 0 (the BSL region itself) - its
+				// map base is faked to 0xffffffff (upload protection for the
+				// normal BSL), so match the real base here instead
+				u32 sector_base = (sector == 0) ? 0x08000000 : flash_sector_map[sector][0];
+				if( addr == sector_base ) {
+#else
 				if( addr == flash_sector_map[sector][0] ) {
+#endif
 					// erase only if really required
 					// helps in the case, that an erase takes more than 1 second.
 					// if this happens, MIOS Studio will retry the memory transfer, and in this case the sector will be erased again.
