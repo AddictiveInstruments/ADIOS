@@ -9,6 +9,11 @@ FAMILY    = 	$(MIOS32_FAMILY)
 BOARD	  = 	$(MIOS32_BOARD)
 LCD       =     $(MIOS32_LCD)
 
+# self-locating repo root: apps live at a fixed depth inside the repo, so a
+# plain `make` works with no environment setup at all (any exported
+# MIOS32_PATH - e.g. from a CubeIDE workspace - still overrides this default)
+MIOS32_PATH ?= ../../..
+
 
 ################################################################################
 # Source Files, include paths and libraries

@@ -14,6 +14,11 @@ FAMILY    =	STM32G0xx
 BOARD	  =	STM32G0GENERIC
 LCD       =	ili9488
 
+# self-locating repo root: apps live at a fixed depth inside the repo, so a
+# plain `make` works with no environment setup at all (any exported
+# MIOS32_PATH - e.g. from a CubeIDE workspace - still overrides this default)
+MIOS32_PATH ?= ../../..
+
 # opt into the real dynamic bootloader/app flash boundary mechanism - see
 # programming_model.mk and etc/gen_bsl_boundary.sh for the full explanation.
 MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1

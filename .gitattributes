@@ -1,0 +1,10 @@
+# Line-ending policy for cross-platform sharing (2026-08-09, prep for
+# multi-developer use incl. macOS): everything the build EXECUTES or PARSES
+# must stay LF on every checkout - a shell script converted to CRLF by a
+# Windows autocrlf checkout no longer runs under /bin/sh, and Makefiles/.ld
+# with CRLF can confuse make/ld on POSIX systems.
+*.sh      text eol=lf
+*.pl      text eol=lf
+*.mk      text eol=lf
+Makefile* text eol=lf
+*.ld      text eol=lf

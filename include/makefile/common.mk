@@ -76,12 +76,24 @@ CPPFLAGS += $(CFLAGS) -fno-rtti -fno-exceptions -Wno-write-strings
 CFLAGS += -fstack-usage
 
 # convert .c/.s -> .o
-THUMB_OBJS = $(THUMB_SOURCE:.c=.o)
-THUMB_CPP_OBJS = $(THUMB_CPP_SOURCE:.cpp=.o)
-THUMB_AS_OBJS = $(THUMB_AS_SOURCE:.s=.o)
-ARM_OBJS = $(ARM_SOURCE:.c=.o)
-ARM_CPP_OBJS = $(ARM_CPP_SOURCE:.cpp=.o)
-ARM_AS_OBJS = $(ARM_AS_SOURCE:.s=.o)
+# Repo sources (the ones prefixed with $(MIOS32_PATH)/) get REPO-RELATIVE
+# object paths - the prefix is stripped before $(PROJECT_OUT)/ is prepended
+# below, so mios32/common/mios32_midi.c always maps to
+# project_build/mios32/common/mios32_midi.o no matter how MIOS32_PATH is
+# spelled. Before 2026-08-09 the raw source path was used as-is, with two
+# real consequences: an absolute MIOS32_PATH nested a full copy of it inside
+# project_build/ ("project_build//e/MIOS32/..."), and a RELATIVE one (e.g.
+# "../../..", now the zero-config default in the app Makefiles) was worse -
+# mkdir -p/gcc -o resolved the ".." segments as a real upward walk OUT of
+# project_build/, scattering stray mios32/drivers/FreeRTOS object trees
+# 3 levels up (found twice: bootloader/ 2026-08-04, apps/ 2026-08-09).
+# Project-local sources (app.c etc, no MIOS32_PATH prefix) are unaffected.
+THUMB_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(THUMB_SOURCE:.c=.o))
+THUMB_CPP_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(THUMB_CPP_SOURCE:.cpp=.o))
+THUMB_AS_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(THUMB_AS_SOURCE:.s=.o))
+ARM_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(ARM_SOURCE:.c=.o))
+ARM_CPP_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(ARM_CPP_SOURCE:.cpp=.o))
+ARM_AS_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(ARM_AS_SOURCE:.s=.o))
 
 # convert .s -> .lst
 THUMB_AS_LST = $(THUMB_AS_SOURCE:.s=.lst)
@@ -181,15 +193,39 @@ projectinfo:
 # Rule for creating object file and .d file, the sed magic is to add
 # the object path at the start of the file because the files gcc
 # outputs assume it will be in the same dir as the source file.
+#
+# Two pattern rules per source kind since 2026-08-09: repo sources get
+# repo-relative object paths (see the THUMB_OBJS comment above), so their
+# real file lives under $(MIOS32_PATH)/ - first rule. Project-local sources
+# (app.c etc) keep their path as-is - second rule. GNU make picks whichever
+# rule's prerequisite actually exists for a given .o.
+$(PROJECT_OUT)/%.o: $(MIOS32_PATH)/%.c
+	@echo Creating object file for $(notdir $<)
+	@$(CC) -Wp,-MMD,$(PROJECT_OUT)/$*.dd $(CFLAGS) -mthumb -c $< -o $@
+	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
+	@rm -f $(PROJECT_OUT)/$*.dd
+
 $(PROJECT_OUT)/%.o: %.c
 	@echo Creating object file for $(notdir $<)
 	@$(CC) -Wp,-MMD,$(PROJECT_OUT)/$*.dd $(CFLAGS) -mthumb -c $< -o $@
 	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
 	@rm -f $(PROJECT_OUT)/$*.dd
 
+$(PROJECT_OUT)/%.o: $(MIOS32_PATH)/%.cpp
+	@echo Creating object file for $(notdir $<)
+	@$(CC) -Wp,-MMD,$(PROJECT_OUT)/$*.dd $(CPPFLAGS) -mthumb -c $< -o $@
+	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
+	@rm -f $(PROJECT_OUT)/$*.dd
+
 $(PROJECT_OUT)/%.o: %.cpp
 	@echo Creating object file for $(notdir $<)
 	@$(CC) -Wp,-MMD,$(PROJECT_OUT)/$*.dd $(CPPFLAGS) -mthumb -c $< -o $@
+	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
+	@rm -f $(PROJECT_OUT)/$*.dd
+
+$(PROJECT_OUT)/%.o: $(MIOS32_PATH)/%.s
+	@echo Creating object file for $(notdir $<)
+	@$(CC) -Wp,-MMD,$(PROJECT_OUT)/$*.dd $(ASFLAGS) -mthumb -c $< -o $@
 	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
 	@rm -f $(PROJECT_OUT)/$*.dd
 

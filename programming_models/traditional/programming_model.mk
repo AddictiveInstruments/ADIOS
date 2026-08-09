@@ -146,7 +146,12 @@ LD_TEMPLATE := $(LD_FILE)
 # for minutes and die at link time on the missing generated cpu_app.ld with a
 # misleading "cannot open linker script" error instead of the script's own
 # diagnostic (observed 2026-08-09 in a CubeIDE build console).
-GEN_BSL_BOUNDARY_STATUS := $(shell $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
+# MIOS32_PATH is passed explicitly into the script's environment: when the
+# self-locating "MIOS32_PATH ?= ../../.." Makefile default applies (nothing
+# exported by the caller), $(shell ...) would not see it otherwise - GNU make
+# only forwards `export`ed Makefile variables to $(shell) since 4.4, and
+# macOS still ships 3.81.
+GEN_BSL_BOUNDARY_STATUS := $(shell MIOS32_PATH=$(MIOS32_PATH) $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
 ifneq ($(GEN_BSL_BOUNDARY_STATUS),0)
 $(error gen_bsl_boundary.sh failed (exit $(GEN_BSL_BOUNDARY_STATUS)) - see its messages above, and bootloader/src/gen_bsl_boundary_build.log for the bootloader sub-make output)
 endif

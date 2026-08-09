@@ -17,6 +17,11 @@ FAMILY    =	STM32F4xx
 BOARD	  =	MBHP_DIPCOREF4
 LCD       =	universal
 
+# self-locating repo root: apps live at a fixed depth inside the repo, so a
+# plain `make` works with no environment setup at all (any exported
+# MIOS32_PATH - e.g. from a CubeIDE workspace - still overrides this default)
+MIOS32_PATH ?= ../../..
+
 # opt into the real dynamic bootloader/app flash boundary mechanism - see
 # programming_model.mk and etc/gen_bsl_boundary.sh for the full explanation.
 # STM32F407VE has no exact-named .ld template (only the package-less

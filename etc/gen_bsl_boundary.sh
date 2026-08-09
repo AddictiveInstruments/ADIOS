@@ -258,7 +258,12 @@ if [ ! -e "$REPO_ROOT_LINK" ]; then
     # shell - same requirement as any Windows symlink, not specific to this
     # script) - falls through to the ".." fallback below if that's not
     # available either.
-    MSYS=winsymlinks:nativestrict ln -s "$MIOS32_PATH" "$REPO_ROOT_LINK" 2>/dev/null || true
+    # the link target must be resolved to an ABSOLUTE path first: a relative
+    # MIOS32_PATH (e.g. "../../..", the app Makefiles' self-locating default
+    # since 2026-08-09) is relative to THIS script's cwd (the app dir), but a
+    # relative symlink target is resolved against the link's OWN directory
+    # (bootloader/src) - storing it as-is would point outside the repo.
+    MSYS=winsymlinks:nativestrict ln -s "$(cd "$MIOS32_PATH" && pwd)" "$REPO_ROOT_LINK" 2>/dev/null || true
 fi
 if [ -L "$REPO_ROOT_LINK" ]; then
     BSL_SUBMAKE_MIOS32_PATH=".repo_root"
@@ -315,7 +320,9 @@ write_ld "$BSL_LD_FILE" "bsl"
 
 echo "=== Pass 1: building bootloader for $CHIP to measure its real size ==="
 build_bootloader
-BSL_SIZE=$(stat -c%s "$BIN_FILE")
+# wc -c instead of stat: `stat -c%s` is GNU coreutils only - macOS/BSD stat
+# spells it -f%z, wc -c is the one portable way to get a file size in bytes
+BSL_SIZE=$(wc -c < "$BIN_FILE")
 BSL_SIZE_PADDED=$(( BSL_SIZE + PADDING_BYTES ))
 
 # round up to next page/sector boundary, then clamp to the safety minimum
@@ -385,7 +392,7 @@ echo "Wrote $BSL_LD_FILE (FLASH=$BOUNDARY bytes)"
 
 echo "=== Pass 2: rebuilding bootloader with the final boundary baked in ==="
 build_bootloader
-BSL_SIZE_FINAL=$(stat -c%s "$BIN_FILE")
+BSL_SIZE_FINAL=$(wc -c < "$BIN_FILE")
 if [ "$BSL_SIZE_FINAL" -gt "$BOUNDARY" ]; then
     echo "ERROR: bootloader grew to $BSL_SIZE_FINAL bytes on pass 2, exceeding the computed boundary $BOUNDARY - increase PADDING_BYTES and retry."
     exit 1
