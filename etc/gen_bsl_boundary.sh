@@ -93,28 +93,35 @@ PROJECT_DIR="$3"
 # normal app origin. It writes the incoming bootloader image DIRECTLY into
 # the BSL region (no staging - see bootloader/src/bsl_sysex.c), so it only
 # needs its own code window here.
-# CRITICAL: the origin must sit at least ONE erase granule ABOVE the highest
-# possible boundary. At finalize the updater invalidates the first app page
-# (the page AT the boundary) - if the updater were linked there it would
-# erase itself mid-run. G0 boundary tops out at 0x3000 (a ~10.4K debug-
-# enabled BSL), so the updater goes at 0x4000, leaving 0x3000-0x3800 free to
-# invalidate. F4 boundary is one 16K sector (0x4000), updater at sector #2
-# (0x8000) - two sectors of margin. Both fit the smallest part of their
-# family (G0: 0x4000+12K=0x7000 < 32K; F4: 0x8000+16K well within 512K).
+# ORIGIN = the FLEET BOUNDARY CEILING (the highest boundary any device can
+# have). The updater is compiled code with absolute addresses - its link
+# address is fixed at build time, before the target device's OLD boundary is
+# known, and neither MIOS Studio nor anyone can relocate compiled ARM code.
+# Two constraints force it >= max(old, new) boundary: (1) it is uploaded
+# THROUGH the old bootloader, which physically refuses writes below its own
+# boundary; (2) it must survive the BSL-region rewrite (writes below the new
+# boundary). Since old is unknown at build time, we link at the ceiling,
+# which is >= every possible boundary in both directions. No +1 page is
+# needed: the fresh bootloader is kept resident by the TAMP flag, not by
+# erasing the app entry, so the updater never erases its own page (see
+# BSL_SYSEX_ReleaseHaltState). G0 ceiling = 0x3000 (a ~10.4K debug-enabled
+# BSL); F4 = one 16K sector (0x4000), updater at sector #2 (0x8000).
+# A BSL that pushes the boundary above the ceiling trips a build #error
+# below - raise the ceiling then.
 case "$CHIP" in
     STM32F4*)
         FAMILY_DIR="STM32F4xx"
         DEFAULT_PAGE_SIZE=16384   # sector-erase, fixed by silicon
         DEFAULT_MIN_BOUNDARY=16384
-        UPDATER_ORIGIN_OFF=32768  # 0x8000, 16K sector #2
+        UPDATER_ORIGIN_OFF=32768  # 0x8000, 16K sector #2 (ceiling = sector #1 = 0x4000)
         UPDATER_REGION_LEN=16384
         ;;
     *)
         FAMILY_DIR="STM32G0xx"
         DEFAULT_PAGE_SIZE=2048    # uniform page-erase
         DEFAULT_MIN_BOUNDARY=10240 # 0x2800 - see MIOS32_SYS_ADDR_BSL_INFO_BEGIN note above
-        UPDATER_ORIGIN_OFF=16384  # 0x4000 - one page clear of the 0x3000 boundary ceiling
-        UPDATER_REGION_LEN=12288  # 0x4000..0x7000, fits a 32K part
+        UPDATER_ORIGIN_OFF=12288  # 0x3000 - the fleet boundary ceiling
+        UPDATER_REGION_LEN=12288  # 0x3000..0x6000, fits a 32K part
         ;;
 esac
 

@@ -258,28 +258,32 @@ s32 BSL_SYSEX_SoftHoldGet(void)
 
 #ifdef BSL_UPDATER
 /////////////////////////////////////////////////////////////////////////////
-// Updater build: MIOS Studio's 0x7f means "the bootloader image is fully
-// written - finish the update". Final sequence:
-//   1) restore the persistent info block (captured to RAM at init) at its
-//      NEW position, boundary-0x100 - the incoming image never covers that
-//      area (its code ends well before it), so it is still erased and
-//      programmable
-//   2) invalidate the first application page: the old app's entry vector is
-//      still there but its body was overwritten by this very updater - it
-//      must not be executed. The fresh bootloader will find an invalid
-//      vector, stay resident and announce an upload request instead.
-//   3) clear any pending entry override, ask the fresh BSL to stay resident
-//      (explicit, on top of 2), reset.
-// Before any image block has arrived, 0x7f just re-announces the upload
-// request like a waiting bootloader. The updater never falls through to an
-// application: its only exits are this sequence or a power cycle.
+// Updater build: MIOS Studio's 0x7f is handled two ways.
+//
+// A) A bootloader image was written this session (upload_started, and a
+//    plausible reset vector at 0x08000004): finish the BSL update -
+//    1) restore the persistent info block (captured to RAM at init) at its
+//       NEW position, boundary-0x100 (the incoming image ends well before
+//       it, so that area is still erased and programmable);
+//    2) clear the entry override, set the TAMP flag so the fresh bootloader
+//       stays resident, reset.
+//    No app-page erase: the flag alone keeps the fresh BSL resident, so the
+//    updater never has to erase the page it might be sitting on - which is
+//    what lets it link right at the boundary ceiling. (Trade-off: if power
+//    is cut in the gap before the app is uploaded, the device reboots into
+//    this still-present updater - harmless, case B below just relays.)
+//
+// B) Nothing written this session (an app-load request, not a BSL update):
+//    behave like a normal application's 0x7f - set the flag and reset, so
+//    the fresh bootloader underneath takes over and receives the app. This
+//    is what makes "load an app through the updater" work: you are never
+//    stuck in the updater, no BSL_HOLD needed.
 /////////////////////////////////////////////////////////////////////////////
 s32 BSL_SYSEX_ReleaseHaltState(void)
 {
 	const u32 boundary = MIOS32_APP_FLASH_START_ADDR;
 
-	// freshly written image plausible? (reset vector must point into the
-	// BSL region)
+	// A) a bootloader image was written -> finalize the BSL update
 	u32 new_reset_vector = *(u32 *)(0x08000000 + 4);
 	if( upload_started &&
 	    (new_reset_vector >> 24) == 0x08 &&
@@ -287,48 +291,25 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 
 		MIOS32_IRQ_Disable();
 
-		// --- 1) restore the info block at its NEW position (skip if the
-		//     image unexpectedly extends into it - the BSL itself matters
-		//     more than the settings)
+		// restore the info block at its NEW position (skip if the image
+		// unexpectedly extends into it - the BSL itself matters more)
 		if( info_found ) {
 			BSL_SYSEX_WriteMem(0x08000000 + boundary - 0x100, 0x100, info_block);
 		}
 
-		// --- 2) invalidate the first application page
-#if defined(MIOS32_FAMILY_STM32G0xx)
-		LL_FLASH_Unlock();
-		LL_FLASH_PageErase(LL_FLASH_BANK_1, boundary/FLASH_PAGE_SIZE);
-		LL_FLASH_Lock();
-#elif defined(MIOS32_FAMILY_STM32F4xx)
-		{
-			// erase the sector whose base is the boundary (the first app
-			// sector) - from the shared sector map
-			int sector;
-			LL_FLASH_Unlock();
-			for(sector=1; sector<MAX_FLASH_SECTOR; ++sector) {
-				if( flash_sector_map[sector][0] == 0x08000000 + boundary ) {
-					LL_FLASH_EraseSector(flash_sector_map[sector][1], LL_FLASH_VOLTRG_3);
-					break;
-				}
-			}
-			LL_FLASH_Lock();
-		}
-#else
-# error "BSL_UPDATER not implemented for this family"
-#endif
-
-		// --- 3) hand over to the fresh bootloader
 		MIOS32_SYS_AppEntryOverrideSet(0);
 		MIOS32_SYS_BootloaderModeRequest();
 		MIOS32_SYS_Reset();
 		return 0; // never reached
 	}
 
-	// nothing (valid) written yet: announce ourselves like a waiting BSL
-	BSL_SYSEX_SendUploadReq(DIN0);
-	BSL_SYSEX_SendUploadReq(USB0);
-	halt_state = 0;
-	return 0;
+	// B) nothing written -> app-load relay: step aside for the fresh
+	//    bootloader (like a normal app's reboot-to-BL), so it can receive an
+	//    application upload
+	MIOS32_SYS_AppEntryOverrideSet(0);
+	MIOS32_SYS_BootloaderModeRequest();
+	MIOS32_SYS_Reset();
+	return 0; // never reached
 }
 
 #else /* !BSL_UPDATER - the normal bootloader */
