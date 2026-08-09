@@ -78,6 +78,22 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE) -DBSL_UPDATER
 
 
 ################################################################################
+# Stale-object guard: THIS project_build is shared by every chip (one
+# Makefile, PROCESSOR passed per invocation) - the same trap documented for
+# bootloader/src in etc/gen_bsl_boundary.sh: make tracks source mtimes only,
+# not -D changes, so switching PROCESSOR silently reuses objects compiled for
+# the PREVIOUS chip. Found the hard way (2026-08-09): an updater linked for
+# G070CB with a leftover G030-flavored LL_USART object configured USART3 but
+# never programmed its baudrate - the tool ran, MIDI-mute, the one-file BSL
+# update stalled before stage 2. Wipe the objects whenever the chip changed
+# since the last build (a per-chip stamp file marks who built last).
+################################################################################
+PROC_STAMP := project_build/.built_for_$(PROCESSOR)
+ifeq (,$(wildcard $(PROC_STAMP)))
+$(shell rm -rf project_build && mkdir -p project_build && touch $(PROC_STAMP))
+endif
+
+################################################################################
 # Updater layout generation - the same two-pass boundary mechanism as every
 # app build, switched to updater mode: measures the CURRENT bootloader,
 # derives the boundary, and generates project_build/cpu_updater.ld (this
