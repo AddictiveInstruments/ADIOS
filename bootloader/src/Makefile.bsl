@@ -51,7 +51,12 @@ THUMB_AS_SOURCE =
 ARM_SOURCE      =
 ARM_AS_SOURCE   =
 
-C_INCLUDE = 	-I .
+# programming_models/traditional supplies the family conf headers
+# (stm32g0xx_conf.h / stm32f4xx_conf.h, included via mios32.h) - the
+# bootloader used to carry its own byte-identical copies here (removed
+# 2026-08-09); it deliberately does NOT include programming_model.mk itself
+# (no FreeRTOS, no main.c), only that directory on the include path.
+C_INCLUDE = 	-I . -I $(MIOS32_PATH)/programming_models/traditional
 A_INCLUDE = 	-I .
 
 LIBS =
