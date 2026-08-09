@@ -1000,9 +1000,31 @@ s32 MIOS32_SPI_TransferBlock(u8 spi, u8 *send_buffer, u8 *receive_buffer, u16 le
 	LL_DMA_EnableChannel(dma_rx_ptr, dma_rx_chn);
 	LL_DMA_EnableChannel(dma_tx_ptr, dma_tx_chn);
 
-	// if no callback: wait until all bytes have been transmitted/received
+	// if no callback: wait until all bytes have been transmitted/received.
+	// BOUNDED wait: if the RX stream got out of sync (e.g. a second context
+	// entered TransferByte/TransferBlock on the same port and stole RX bytes
+	// mid-transfer - MIOS32_SPI has no internal locking, serialization is the
+	// caller's job), the RX counter never reaches zero. The bound is far
+	// beyond any legitimate transfer time (65535 bytes at the slowest
+	// prescaler), so a timeout always means a lost transfer: disable the
+	// channels so the next call starts from a clean state, and report the
+	// error instead of spinning forever (a 2026-08-09 hardware capture showed
+	// exactly that: RX counter stuck above zero, whole application starved
+	// behind this loop).
 	if( callback == NULL ) {
-		while( LL_DMA_GetDataLength(dma_rx_ptr, dma_rx_chn) );
+		u32 timeout_ctr = 10000000;
+		while( LL_DMA_GetDataLength(dma_rx_ptr, dma_rx_chn) ) {
+			if( !--timeout_ctr ) {
+				LL_DMA_DisableChannel(dma_rx_ptr, dma_rx_chn);
+				LL_DMA_DisableChannel(dma_tx_ptr, dma_tx_chn);
+				// the counter keeps its value across a disable - zero it, or
+				// the ongoing-transfer guard at the top of this function
+				// would reject every future call
+				LL_DMA_SetDataLength(dma_rx_ptr, dma_rx_chn, 0);
+				LL_DMA_SetDataLength(dma_tx_ptr, dma_tx_chn, 0);
+				return -4; // transfer lost (RX stream out of sync)
+			}
+		}
 	}
 
 	return 0; // no error;

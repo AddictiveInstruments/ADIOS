@@ -17,6 +17,7 @@
 
 #include <mios32.h>
 #include <string.h>
+#include "app.h"		// APP_SPI_MutexTake/Give
 
 /* Includes ------------------------------------------------------------------*/
 #include "tr5x6_rom.h"
@@ -538,6 +539,8 @@ s32 TR5X6_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
 	checksum += *sysex_buffer_ptr++ = (len >>  4) & 0x7f;
 
 	// send memory content in scrambled format (8bit values -> 7bit values)
+	// ROM reads from the MIDI task - serialized (see APP_SPI_MutexTake, app.h)
+	APP_SPI_MutexTake();
 	u8 value7 = 0;
 	u8 bit_ctr7 = 0;
 	i=0;
@@ -555,6 +558,7 @@ s32 TR5X6_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
 			}
 		}
 	}
+	APP_SPI_MutexGive();
 
 	if( bit_ctr7 )
 		checksum += *sysex_buffer_ptr++ = value7;
@@ -587,11 +591,13 @@ static s32 TR5X6_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 			return -MIOS32_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
 		tr5x6_rom_status status;
 		int i;
+		// ROM erase/write from the MIDI task - serialized (see app.h)
+		APP_SPI_MutexTake();
 		for(i=0; i<len; addr++, i++) {
-			//MIOS32_IRQ_Disable();
 
 			if( (addr % TR5X6_ROM_SECTOR_SIZE) == 0 ) {
 				if((status=TR5X6_ROM_Sector_Erase(addr, 1000))!=TR5X6_ROM_OK) {
+					APP_SPI_MutexGive();
 #ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 					MIOS32_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
 #endif
@@ -600,17 +606,15 @@ static s32 TR5X6_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 			}
 
 			if( (status=TR5X6_ROM_Write(addr, buffer[i], 1000)) != TR5X6_ROM_OK ) {
-				//MIOS32_IRQ_Enable();
+				APP_SPI_MutexGive();
 #ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 				MIOS32_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", buffer[i], addr, status);
 #endif
-				//FLASH->SR = LL_FLASH_SR_CLEAR;
 				return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
 			}
-			//MIOS32_IRQ_Enable();
-			//LL_FLASH_FlushCaches();
 			// TODO: verify programmed code
 		}
+		APP_SPI_MutexGive();
 
 		return 0; // no error
 	}else{

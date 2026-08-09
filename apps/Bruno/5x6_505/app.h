@@ -41,6 +41,15 @@ extern void APP_DIN_NotifyToggle(u32 pin, u32 pin_value);
 extern void APP_ENC_NotifyChange(u32 encoder, s32 incrementer);
 extern void APP_AIN_NotifyChange(u32 pin, u32 pin_value);
 
+// SPI serialization (mutex owned by app.c - see the comment there): MUST wrap
+// every SPI access sequence performed outside TASK_TFT_Periodic/-_SettingsMenu/
+// -_ROM_Periodic (which take it themselves), e.g. the direct flash/ROM
+// accesses in the SysEx handlers running in the MIDI task.
+// Never call from an ISR (the decod capture ISRs don't touch SPI - they
+// don't need it).
+extern void APP_SPI_MutexTake(void);
+extern void APP_SPI_MutexGive(void);
+
 
 /////////////////////////////////////////////////////////////////////////////
 // Export global variables

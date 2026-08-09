@@ -213,10 +213,13 @@ s32 MIDIO_SYSEX_Send_Info(mios32_midi_port_t port)
 	slot.bank=sysex_bank;
 	slot.slot=sysex_slot;
 
-	// get the slot info
+	// get the slot info (flash access from the MIDI task - serialized against
+	// the TFT/ROM tasks, see APP_SPI_MutexTake in app.h)
+	APP_SPI_MutexTake();
 	if(sysex_cmd==CMD_SLOT_READ_INFO)
 		TR5X6_FLASH_SlotRead(&slot);
 	else TR5X6_FLASH_BankRead(&slot);
+	APP_SPI_MutexGive();
 
 	// add slot name
 	for(i=0; i<22; i++) {
@@ -312,7 +315,8 @@ s32 MIDIO_SYSEX_Send_Block(mios32_midi_port_t port)
 	sysex_buffer[sysex_buffer_ix++] = sysex_block;
 	checksum += sysex_block;
 
-
+	// ROM reads from the MIDI task - serialized (see APP_SPI_MutexTake)
+	APP_SPI_MutexTake();
 	u32 addr;
 	switch(tr5x6_slots[sysex_slot].size){
 	case SIZE_4K:
@@ -354,6 +358,7 @@ s32 MIDIO_SYSEX_Send_Block(mios32_midi_port_t port)
 		break;
 
 	}
+	APP_SPI_MutexGive();
 
 	// send checksum
 	sysex_buffer[sysex_buffer_ix++] = -checksum & 0x7f;
@@ -405,7 +410,11 @@ s32 MIDIO_SYSEX_TimeOut(mios32_midi_port_t port)
 	// if we receive a SysEx command (MY_SYSEX flag set), abort parser if port matches
 	if( sysex_state.MY_SYSEX && port == sysex_port )
 		MIDIO_SYSEX_Cmd_Finished();
+	// bus handover back to the host touches the ROM SPI port (Addr_Set) -
+	// serialized (MIDI task context)
+	APP_SPI_MutexTake();
 	TR5X6_ROM_HOST();
+	APP_SPI_MutexGive();
 	return 0; // no error
 }
 
@@ -734,7 +743,10 @@ s32 MIDIO_SYSEX_Cmd_ReadBlock(u8 cmd_state, u8 midi_in)
 				xfer_time_out=MIDIO_SYSEX_XFER_TIMEOUT;
 				tr5x6_xfer_state.FLAG_CONT=1;
 			}else{
+				// bus handover to the host (ROM SPI port) - MIDI task context
+				APP_SPI_MutexTake();
 				TR5X6_ROM_HOST();
+				APP_SPI_MutexGive();
 				xfer_time_out=-1;
 				tr5x6_xfer_state.FLAG_END=1;
 			}

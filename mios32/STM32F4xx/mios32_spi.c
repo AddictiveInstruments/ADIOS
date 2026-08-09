@@ -970,8 +970,27 @@ s32 MIOS32_SPI_TransferBlock(u8 spi, u8 *send_buffer, u8 *receive_buffer, u16 le
     // start DMA transfer
     dma_tx_ptr->CR = tx_CCR | CCR_ENABLE;
 
-    // if no callback: wait until all bytes have been transmitted/received
-    while( dma_rx_ptr->NDTR );
+    // if no callback: wait until all bytes have been transmitted/received.
+    // BOUNDED wait - same rationale as the STM32G0xx implementation: if a
+    // second context stole RX bytes mid-transfer (MIOS32_SPI has no internal
+    // locking, serialization is the caller's job), the RX counter never
+    // reaches zero. Fail the transfer and clean up instead of spinning
+    // forever; the counter must be zeroed too, or the ongoing-transfer guard
+    // at the top of this function would reject every future call.
+    u32 timeout_ctr = 10000000;
+    while( dma_rx_ptr->NDTR ) {
+      if( !--timeout_ctr ) {
+        dma_rx_ptr->CR &= ~CCR_ENABLE;
+        dma_tx_ptr->CR &= ~CCR_ENABLE;
+        // a F4 DMA stream aborts asynchronously - EN must read back 0
+        // before NDTR may be written (bounded, aborts settle in a few cycles)
+        u32 settle = 10000;
+        while( ((dma_rx_ptr->CR | dma_tx_ptr->CR) & CCR_ENABLE) && --settle );
+        dma_rx_ptr->NDTR = 0;
+        dma_tx_ptr->NDTR = 0;
+        return -4; // transfer lost (RX stream out of sync)
+      }
+    }
   }
 
   return 0; // no error;

@@ -191,18 +191,12 @@ s32 MIOS32_SYS_Reset(void)
   portENTER_CRITICAL(); // port specific FreeRTOS function to disable tasks (nested)
 #endif
 
-  // print reboot message if LCD enabled
-#ifndef MIOS32_DONT_USE_LCD
-  // TODO: here we should select the normal font - but only if available!
-  // MIOS32_LCD_FontInit((u8 *)GLCD_FONT_NORMAL);
-  MIOS32_LCD_BColourSet(0xffffff);
-  MIOS32_LCD_FColourSet(0x000000);
-
-  MIOS32_LCD_DeviceSet(0);
-  MIOS32_LCD_Clear();
-  MIOS32_LCD_CursorSet(0, 0);
-  MIOS32_LCD_PrintString("Bootloader Mode "); // 16 chars
-#endif
+  // NOTE: the historical "print 'Bootloader Mode' on the LCD" block was
+  // removed here (2026-08-09): with the scheduler frozen by the critical
+  // section above, calling into a display driver is unsafe - another task may
+  // be mid-transfer on the same bus (SPI DMA), and the driver call then
+  // operates on a half-configured channel. The message was visible for ~50 mS
+  // before the reset anyway.
 
   // disable all interrupts
   MIOS32_IRQ_Disable();
