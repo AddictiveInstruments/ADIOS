@@ -156,6 +156,44 @@ mkdir -p "$BSL_DIR/project_build" "$PROJECT_DIR/project_build"
 BSL_LD_FILE="$BSL_DIR/project_build/cpu_bsl.ld"
 APP_LD_FILE="$PROJECT_DIR/project_build/cpu_app.ld"
 
+# --- serialize concurrent invocations (2026-08-09). bootloader/src (and its
+#     project_build/) is SHARED by every project build - two overlapping
+#     runs of this script trample each other's build dir: one side's cleanall
+#     "rm -rf project_build" races the other side's still-running compiler
+#     ("Device or resource busy", then ".su for writing: No such file or
+#     directory" once the dir vanishes under it). Never happens with
+#     sequential command-line builds, but CubeIDE triggers it naturally: a
+#     CANCELED IDE build kills the top-level make yet leaves the script's
+#     bootloader sub-make running as an orphan, and the user's very next
+#     build collides with it (observed 2026-08-09 on the real 5x6_505
+#     CubeIDE console). mkdir is the portable atomic test-and-set; the
+#     holder's PID is stored inside so a lock left behind by a killed/dead
+#     process is detected (kill -0) and stolen instead of deadlocking.
+LOCK_DIR="$BSL_DIR/.gen_bsl_boundary.lock"
+LOCK_WAITED=0
+while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    HOLDER_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null)
+    if [ -n "$HOLDER_PID" ] && ! kill -0 "$HOLDER_PID" 2>/dev/null; then
+        echo "Removing stale gen_bsl_boundary.sh lock left by dead process $HOLDER_PID"
+        rm -rf "$LOCK_DIR"
+        continue
+    fi
+    if [ "$LOCK_WAITED" -ge 600 ]; then
+        echo "ERROR: timed out after ${LOCK_WAITED}s waiting for a concurrent gen_bsl_boundary.sh run (pid $HOLDER_PID) - if no build is actually running, remove $LOCK_DIR by hand."
+        exit 1
+    fi
+    if [ "$LOCK_WAITED" -eq 0 ]; then
+        echo "Waiting for a concurrent gen_bsl_boundary.sh run (pid $HOLDER_PID) to finish..."
+    fi
+    sleep 2
+    LOCK_WAITED=$(( LOCK_WAITED + 2 ))
+done
+echo $$ > "$LOCK_DIR/pid"
+# released on ANY exit (success, set -e failure, or signal) - INT/TERM/HUP
+# re-raise through exit so the EXIT trap runs under every sh flavor
+trap 'rm -rf "$LOCK_DIR"' EXIT
+trap 'exit 1' INT TERM HUP
+
 # --- write one variant of the generated linker script from the shared
 #     per-chip template. $1 = output path, $2 = "bsl" or "app".
 write_ld () {

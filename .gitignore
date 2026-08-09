@@ -122,6 +122,10 @@ cpu_bsl.ld
 cpu_app.ld
 mios32_bsl_boundary.h
 gen_bsl_boundary_build.log
+# Transient concurrency lock (etc/gen_bsl_boundary.sh) - removed on exit, can
+# only survive a hard crash/kill; the script steals a lock whose holder PID
+# is dead, so a leftover is harmless either way.
+.gen_bsl_boundary.lock/
 
 # Machine-local symlink bootstrapped by gen_bsl_boundary.sh, standing in for
 # the repo root in the bootloader's own sub-make so THUMB_SOURCE paths built

@@ -141,7 +141,15 @@ endif
 ################################################################################
 ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
 LD_TEMPLATE := $(LD_FILE)
-$(shell $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2)
+# capture the script's exit status and STOP make right here if it failed -
+# $(shell ...) alone silently discards the status, letting the build plow on
+# for minutes and die at link time on the missing generated cpu_app.ld with a
+# misleading "cannot open linker script" error instead of the script's own
+# diagnostic (observed 2026-08-09 in a CubeIDE build console).
+GEN_BSL_BOUNDARY_STATUS := $(shell $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
+ifneq ($(GEN_BSL_BOUNDARY_STATUS),0)
+$(error gen_bsl_boundary.sh failed (exit $(GEN_BSL_BOUNDARY_STATUS)) - see its messages above, and bootloader/src/gen_bsl_boundary_build.log for the bootloader sub-make output)
+endif
 LD_FILE = $(CURDIR)/$(PROJECT_OUT)/cpu_app.ld
 endif
 
