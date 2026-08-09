@@ -150,7 +150,10 @@
 // hardware-validated): the vsprintf machinery alone pushed the new-
 // generation BSL over its 10240-byte page (10408 bytes), bouncing the
 // boundary to 0x3000 - errors still reach MIOS Studio as DISACK codes
-# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+// TEMPORARILY re-enabled 2026-08-09 to exercise the boundary-migration path
+// (bigger BSL -> boundary 0x3000): tests the updater's old-info-block scan,
+// its relocation to the new position, and the app re-link. Re-strip after.
+//# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 #define MIOS32_BOARD_J15_LED_NUM 1
 
 // reserved flash size for the bootloader itself.

@@ -90,11 +90,17 @@ PROJECT_DIR="$3"
 # family-appropriate erase-granularity defaults, overridable via $4/$6.
 # UPDATER_ORIGIN_OFF/UPDATER_REGION_LEN: layout of the BSL-update tool when
 # BSL_BOUNDARY_MODE=updater (see below) - the updater is linked ABOVE the
-# normal app origin (always clear of any old or new boundary). It writes the
-# incoming bootloader image DIRECTLY into the BSL region (no staging - see
-# bootloader/src/bsl_sysex.c), so it only needs its own code window here.
-# Derived per family: G0 = one page above the minimum boundary (0x3000),
-# 12K region (fits a 32K part with room to spare); F4 = 16K sector #2.
+# normal app origin. It writes the incoming bootloader image DIRECTLY into
+# the BSL region (no staging - see bootloader/src/bsl_sysex.c), so it only
+# needs its own code window here.
+# CRITICAL: the origin must sit at least ONE erase granule ABOVE the highest
+# possible boundary. At finalize the updater invalidates the first app page
+# (the page AT the boundary) - if the updater were linked there it would
+# erase itself mid-run. G0 boundary tops out at 0x3000 (a ~10.4K debug-
+# enabled BSL), so the updater goes at 0x4000, leaving 0x3000-0x3800 free to
+# invalidate. F4 boundary is one 16K sector (0x4000), updater at sector #2
+# (0x8000) - two sectors of margin. Both fit the smallest part of their
+# family (G0: 0x4000+12K=0x7000 < 32K; F4: 0x8000+16K well within 512K).
 case "$CHIP" in
     STM32F4*)
         FAMILY_DIR="STM32F4xx"
@@ -107,8 +113,8 @@ case "$CHIP" in
         FAMILY_DIR="STM32G0xx"
         DEFAULT_PAGE_SIZE=2048    # uniform page-erase
         DEFAULT_MIN_BOUNDARY=10240 # 0x2800 - see MIOS32_SYS_ADDR_BSL_INFO_BEGIN note above
-        UPDATER_ORIGIN_OFF=12288  # 0x3000
-        UPDATER_REGION_LEN=12288   # up to the top of a 32K part
+        UPDATER_ORIGIN_OFF=16384  # 0x4000 - one page clear of the 0x3000 boundary ceiling
+        UPDATER_REGION_LEN=12288  # 0x4000..0x7000, fits a 32K part
         ;;
 esac
 
