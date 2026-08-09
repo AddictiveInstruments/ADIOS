@@ -229,6 +229,8 @@ extern s32 MIOS32_SYS_Reset(void);
 
 extern s32 MIOS32_SYS_BootloaderModeRequest(void);
 extern s32 MIOS32_SYS_BootloaderModeRequested(void);
+extern s32 MIOS32_SYS_AppEntryOverrideSet(u32 addr);
+extern u32 MIOS32_SYS_AppEntryOverrideGet(void);
 #endif
 
 extern u32 MIOS32_SYS_ChipIDGet(void);

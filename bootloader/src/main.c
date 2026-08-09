@@ -298,6 +298,14 @@ int main(void)
   // through to the application (found 2026-08-09).
   BSL_SYSEX_SoftHoldSet(bootloader_mode_requested);
 
+#ifdef BSL_UPDATER
+  // the BSL-update tool NEVER falls through to an application by itself:
+  // its only exits are a successful apply (which resets the core) or a
+  // power cycle. Force permanent hold regardless of pin/flag state.
+  hold_mode_active_after_reset = 1;
+  BSL_SYSEX_SoftHoldSet(1);
+#endif
+
 
   ///////////////////////////////////////////////////////////////////////////
   // check for optional fast boot
@@ -375,7 +383,21 @@ int main(void)
   // branch to application if reset vector is valid (should be inside flash range)
 #if defined(MIOS32_FAMILY_STM32F10x) || defined(MIOS32_FAMILY_STM32F4xx) || defined(MIOS32_FAMILY_STM32G0xx)
 #if defined (MIOS32_FAMILY_STM32G0xx) || defined(MIOS32_FAMILY_STM32F4xx)
-  u32 *reset_vector = (u32 *)(0x08000000 + MIOS32_APP_FLASH_START_ADDR + 4);
+  // application entry: normally the vector table right at the app/bootloader
+  // boundary. The one-shot entry override (backup register, set via SysEx
+  // command 0x03 - see MIOS32_SYS_AppEntryOverrideGet) redirects a SINGLE
+  // boot to an alternate vector table: the one-click BSL update flow uses it
+  // to hand control to an updater linked above the normal app origin.
+  // Consumed (cleared) here whatever happens: if the alternate target
+  // crashes, the next reset falls back to the normal boundary entry instead
+  // of looping on a broken override.
+  u32 app_vector_base = 0x08000000 + MIOS32_APP_FLASH_START_ADDR;
+  {
+    u32 entry_override = MIOS32_SYS_AppEntryOverrideGet();
+    if( (entry_override >> 24) == 0x08 && !(entry_override & 3) )
+      app_vector_base = entry_override;
+  }
+  u32 *reset_vector = (u32 *)(app_vector_base + 4);
 #else
   u32 *reset_vector = (u32 *)0x08004004;
 #endif
@@ -422,7 +444,8 @@ int main(void)
     }
 
 #if defined (MIOS32_FAMILY_STM32G0xx) || defined(MIOS32_FAMILY_STM32F4xx)
-  u32 *stack_pointer = (u32 *)(0x08000000 + MIOS32_APP_FLASH_START_ADDR);
+  // same base as reset_vector above - follows the entry override when set
+  u32 *stack_pointer = (u32 *)app_vector_base;
 #else
   u32 *stack_pointer = (u32 *)0x08004000;
 #endif

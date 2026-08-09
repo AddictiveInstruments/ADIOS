@@ -39,6 +39,14 @@
 #define MIOS32_MIDI_SYSEX_DISACK   0x0e
 #define MIOS32_MIDI_SYSEX_ACK      0x0f
 
+// core type reported by query 0x0b - "APP" for a normal application (the
+// default), overridden to "BSL" by the bootloader build and "UPDATER" by the
+// BSL-update tool (see bootloader/). MIOS Studio bases its upload-range
+// protection on this answer.
+#ifndef MIOS32_MIDI_CORE_TYPE_STR
+#define MIOS32_MIDI_CORE_TYPE_STR "APP"
+#endif
+
 // disacknowledge arguments
 #define MIOS32_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP  0x01
 #define MIOS32_MIDI_SYSEX_DISACK_MORE_BYTES_THAN_EXP  0x02

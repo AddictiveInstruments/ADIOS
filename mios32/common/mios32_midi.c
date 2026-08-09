@@ -1840,6 +1840,15 @@ static s32 MIOS32_MIDI_SYSEX_Cmd_Query(mios32_midi_port_t port, mios32_midi_syse
 			MIOS32_MIDI_SYSEX_SendAckStr(port, str_buffer);
 			break;
 #endif
+		case 0x0b: // Core type (2026-08-09, for the one-click BSL update flow):
+			// "APP" (default), "BSL" (bootloader build) or "UPDATER" (the
+			// BSL-update tool) - lets MIOS Studio decide whether a hex
+			// targeting the protected bootloader range may be sent (UPDATER
+			// only), and whether the core understands the entry-override
+			// command (BSL). Legacy firmware without this query answers
+			// DISACK - Studio treats that as "APP"/old-generation.
+			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_MIDI_CORE_TYPE_STR);
+			break;
 		case 0x7f:
 #if MIOS32_MIDI_BSL_ENHANCEMENTS
 			// release halt state (or sending upload request) instead of reseting the core
@@ -1858,12 +1867,11 @@ static s32 MIOS32_MIDI_SYSEX_Cmd_Query(mios32_midi_port_t port, mios32_midi_syse
 			// the peripheral: the 9-byte SysEx takes ~2.9 mS at MIDI baudrate
 			MIOS32_DELAY_Wait_uS(10000);
 			// reset core (this will send an upload request)
-#if defined(MIOS32_FAMILY_STM32G0xx)
 			// tell the bootloader to stay resident after this reset, so the
 			// user never has to touch the physical BSL_HOLD pin for a normal
-			// firmware update
+			// firmware update (implemented per family in mios32_sys.c -
+			// TAMP/RTC backup register, both G0xx and F4xx covered)
 			MIOS32_SYS_BootloaderModeRequest();
-#endif
 			MIOS32_SYS_Reset();
 			// at least on STM32 we will never reach this point
 			// but other core families could contain an empty stumb!

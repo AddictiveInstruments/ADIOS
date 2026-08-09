@@ -269,6 +269,50 @@ s32 MIOS32_SYS_BootloaderModeRequested(void)
   return requested ? 1 : 0;
 }
 
+/////////////////////////////////////////////////////////////////////////////
+//! Sets the application entry override (backup register BKP_DR1): on the
+//! next reset, a new-generation bootloader jumps to the vector table at this
+//! address instead of the app/bootloader boundary. Used by the one-click
+//! BSL-update flow to hand control to an updater linked ABOVE the normal
+//! app origin. 0 = no override (backup registers reset to 0 on power loss -
+//! a safe fallback to the normal boundary entry).
+//! \param[in] addr vector table address of the alternate entry (0 to clear)
+//! \return 0 (no error)
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_SYS_AppEntryOverrideSet(u32 addr)
+{
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+  // RTCAPBEN gates all TAMP register access - same requirement as
+  // MIOS32_SYS_BootloaderModeRequest() above
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_RTC);
+  LL_PWR_EnableBkUpAccess();
+
+  LL_RTC_BKP_SetRegister(TAMP, LL_RTC_BKP_DR1, addr);
+
+  return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+//! Reads AND CLEARS the application entry override (one-shot, same pattern
+//! as MIOS32_SYS_BootloaderModeRequested): consumed by the bootloader right
+//! before its jump-to-application decision, so a crashing alternate entry
+//! can't wedge the core in a reboot loop - the next reset falls back to the
+//! normal boundary entry.
+//! \return the stored vector table address, 0 if no override was set
+/////////////////////////////////////////////////////////////////////////////
+u32 MIOS32_SYS_AppEntryOverrideGet(void)
+{
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_RTC);
+  LL_PWR_EnableBkUpAccess();
+
+  u32 addr = LL_RTC_BKP_GetRegister(TAMP, LL_RTC_BKP_DR1);
+
+  LL_RTC_BKP_SetRegister(TAMP, LL_RTC_BKP_DR1, 0);
+
+  return addr;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 //! Returns the Chip ID of the core

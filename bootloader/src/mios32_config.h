@@ -99,6 +99,11 @@
 // enable BSL enhancements in MIOS32 SysEx parser
 #define MIOS32_MIDI_BSL_ENHANCEMENTS 1
 
+// announce ourselves as the bootloader on the core-type query (0x0b) - a
+// new-generation marker too: MIOS Studio uses a positive answer here to know
+// the entry-override SysEx command is understood (legacy BSLs DISACK 0x0b)
+#define MIOS32_MIDI_CORE_TYPE_STR "BSL"
+
 // exclude default BSL image from MIOS32
 #define MIOS32_DONT_INCLUDE_BSL
 
@@ -141,9 +146,11 @@
 // mios32_uart.c.
 #define MIOS32_UART0_TX_INVERTED
 # define MIOS32_SYS_DONT_INIT_RTC
-// left enabled for now (costs some flash) - define this to strip debug
-// message support once you no longer need it:
-// # define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+// debug-message support stripped (2026-08-09, every BSL mechanism now
+// hardware-validated): the vsprintf machinery alone pushed the new-
+// generation BSL over its 10240-byte page (10408 bytes), bouncing the
+// boundary to 0x3000 - errors still reach MIOS Studio as DISACK codes
+# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 #define MIOS32_BOARD_J15_LED_NUM 1
 
 // reserved flash size for the bootloader itself.
