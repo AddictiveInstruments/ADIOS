@@ -23,6 +23,17 @@
 #define MIOS32_MIDI_DEFAULT_PORT USB0
 #endif
 
+// SysEx device ID this core answers on at startup. A bootloader's persistent
+// info block, where there is one, overrides it (see MIOS32_MIDI_Init) - so on
+// an instrument with a bootloader this is only the value before anything was
+// ever written into that block. It matters most for a project built WITHOUT
+// a bootloader (MIOS32_USE_BOOTLOADER = 0): there is no info block to hold an
+// ID at all, making this the only way to give the core an identity other
+// than 0, short of the application calling MIOS32_MIDI_DeviceIDSet() itself.
+#ifndef MIOS32_MIDI_DEFAULT_DEVICE_ID
+#define MIOS32_MIDI_DEFAULT_DEVICE_ID 0x00
+#endif
+
 
 // the default MIDI port for debugging output via MIOS32_MIDI_SendDebugMessage
 #ifndef MIOS32_MIDI_DEBUG_PORT

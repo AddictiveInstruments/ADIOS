@@ -150,9 +150,28 @@
 #include "mios32_bsl_boundary.h"
 #endif
 
+// Is there a bootloader at all? Set MIOS32_USE_BOOTLOADER = 0 in a project's
+// Makefile (programming_model.mk relays it as a -D) to build an application
+// linked at the base of flash, with no reserved bootloader region and no
+// embedded bootloader image. Everything that only makes sense WITH one is
+// then compiled out: the persistent info block below, the TAMP request /
+// entry-override helpers in mios32_sys.c, and the "reboot into the
+// bootloader" SysEx query in mios32_midi.c.
+#ifndef MIOS32_USE_BOOTLOADER
+# define MIOS32_USE_BOOTLOADER 1
+#endif
+
 // location of the Device ID and USB device name
 // The bootloader update tool allows to change these values from MIOS terminal
-#if defined(MIOS32_FAMILY_STM32F10x)
+// NOTE: deliberately left UNDEFINED when there is no bootloader. The block
+// lives at (boundary - 0x100), which without a bootloader would resolve to
+// 0x07FFFF00 - outside flash entirely - and every reader of it here and in
+// mios32_midi.c / mios32_lcd.c is guarded by #ifdef on this very macro, so
+// not defining it makes them all disappear cleanly rather than dereference
+// a wild address.
+#if !MIOS32_USE_BOOTLOADER
+// no info block: nothing persistent to read from, see above
+#elif defined(MIOS32_FAMILY_STM32F10x)
 # define MIOS32_SYS_ADDR_BSL_INFO_BEGIN    0x08003f00
 #elif defined(MIOS32_FAMILY_STM32F4xx) || defined(MIOS32_FAMILY_STM32G0xx)
 // last 256 bytes before the (dynamic, per-project) bootloader/app boundary -

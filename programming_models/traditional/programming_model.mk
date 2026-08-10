@@ -136,13 +136,28 @@ endif
 #               flash out of it, and writes cpu_app.ld / cpu_bsl.ld with the
 #               measured boundary. LD_FILE becomes the generated cpu_app.ld.
 #   static   -> a plain rule below preprocesses it into project_build/cpu.ld,
-#               the whole flash left as one region. That is the path a
-#               project without a bootloader wants (see app_skeleton), and
-#               keeping it is why the template is preprocessed rather than
-#               resolved inside the script only.
+#               the bootloader region reserved at a FIXED size.
+# A third mode sits on the other axis: MIOS32_USE_BOOTLOADER = 0 means there
+# is no bootloader at all - the application is linked at the base of flash and
+# owns all of it. The boundary question then has no meaning, hence the guard
+# just below.
 # PROJECT_DIR is $(CURDIR) - the directory make was invoked from, i.e. the
 # app's own folder - so this generalizes to any project without hardcoding it.
 ################################################################################
+MIOS32_USE_BOOTLOADER ?= 1
+ifeq ($(MIOS32_USE_BOOTLOADER),0)
+ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
+$(error MIOS32_USE_BOOTLOADER = 0 and MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1 contradict each other: a boundary cannot be measured against a bootloader this project does not have. Drop one of the two.)
+endif
+# no bootloader: no reserved region in the linker script, no embedded image,
+# and the application starts at the base of flash. The C side needs to agree,
+# hence MIOS32_APP_FLASH_START_ADDR = 0 - it is what the SysEx query 0x0a
+# answers, and it also keeps MIOS32_SYS_ADDR_BSL_INFO_BEGIN out of existence
+# (see include/mios32/mios32_sys.h).
+LD_CHIP_DEFS += -DADIOS_LD_NO_BOOTLOADER
+C_DEFINES    += -DMIOS32_USE_BOOTLOADER=0 -DMIOS32_DONT_INCLUDE_BSL -DMIOS32_APP_FLASH_START_ADDR=0
+endif
+
 ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
 LD_TEMPLATE := $(LD_TEMPLATE_S)
 # capture the script's exit status and STOP make right here if it failed -
@@ -174,6 +189,14 @@ else
 # target is fixed when the rule is read - it would resolve to an empty path.
 ADIOS_LD_BSL_BOUNDARY_K ?= $(if $(filter STM32F4xx,$(FAMILY)),16,10)
 LD_CHIP_DEFS += -DADIOS_LD_BSL_BOUNDARY_K=$(ADIOS_LD_BSL_BOUNDARY_K)
+# ...and tell the C side the SAME boundary. Only the dynamic path used to
+# define MIOS32_APP_FLASH_START_ADDR (through the generated header), so on a
+# static build it was simply absent - leaving MIOS32_SYS_ADDR_BSL_INFO_BEGIN
+# as an expression referring to an undefined macro, valid only as long as
+# nothing used it. Now all three modes state it.
+ifneq ($(MIOS32_USE_BOOTLOADER),0)
+C_DEFINES += -DMIOS32_APP_FLASH_START_ADDR=$(shell echo $$(( $(ADIOS_LD_BSL_BOUNDARY_K) * 1024 )))
+endif
 LD_FILE = $(CURDIR)/project_build/cpu.ld
 # the RULE that builds it lives in include/makefile/common.mk, not here: this
 # file is included FIRST, so a target defined at this point would become

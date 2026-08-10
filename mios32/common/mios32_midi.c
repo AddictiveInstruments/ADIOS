@@ -235,9 +235,15 @@ s32 MIOS32_MIDI_Init(u32 mode)
 	last_sysex_port = DEFAULT;
 	sysex_state.ALL = 0;
 
-	sysex_device_id = 0x00;
+	// compile-time identity, overridable by the project (mios32_midi.h).
+	// Was a hardcoded 0x00: with a bootloader the info block below overrides
+	// it anyway, but WITHOUT one there is no persistent block at all and the
+	// device would be stuck on ID 0 for good - writing that block needs a
+	// probe today, the bootloader itself refusing to write below its own
+	// boundary.
+	sysex_device_id = MIOS32_MIDI_DEFAULT_DEVICE_ID;
 #ifdef MIOS32_SYS_ADDR_BSL_INFO_BEGIN
-	// read from bootloader info range
+	// read from bootloader info range - wins over the default above
 	u8 *device_id_confirm = (u8 *)MIOS32_SYS_ADDR_DEVICE_ID_CONFIRM;
 	u8 *device_id = (u8 *)MIOS32_SYS_ADDR_DEVICE_ID;
 	if( *device_id_confirm == 0x42 && *device_id < 0x80 )
@@ -1850,7 +1856,13 @@ static s32 MIOS32_MIDI_SYSEX_Cmd_Query(mios32_midi_port_t port, mios32_midi_syse
 			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_MIDI_CORE_TYPE_STR);
 			break;
 		case 0x7f:
-#if MIOS32_MIDI_BSL_ENHANCEMENTS
+#if !MIOS32_USE_BOOTLOADER
+			// nothing to reboot INTO: this core has no bootloader, so the
+			// flag-and-reset below would just restart the application on
+			// itself - and MIOS Studio, which retries, would loop it. Say so
+			// instead, and stay running.
+			MIOS32_MIDI_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_UNKNOWN_QUERY);
+#elif MIOS32_MIDI_BSL_ENHANCEMENTS
 			// release halt state (or sending upload request) instead of reseting the core
 			BSL_SYSEX_ReleaseHaltState();
 #else

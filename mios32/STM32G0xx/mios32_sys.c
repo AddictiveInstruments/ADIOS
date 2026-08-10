@@ -216,6 +216,12 @@ s32 MIOS32_SYS_Reset(void)
 }
 
 
+// The four helpers below exist only to hand a bootloader something across a
+// reset: the "stay resident" request and the one-shot entry override, both
+// held in TAMP/RTC backup registers. With MIOS32_USE_BOOTLOADER = 0 there is
+// nothing on the other side of the reset to read them, so they are dead
+// weight - and the backup-register clocking they enable is pointless too.
+#if MIOS32_USE_BOOTLOADER
 /////////////////////////////////////////////////////////////////////////////
 //! Requests that the bootloader stays resident after the next reset, so
 //! that an application can trigger a firmware update (e.g. via MIDI SysEx)
@@ -306,6 +312,7 @@ u32 MIOS32_SYS_AppEntryOverrideGet(void)
 
   return addr;
 }
+#endif /* MIOS32_USE_BOOTLOADER */
 
 
 /////////////////////////////////////////////////////////////////////////////

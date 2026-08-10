@@ -24,8 +24,18 @@
 MEMORY
 {
   RAM (xrw) :     ORIGIN = 0x20000000, LENGTH = ADIOS_RAM_LEN
+#ifdef ADIOS_LD_NO_BOOTLOADER
+  /* MIOS32_USE_BOOTLOADER = 0: no reserved bootloader region at all, the
+     application owns the whole flash from its base. FLASH_BSL is not even
+     declared - the .mios32_bsl output section below is retargeted to FLASH,
+     the same way etc/gen_bsl_boundary.sh does it for the bootloader's own
+     build (an output section mapped to an undeclared region makes ld warn
+     and mis-size its neighbours). */
+  FLASH (rx) :    ORIGIN = 0x08000000, LENGTH = ADIOS_FLASH_TOTAL_LEN
+#else
   FLASH_BSL (rx) :    ORIGIN = 0x08000000, LENGTH = ADIOS_FLASH_BSL_LEN
   FLASH (rx) :    ORIGIN = 0x08002800, LENGTH = ADIOS_FLASH_APP_LEN
+#endif
   FLASHB1 (rx) :  ORIGIN = 0x00000000, LENGTH = 0
   EXTMEMB0 (rx) : ORIGIN = 0x00000000, LENGTH = 0
   EXTMEMB1 (rx) : ORIGIN = 0x00000000, LENGTH = 0
@@ -88,7 +98,11 @@ SECTIONS
 	. = ALIGN(4);
         KEEP(*(.mios32_bsl))
 	. = ALIGN(4);
+#ifdef ADIOS_LD_NO_BOOTLOADER
+    } >FLASH        /* stays empty: no image is embedded in this mode */
+#else
     } >FLASH_BSL
+#endif
  
     /* for Cortex devices, the beginning of the startup code is stored in the .isr_vector section, which goes to FLASH */
     .isr_vector :
