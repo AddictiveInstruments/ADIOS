@@ -115,6 +115,21 @@ DIST += $(LD_FILE)
 # default rule
 all: dirs cleanhex $(PROJECT).hex $(PROJECT_OUT)/$(PROJECT).bin $(PROJECT_OUT)/$(PROJECT).lss $(PROJECT_OUT)/$(PROJECT).sym projectinfo
 
+# Static-boundary builds resolve their linker script from the per-family
+# template here rather than in programming_model.mk: that file is included
+# BEFORE this one, so a target defined there would silently become make's
+# default goal and the build would stop right after writing the script.
+# (Dynamic-boundary builds get theirs written by gen_bsl_boundary.sh while
+# the makefiles are still being parsed, so they need no rule at all.)
+ifneq ($(LD_TEMPLATE_S),)
+ifneq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
+$(CURDIR)/$(PROJECT_OUT)/cpu.ld: $(LD_TEMPLATE_S) $(MIOS32_PATH)/etc/ld/adios_body.ld.inc
+	@mkdir -p $(dir $@)
+	@echo "Resolving $(notdir $(LD_TEMPLATE_S)) for $(PROCESSOR), fixed BSL boundary $(ADIOS_LD_BSL_BOUNDARY_K)K -> $@"
+	@$(LD_PREPROCESS) $(LD_TEMPLATE_S) -o $@
+endif
+endif
+
 # define debug/release target for easier use in codeblocks
 debug: all
 Debug: all
@@ -187,8 +202,11 @@ dirs:
 %.sym: $(PROJECT_OUT)/$(PROJECT).elf
 	@$(NM) -n $< > $@
 
-# rule to create .elf file
-$(PROJECT_OUT)/$(PROJECT).elf: $(ALL_OBJS)
+# rule to create .elf file. $(LD_FILE) is a prerequisite because it is
+# GENERATED now (resolved from the per-family template, see
+# programming_models/traditional/programming_model.mk) - without it, a static
+# build would try to link before its linker script exists.
+$(PROJECT_OUT)/$(PROJECT).elf: $(ALL_OBJS) $(LD_FILE)
 	@$(CC) $(CFLAGS) $(ALL_OBJS) $(LIBS) $(LDFLAGS) -o$@
 
 

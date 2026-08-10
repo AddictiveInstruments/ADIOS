@@ -99,13 +99,7 @@ endif
 # derives the boundary, and generates project_build/cpu_updater.ld (this
 # build's own window) + mios32_bsl_boundary.h (boundary + updater origin).
 ################################################################################
-LD_TEMPLATE_EXACT    = $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(PROCESSOR).ld
-LD_TEMPLATE_FALLBACK = $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(shell echo $(PROCESSOR) | sed -E 's/^(.{9}).(.)$$/\1x\2/').ld
-ifneq (,$(wildcard $(LD_TEMPLATE_EXACT)))
-LD_TEMPLATE = $(LD_TEMPLATE_EXACT)
-else
-LD_TEMPLATE = $(LD_TEMPLATE_FALLBACK)
-endif
+LD_TEMPLATE = $(MIOS32_PATH)/etc/ld/$(FAMILY).ld.S
 
 # BSL_RELAY_SRC (passed by the app's common.mk) names the directory whose
 # mios32_config.h carries this board's MIDI wiring - THIS directory holds

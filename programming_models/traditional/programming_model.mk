@@ -60,17 +60,21 @@ C_INCLUDE += 	-I $(MIOS32_PATH)/programming_models/traditional \
 # package/density) shares the exact same vector table, so the file is
 # always startup_<lowercased 9-char line prefix>.c with no exceptions to
 # special-case.
-LD_FILE_EXACT    = $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(PROCESSOR).ld
-LD_FILE_FALLBACK = $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(shell echo $(PROCESSOR) | sed -E 's/^(.{9}).(.)$$/\1x\2/').ld
+# ONE preprocessed template per family (2026-08-10) instead of one linker
+# script per chip: only the contiguous RAM size and the total flash ever
+# differed, so those live in a table inside the template and the body is
+# shared (etc/ld/adios_body.ld.inc). Both candidate keys are passed to the
+# preprocessor - the exact part number and the package-less form - and the
+# table matches whichever it carries, reproducing the old exact-then-
+# fallback filename lookup with no logic on this side. Verified that no chip
+# has both of its forms in the table, so the two can never collide.
+LD_TEMPLATE_S    = $(MIOS32_PATH)/etc/ld/$(FAMILY).ld.S
+LD_CHIP_DEFS     = -DADIOS_LD_CHIP_$(PROCESSOR) -DADIOS_LD_CHIP_$(shell echo $(PROCESSOR) | sed -E 's/^(.{9}).(.)$$/\1x\2/')
+LD_PREPROCESS    = $(CC) -E -x assembler-with-cpp -P -I $(MIOS32_PATH)/etc/ld $(LD_CHIP_DEFS)
 STARTUP_FILE     = $(MIOS32_PATH)/etc/startup/$(FAMILY)/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
 
 ifeq ($(FAMILY),STM32F4xx)
 CFLAGS    +=    -DGCC_ARMCM3
-ifneq (,$(wildcard $(LD_FILE_EXACT)))
-LD_FILE = $(LD_FILE_EXACT)
-else
-LD_FILE = $(LD_FILE_FALLBACK)
-endif
 # add modules to thumb sources
 THUMB_SOURCE += \
 		$(MIOS32_PATH)/programming_models/traditional/main.c
@@ -92,11 +96,6 @@ endif
 THUMB_SOURCE += $(MIOS32_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c
 endif
 ifeq ($(FAMILY),STM32G0xx)
-ifneq (,$(wildcard $(LD_FILE_EXACT)))
-LD_FILE = $(LD_FILE_EXACT)
-else
-LD_FILE = $(LD_FILE_FALLBACK)
-endif
 CFLAGS    +=    -DGCC_ARMCM0
 # add modules to thumb sources
 THUMB_SOURCE += \
@@ -131,16 +130,21 @@ endif
 # boundary can shift between builds as the bootloader's own code changes, so
 # a cached/stale generated .ld can't be trusted.
 #
-# LD_TEMPLATE reuses whatever $(LD_FILE) was already resolved to above
-# (LD_FILE_EXACT if this PROCESSOR has one, else LD_FILE_FALLBACK) - the same
-# file gen_bsl_boundary.sh reads to derive both TOTAL_FLASH_BYTES and the
-# generated cpu_app.ld/cpu_bsl.ld MEMORY layout. LD_FILE is then overridden to
-# the generated, per-build project_build/cpu_app.ld. PROJECT_DIR is
-# $(CURDIR) - the directory make was invoked from, i.e. the app's own folder -
-# so this generalizes to any project without hardcoding its path.
+# Both paths start from the same per-family template (LD_TEMPLATE_S above);
+# only who resolves it differs:
+#   dynamic  -> gen_bsl_boundary.sh preprocesses it, reads the chip's total
+#               flash out of it, and writes cpu_app.ld / cpu_bsl.ld with the
+#               measured boundary. LD_FILE becomes the generated cpu_app.ld.
+#   static   -> a plain rule below preprocesses it into project_build/cpu.ld,
+#               the whole flash left as one region. That is the path a
+#               project without a bootloader wants (see app_skeleton), and
+#               keeping it is why the template is preprocessed rather than
+#               resolved inside the script only.
+# PROJECT_DIR is $(CURDIR) - the directory make was invoked from, i.e. the
+# app's own folder - so this generalizes to any project without hardcoding it.
 ################################################################################
 ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
-LD_TEMPLATE := $(LD_FILE)
+LD_TEMPLATE := $(LD_TEMPLATE_S)
 # capture the script's exit status and STOP make right here if it failed -
 # $(shell ...) alone silently discards the status, letting the build plow on
 # for minutes and die at link time on the missing generated cpu_app.ld with a
@@ -156,6 +160,24 @@ ifneq ($(GEN_BSL_BOUNDARY_STATUS),0)
 $(error gen_bsl_boundary.sh failed (exit $(GEN_BSL_BOUNDARY_STATUS)) - see its messages above, and bootloader/src/gen_bsl_boundary_build.log for the bootloader sub-make output)
 endif
 LD_FILE = $(CURDIR)/$(PROJECT_OUT)/cpu_app.ld
+else
+# STATIC path: there is still a bootloader, its boundary is just FIXED rather
+# than measured - the historical MIOS32 layout, FLASH_BSL reserved from
+# 0x08000000 and the application starting right after it. The boundary is a
+# single define, ADIOS_LD_BSL_BOUNDARY_K, defaulted per family to the same
+# value the old per-chip scripts carried (10K on G0, 16K on F4) and
+# overridable by a project that reserves more.
+# (Building with NO bootloader at all is a separate, not-yet-implemented
+# switch - see the checklist.)
+# The target is spelled literally rather than through $(PROJECT_OUT): that
+# variable comes from common.mk, included AFTER this file, and a rule's
+# target is fixed when the rule is read - it would resolve to an empty path.
+ADIOS_LD_BSL_BOUNDARY_K ?= $(if $(filter STM32F4xx,$(FAMILY)),16,10)
+LD_CHIP_DEFS += -DADIOS_LD_BSL_BOUNDARY_K=$(ADIOS_LD_BSL_BOUNDARY_K)
+LD_FILE = $(CURDIR)/project_build/cpu.ld
+# the RULE that builds it lives in include/makefile/common.mk, not here: this
+# file is included FIRST, so a target defined at this point would become
+# make's default goal and the build would stop after producing the script.
 endif
 
 THUMB_CPP_SOURCE += $(MIOS32_PATH)/programming_models/traditional/mini_cpp.cpp

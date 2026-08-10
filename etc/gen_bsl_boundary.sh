@@ -144,17 +144,42 @@ if [ ! -f "$LD_TEMPLATE" ]; then
     exit 1
 fi
 
-# --- derive TOTAL_FLASH_BYTES from the template's own MEMORY block - see the
-#     usage comment above. The FLASH_BSL pattern is checked first and is
-#     specific enough (requires the literal "_BSL" right after "FLASH") that
-#     it can never accidentally match the plain "FLASH (rx)" line below it.
-FLASH_BSL_K=$(sed -n -E 's/^[[:space:]]*FLASH_BSL[[:space:]]*\(rx\)[[:space:]]*:.*LENGTH[[:space:]]*=[[:space:]]*([0-9]+)K.*/\1/p' "$LD_TEMPLATE" | head -1)
-FLASH_K=$(sed -n -E 's/^[[:space:]]*FLASH[[:space:]]*\(rx\)[[:space:]]*:.*LENGTH[[:space:]]*=[[:space:]]*([0-9]+)K.*/\1/p' "$LD_TEMPLATE" | head -1)
-if [ -z "$FLASH_BSL_K" ] || [ -z "$FLASH_K" ]; then
-    echo "Could not parse K-suffixed FLASH_BSL/FLASH LENGTH out of $LD_TEMPLATE"
+# --- a per-family template (.ld.S) has to be resolved for THIS chip before
+#     anything below can read it: the linker scripts are no longer one file
+#     per chip, they are one per family plus a table of the only two values
+#     that ever differed (contiguous RAM, total flash). Both candidate keys
+#     are passed - the exact part number and the package-less form - and the
+#     table matches whichever it carries, reproducing the old exact-then-
+#     fallback filename lookup. Everything downstream (the TOTAL_FLASH parse
+#     just below, write_ld) then works on the resolved file unchanged, which
+#     is why the template keeps literal K-suffixed lengths.
+case "$LD_TEMPLATE" in
+    *.ld.S)
+        LD_TEMPLATE_SRC="$LD_TEMPLATE"
+        LD_TEMPLATE="${TMPDIR:-/tmp}/adios_ld_${CHIP}_$$.ld"
+        LD_CHIP_FALLBACK=$(echo "$CHIP" | sed -E 's/^(.{9}).(.)$/\1x\2/')
+        "${MIOS32_GCC_PREFIX:-arm-none-eabi}-gcc" -E -x assembler-with-cpp -P \
+            -I "$(dirname "$LD_TEMPLATE_SRC")" \
+            -DADIOS_LD_CHIP_"$CHIP" -DADIOS_LD_CHIP_"$LD_CHIP_FALLBACK" \
+            "$LD_TEMPLATE_SRC" -o "$LD_TEMPLATE" || {
+            echo "Could not resolve $LD_TEMPLATE_SRC for $CHIP (keys tried: $CHIP, $LD_CHIP_FALLBACK)"
+            exit 1
+        }
+        trap 'rm -f "$LD_TEMPLATE"' EXIT
+        ;;
+esac
+
+# --- the chip's total flash, stated explicitly by the template (see the
+#     _flash_size line in etc/ld/adios_body.ld.inc). Read from one dedicated
+#     line rather than summing the two FLASH region lengths: those are a
+#     LAYOUT, they change with the boundary and their written form can drift,
+#     while the chip's flash size is a fixed fact about the silicon.
+TOTAL_FLASH_K=$(sed -n -E 's/^[[:space:]]*PROVIDE[[:space:]]*\([[:space:]]*_flash_size[[:space:]]*=[[:space:]]*([0-9]+)K.*/\1/p' "$LD_TEMPLATE" | head -1)
+if [ -z "$TOTAL_FLASH_K" ]; then
+    echo "Could not read the chip's total flash from $LD_TEMPLATE (expected a 'PROVIDE ( _flash_size = <n>K ) ;' line)"
     exit 1
 fi
-TOTAL_FLASH=$(( (FLASH_BSL_K + FLASH_K) * 1024 ))
+TOTAL_FLASH=$(( TOTAL_FLASH_K * 1024 ))
 
 # canonicalize to an absolute path for OUR OWN file operations (write_header,
 # log redirection, etc) - a deeply relative BSL_DIR (e.g.

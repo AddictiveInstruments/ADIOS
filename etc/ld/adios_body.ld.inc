@@ -1,27 +1,31 @@
-/* Reference template for STM32F401xD (Flash 384K, RAM 96K contiguous).
-   Auto-generated 2026-08-04 from ST's own STM32CubeIDE MCU database
-   (db/mcu/*.xml, Ram/Flash tags - package-independent, cross-checked
-   against every package variant of this exact die+density with zero
-   mismatches) - see etc/gen_bsl_boundary.sh, consumed as $LD_TEMPLATE.
-   FLASH_BSL/FLASH split below is just the fallback minimum - real
-   projects get this overwritten at build time from the bootloader's
-   actual compiled size. */
+/* ADIOS - common linker-script body, shared by every supported chip.
+ *
+ * Not used directly: included by the per-family templates
+ * (STM32G0xx.ld.S / STM32F4xx.ld.S), which define the three parameters
+ * below for the chip being built, then this file supplies everything else.
+ * The families genuinely share this body - it was verified identical
+ * across all 60 per-chip scripts this replaced (2026-08-10).
+ *
+ * Parameters the includer must define:
+ *   ADIOS_RAM_LEN         contiguous RAM size, K-suffixed (e.g. 36K)
+ *   ADIOS_FLASH_TOTAL_LEN total flash of the chip, K-suffixed
+ *   ADIOS_FLASH_BSL_LEN   bootloader region
+ *   ADIOS_FLASH_APP_LEN   application region (total minus the bootloader)
+ *
+ * There is a bootloader either way - what differs is who fixes the boundary
+ * between the two FLASH regions. On a DYNAMIC-boundary build the two lines
+ * below are placeholders: etc/gen_bsl_boundary.sh rewrites them with the
+ * boundary measured from the bootloader's real compiled size. On a STATIC
+ * build they are already the final layout, the boundary coming from the
+ * project's ADIOS_LD_BSL_BOUNDARY_K.
+ */
 
 /* Memory Spaces Definitions */
 MEMORY
 {
-  RAM (xrw) :     ORIGIN = 0x20000000, LENGTH = 96K
-  /* First flash sector (16K, sector-erase granularity - F4 flash can't be
-     erased at finer resolution than a whole sector, unlike G0xx's uniform
-     2K pages). FLASH_BSL/FLASH origins+lengths are rewritten by
-     etc/gen_bsl_boundary.sh at build time to match the bootloader's real
-     size, rounded up to a whole number of 16K sectors - do not edit by
-     hand, this is just the fallback template. No more FLASH_SECTOR2/3
-     EEPROM-emulation reservation (dropped 2026-08 - module no longer used,
-     any future flash-write need goes through direct LL_FLASH_* calls like
-     tr5x6_rom.c does, not this vestigial StdPeriph-era EEPROM emulation). */
-  FLASH_BSL (rx) : ORIGIN = 0x08000000, LENGTH = 16K
-  FLASH (rx)     : ORIGIN = 0x08004000, LENGTH = 368K
+  RAM (xrw) :     ORIGIN = 0x20000000, LENGTH = ADIOS_RAM_LEN
+  FLASH_BSL (rx) :    ORIGIN = 0x08000000, LENGTH = ADIOS_FLASH_BSL_LEN
+  FLASH (rx) :    ORIGIN = 0x08002800, LENGTH = ADIOS_FLASH_APP_LEN
   FLASHB1 (rx) :  ORIGIN = 0x00000000, LENGTH = 0
   EXTMEMB0 (rx) : ORIGIN = 0x00000000, LENGTH = 0
   EXTMEMB1 (rx) : ORIGIN = 0x00000000, LENGTH = 0
@@ -30,28 +34,35 @@ MEMORY
 }
 
 /* exposes the RAM region size to C code (MIOS32_SYS_RAMSizeGet()) without a
-   per-processor #elif chain - STM32 has no hardware register for this,
-   unlike FLASH size (electronic signature) */
+   per-chip #if - see mios32_sys.c */
 PROVIDE ( _ram_size = LENGTH(RAM) ) ;
 
-/* higher address of the user mode stack */
-_estack = 0x20018000; /* end of 96K contiguous RAM */
+/* total flash of this chip, independent of how it is currently split.
+   etc/gen_bsl_boundary.sh reads THIS line to size the application region it
+   generates - deliberately explicit, rather than making the script add up
+   two region lengths whose written form could drift. */
+PROVIDE ( _flash_size = ADIOS_FLASH_TOTAL_LEN ) ;
 
+/* top of the user-mode stack - DERIVED from the RAM size rather than typed
+   in per chip. The hand-maintained form silently disagreed with the region
+   more than once (STM32F405RG/F407VG declared 192K of RAM - counting the
+   64K CCM, which is NOT contiguous, it lives at 0x10000000 - while stacking
+   at the 128K mark; ST's own db/mcu says 128K). Deriving it makes that
+   class of mismatch impossible. */
+_estack = 0x20000000 + ADIOS_RAM_LEN;
 
-/* default stack sizes. 
-
-These are used by the startup in order to allocate stacks for the different modes.
-
-Note: FreeRTOS gives each task an own stack, the default stack sizes used by the
-"programming model" can be changed with MIOS32_MINIMAL_STACK_SIZE
-*/
-
-__Stack_Size = 128 ;
-
+/* Reserved stack region. __Stack_Init is the BOTTOM of it, and it is a live
+   symbol: the bare-metal canary (MIOS32_CORE_USE_CANARI, see
+   programming_models/traditional/main.c) fills from there up to the current
+   stack pointer, then checks that first word for corruption.
+   Uniform across families since 2026-08-10 - STM32F4xx used to say 128,
+   which would have placed __Stack_Init above the stack pointer at startup:
+   the fill loop would do nothing and the check would report an immediate,
+   bogus stack overflow. Never seen only because bare-metal has not yet run
+   on real F4 hardware. */
+__Stack_Size = 0x1000 ;
 PROVIDE ( _Stack_Size = __Stack_Size ) ;
-
 __Stack_Init = _estack  - __Stack_Size ;
-
 /*"PROVIDE" allows to easily override these values from an object file or the commmand line.*/
 PROVIDE ( _Stack_Init = __Stack_Init ) ;
 
@@ -67,70 +78,6 @@ _Minimum_Stack_Size = 0x100 ;
 /*this allows to compile the ST lib in "non-debug" mode*/
 
 
-/* Peripheral and SRAM base address in the alias region */
-PERIPH_BB_BASE        = 0x42000000;
-SRAM_BB_BASE          = 0x22000000;
-
-/* Peripheral and SRAM base address in the bit-band region */
-SRAM_BASE             = 0x20000000;
-PERIPH_BASE           = 0x40000000;
-
-/* Flash registers base address */
-PROVIDE ( FLASH_BASE            = 0x40022000);
-/* Flash Option Bytes base address */
-PROVIDE ( OB_BASE               = 0x1FFFF800);
-
-/* Peripheral memory map */
-APB1PERIPH_BASE      = PERIPH_BASE  ;
-APB2PERIPH_BASE      = (PERIPH_BASE + 0x10000) ;
-AHBPERIPH_BASE       = (PERIPH_BASE + 0x20000) ;
-
-PROVIDE ( TIM2            = (APB1PERIPH_BASE + 0x0000) ) ;
-PROVIDE ( TIM3            = (APB1PERIPH_BASE + 0x0400) ) ;
-PROVIDE ( TIM4            = (APB1PERIPH_BASE + 0x0800) ) ;
-PROVIDE ( RTC             = (APB1PERIPH_BASE + 0x2800) ) ;
-PROVIDE ( WWDG            = (APB1PERIPH_BASE + 0x2C00) ) ;
-PROVIDE ( IWDG            = (APB1PERIPH_BASE + 0x3000) ) ;
-PROVIDE ( SPI2            = (APB1PERIPH_BASE + 0x3800) ) ;
-PROVIDE ( USART2          = (APB1PERIPH_BASE + 0x4400) ) ;
-PROVIDE ( USART3          = (APB1PERIPH_BASE + 0x4800) ) ;
-PROVIDE ( I2C1            = (APB1PERIPH_BASE + 0x5400) ) ;
-PROVIDE ( I2C2            = (APB1PERIPH_BASE + 0x5800) ) ;
-PROVIDE ( CAN             = (APB1PERIPH_BASE + 0x6400) ) ;
-PROVIDE ( BKP             = (APB1PERIPH_BASE + 0x6C00) ) ;
-PROVIDE ( PWR             = (APB1PERIPH_BASE + 0x7000) ) ;
-
-PROVIDE ( AFIO            = (APB2PERIPH_BASE + 0x0000) ) ;
-PROVIDE ( EXTI            = (APB2PERIPH_BASE + 0x0400) ) ;
-PROVIDE ( GPIOA           = (APB2PERIPH_BASE + 0x0800) ) ;
-PROVIDE ( GPIOB           = (APB2PERIPH_BASE + 0x0C00) ) ;
-PROVIDE ( GPIOC           = (APB2PERIPH_BASE + 0x1000) ) ;
-PROVIDE ( GPIOD           = (APB2PERIPH_BASE + 0x1400) ) ;
-PROVIDE ( GPIOE           = (APB2PERIPH_BASE + 0x1800) ) ;
-PROVIDE ( ADC1            = (APB2PERIPH_BASE + 0x2400) ) ;
-PROVIDE ( ADC2            = (APB2PERIPH_BASE + 0x2800) ) ;
-PROVIDE ( TIM1            = (APB2PERIPH_BASE + 0x2C00) ) ;
-PROVIDE ( SPI1            = (APB2PERIPH_BASE + 0x3000) ) ;
-PROVIDE ( USART1          = (APB2PERIPH_BASE + 0x3800) ) ;
-
-PROVIDE ( DMA             = (AHBPERIPH_BASE + 0x0000) ) ;
-PROVIDE ( DMA_Channel1    = (AHBPERIPH_BASE + 0x0008) ) ;
-PROVIDE ( DMA_Channel2    = (AHBPERIPH_BASE + 0x001C) ) ;
-PROVIDE ( DMA_Channel3    = (AHBPERIPH_BASE + 0x0030) ) ;
-PROVIDE ( DMA_Channel4    = (AHBPERIPH_BASE + 0x0044) ) ;
-PROVIDE ( DMA_Channel5    = (AHBPERIPH_BASE + 0x0058) ) ;
-PROVIDE ( DMA_Channel6    = (AHBPERIPH_BASE + 0x006C) ) ;
-PROVIDE ( DMA_Channel7    = (AHBPERIPH_BASE + 0x0080) ) ;
-PROVIDE ( RCC             = (AHBPERIPH_BASE + 0x1000) ) ;
-
-/* System Control Space memory map */
-SCS_BASE              = 0xE000E000;
-
-PROVIDE ( SysTick         = (SCS_BASE + 0x0010) ) ;
-PROVIDE ( NVIC            = (SCS_BASE + 0x0100) ) ;
-PROVIDE ( SCB             = (SCS_BASE + 0x0D00) ) ;
-
-
 /* Sections Definitions */
 
 SECTIONS
@@ -142,7 +89,7 @@ SECTIONS
         KEEP(*(.mios32_bsl))
 	. = ALIGN(4);
     } >FLASH_BSL
-
+ 
     /* for Cortex devices, the beginning of the startup code is stored in the .isr_vector section, which goes to FLASH */
     .isr_vector :
     {
