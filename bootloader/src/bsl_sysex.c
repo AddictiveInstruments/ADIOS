@@ -224,6 +224,18 @@ s32 BSL_SYSEX_Init(u32 mode)
 			}
 		}
 	}
+
+	// adopt the instrument's real SysEx device ID from the captured block.
+	// MIOS32_MIDI_Init() ran BEFORE this function (see main.c) and read the
+	// ID from MIOS32_SYS_ADDR_DEVICE_ID - which, in this build, points at the
+	// NEW boundary's info block position. On a boundary MIGRATION nothing is
+	// there yet (the real block still sits at the OLD boundary, found by the
+	// scan above), so the ID silently defaulted to 0 and MIOS Studio - still
+	// addressing the instrument's own ID - could no longer reach the updater:
+	// the second stage of the one-file update never started (found on the
+	// first real migration, 2026-08-10).
+	if( info_found && info_block[0xd0] == 0x42 )
+		MIOS32_MIDI_DeviceIDSet(info_block[0xd1] & 0x7f);
 #endif
 
 	return 0; // no error

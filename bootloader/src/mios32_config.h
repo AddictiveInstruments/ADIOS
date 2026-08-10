@@ -146,14 +146,15 @@
 // mios32_uart.c.
 #define MIOS32_UART0_TX_INVERTED
 # define MIOS32_SYS_DONT_INIT_RTC
-// debug-message support stripped (2026-08-09, every BSL mechanism now
-// hardware-validated): the vsprintf machinery alone pushed the new-
-// generation BSL over its 10240-byte page (10408 bytes), bouncing the
-// boundary to 0x3000 - errors still reach MIOS Studio as DISACK codes
-// TEMPORARILY re-enabled 2026-08-09 to exercise the boundary-migration path
-// (bigger BSL -> boundary 0x3000): tests the updater's old-info-block scan,
-// its relocation to the new position, and the app re-link. Re-strip after.
-//# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+// debug-message support stripped (production default): the vsprintf
+// machinery alone pushes the new-generation BSL over its 10240-byte page
+// (10456 bytes with it), bouncing the boundary from 0x2800 to 0x3000 -
+// errors still reach MIOS Studio as DISACK codes.
+// Commenting this line out is therefore also how the boundary-MIGRATION
+// path gets exercised on real hardware (bigger BSL -> 0x3000): it tests the
+// updater's old-info-block scan, its relocation to the new boundary, and
+// the app re-link. Always come back to the stripped state afterwards.
+# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 #define MIOS32_BOARD_J15_LED_NUM 1
 
 // reserved flash size for the bootloader itself.
