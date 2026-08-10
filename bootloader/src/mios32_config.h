@@ -133,30 +133,18 @@
 
 
 #if defined(MIOS32_FAMILY_STM32G0xx)
-// MIDI wiring of the board this bootloader is built for. NOTE (2026-08-10):
-// still hardcoded to the 5x6_505's arrangement - UART2 (USART3, PB8/PB9)
-// behind an inverting 3V3->5V transistor stage, which is that instrument's
-// physical MIDI connector. It is NOT valid for other G0 boards: a G030K6,
-// for one, has no USART3 at all, so this bootloader cannot talk to it (the
-// new guard in mios32_uart.c now says so at compile time instead of
-// producing a silently mute build). The fix is to relay these three facts
-// from the project's own mios32_config.h through etc/gen_bsl_boundary.sh,
-// the way MIOS32_BSL_HOLD_PORT/PIN_OVERRIDE already are - pending design
-// review with the user.
-// debug messages default to USB0 (mios32_midi.h) which is disabled on this
-// family/project - route them to the DIN port instead so they're visible.
-#define MIOS32_MIDI_DEFAULT_PORT DIN2
-#define MIOS32_MIDI_DEBUG_PORT DIN2
-#define MIOS32_USE_UART2
-#define MIOS32_USE_DIN_MIDI
+// NO MIDI wiring here on purpose. Which port this bootloader talks on, its
+// TX polarity and its pin drive mode belong to the BOARD, not to the
+// bootloader: it shares one physical connector with its application. The
+// project declares them once in its own mios32_config.h, inside a
+// BSL_RELAY_BEGIN/END block, and etc/gen_bsl_boundary.sh copies them into
+// the generated header included below (see apps/Bruno/5x6_505 for an
+// example). This file used to hardcode the 5x6_505's arrangement, which
+// made it describe exactly one instrument - and silently produced a mute
+// bootloader on any board wired differently, or one asking for a peripheral
+// its chip doesn't have.
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
-// UART2 (USART3) TX runs through an external 3V3->5V transistor stage on
-// this board that inverts the signal - see the module-level comment in
-// mios32_uart.c - and that stage must be driven, hence push-pull
-// (mios32_uart.h defaults TX_OD to 1 on every port except UART0).
-#define MIOS32_UART2_TX_INVERTED
-#define MIOS32_UART2_TX_OD 0
 # define MIOS32_SYS_DONT_INIT_RTC
 // debug-message support stripped (production default): the vsprintf
 // machinery alone pushes the new-generation BSL over its 10240-byte page
@@ -176,6 +164,13 @@
 #if __has_include("mios32_bsl_boundary.h")
 #include "mios32_bsl_boundary.h"
 #endif
+// the relayed block above is what gives this bootloader a MIDI transport at
+// all - without it the build would succeed and produce a core that never
+// answers, the exact failure this whole mechanism exists to prevent
+#ifndef MIOS32_USE_DIN_MIDI
+# error "No board MIDI wiring reached this bootloader build: add a BSL_RELAY_BEGIN/END block to your project's mios32_config.h declaring the port it must talk on (see apps/Bruno/5x6_505/mios32_config.h)."
+#endif
+
 #ifndef MIOS32_APP_FLASH_START_ADDR
 #define MIOS32_APP_FLASH_START_ADDR 0x2800
 #endif

@@ -157,9 +157,12 @@ $(DYNAMIC_BSL_APP_NAME)_app_only.hex: project_build/$(PROJECT).elf
 #    automatically (see bootloader/updater/Makefile). Built by the updater's
 #    own Makefile for $(PROCESSOR); MIOS32_PATH is passed relative to THAT
 #    directory (always 2 levels deep), not inherited - an app-relative or
-#    CubeIDE-env value would resolve wrongly from there.
+#    CubeIDE-env value would resolve wrongly from there. BSL_RELAY_SRC points
+#    the updater build back at THIS app's mios32_config.h: the board's MIDI
+#    wiring lives there (BSL_RELAY block), and the updater must come up on
+#    the same connector as the bootloader it replaces.
 $(DYNAMIC_BSL_APP_NAME)_bsl_updater.hex: project_build/$(PROJECT).elf
-	+$(MAKE) -C $(MIOS32_PATH)/bootloader/updater MIOS32_PATH=../.. PROCESSOR=$(PROCESSOR)
+	+$(MAKE) -C $(MIOS32_PATH)/bootloader/updater MIOS32_PATH=../.. PROCESSOR=$(PROCESSOR) BSL_RELAY_SRC=$(CURDIR)
 	cp $(MIOS32_PATH)/bootloader/updater/updater_$(PROCESSOR).hex $@
 endif
 

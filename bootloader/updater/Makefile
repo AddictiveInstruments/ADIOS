@@ -107,7 +107,13 @@ else
 LD_TEMPLATE = $(LD_TEMPLATE_FALLBACK)
 endif
 
-GEN_BSL_BOUNDARY_STATUS := $(shell BSL_BOUNDARY_MODE=updater MIOS32_PATH=$(MIOS32_PATH) $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
+# BSL_RELAY_SRC (passed by the app's common.mk) names the directory whose
+# mios32_config.h carries this board's MIDI wiring - THIS directory holds
+# none, deliberately: the updater talks on the same connector as the
+# bootloader it installs, which is a fact about the instrument, not about
+# the tool. Without it the build stops on the "no board MIDI wiring" guard
+# in mios32_config.h rather than producing a tool that never answers.
+GEN_BSL_BOUNDARY_STATUS := $(shell BSL_BOUNDARY_MODE=updater MIOS32_PATH=$(MIOS32_PATH) BSL_RELAY_SRC=$(BSL_RELAY_SRC) $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
 ifneq ($(GEN_BSL_BOUNDARY_STATUS),0)
 $(error gen_bsl_boundary.sh failed (exit $(GEN_BSL_BOUNDARY_STATUS)) - see its messages above)
 endif

@@ -133,23 +133,13 @@
 
 
 #if defined(MIOS32_FAMILY_STM32G0xx)
-// same board-specific MIDI wiring as the bootloader this tool installs -
-// see the note in ../src/mios32_config.h: hardcoded to the 5x6_505's
-// UART2 (USART3, inverting output stage) until it is relayed per project.
-// debug messages default to USB0 (mios32_midi.h) which is disabled on this
-// family/project - route them to the DIN port instead so they're visible.
-#define MIOS32_MIDI_DEFAULT_PORT DIN2
-#define MIOS32_MIDI_DEBUG_PORT DIN2
-#define MIOS32_USE_UART2
-#define MIOS32_USE_DIN_MIDI
+// NO MIDI wiring here, same rule as the bootloader this tool installs (see
+// ../src/mios32_config.h): the board's port, TX polarity and pin drive mode
+// arrive from the project's BSL_RELAY block through the generated header
+// included below. The updater must obviously talk on the same connector as
+// the bootloader it replaces.
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
-// UART2 (USART3) TX runs through an external 3V3->5V transistor stage on
-// this board that inverts the signal - see the module-level comment in
-// mios32_uart.c - and that stage must be driven, hence push-pull
-// (mios32_uart.h defaults TX_OD to 1 on every port except UART0).
-#define MIOS32_UART2_TX_INVERTED
-#define MIOS32_UART2_TX_OD 0
 # define MIOS32_SYS_DONT_INIT_RTC
 // debug-message support stripped: the updater is entirely driven by MIOS
 // Studio (errors travel as DISACK codes), and its 10K window on 32K parts
@@ -163,6 +153,11 @@
 // 0x2800 fallback below only applies before the first run of that script.
 #if __has_include("mios32_bsl_boundary.h")
 #include "mios32_bsl_boundary.h"
+#endif
+// same guard as the bootloader: without the project's relayed wiring this
+// tool would build fine and never answer MIOS Studio
+#ifndef MIOS32_USE_DIN_MIDI
+# error "No board MIDI wiring reached this updater build: add a BSL_RELAY_BEGIN/END block to your project's mios32_config.h declaring the port it must talk on (see apps/Bruno/5x6_505/mios32_config.h)."
 #endif
 #ifndef MIOS32_APP_FLASH_START_ADDR
 #define MIOS32_APP_FLASH_START_ADDR 0x2800

@@ -31,11 +31,8 @@
 #define TR5X6_VERSION      		"b0 . 002 (beta)"
 #endif
 //#define REDUCED_APP_LCD
-// DIN2 = UART2 = USART3 = the instrument's physical MIDI OUT/IN (see the
-// UART section further below) - that's the connector the outside world,
-// and MIOS Studio, actually talk to. DIN0 is the internal host link.
-#define MIOS32_MIDI_DEFAULT_PORT DIN2
-#define MIOS32_MIDI_DEBUG_PORT DIN2
+// (MIOS32_MIDI_DEFAULT_PORT / _DEBUG_PORT are set in the BSL_RELAY block of
+// the UART section below, with the rest of this board's MIDI wiring)
 // disable code modules
 // mios32_spi.c - SPI0 drives the ROM (tr5x6_rom.c), SPI1 drives the TFT
 // (5x6_tft.c). Both use MIOS32_SPI_CS_PinSet(spi, value) for chip select.
@@ -129,13 +126,21 @@
 //   UART2 = USART3, PB8 out - the instrument's physical MIDI OUT, where
 //           everything is merged, and PB9 in, wired in parallel with the
 //           host's own MIDI input                          -> port DIN2
+// Only the second one is the bootloader's business - it is the connector
+// the outside world (and MIOS Studio) talks to - so it lives in the relayed
+// block below; the host link is this application's alone.
 #define MIOS32_USE_UART0
-#define MIOS32_USE_UART2
+
+// BSL_RELAY_BEGIN - copied verbatim into the bootloader and updater builds
+// by etc/gen_bsl_boundary.sh. They must talk on the same physical connector
+// as this application, so its wiring is declared here once and shared,
+// rather than duplicated (and drifting) in bootloader/src/mios32_config.h.
 #define MIOS32_USE_DIN_MIDI
-// UART2 (USART3) TX runs through an external 3V3->5V transistor stage on
-// this board that inverts the signal - every port defaults to normal
-// polarity in the common driver, this is the per-project override (see
-// the module-level comment in mios32_uart.c).
+#define MIOS32_USE_UART2
+#define MIOS32_MIDI_DEFAULT_PORT DIN2
+#define MIOS32_MIDI_DEBUG_PORT DIN2
+// UART2 (USART3) TX runs through an external 3V3->5V transistor stage that
+// inverts the signal; every port defaults to normal polarity in the driver.
 #define MIOS32_UART2_TX_INVERTED
 // ...and that stage must be DRIVEN, so push-pull. mios32_uart.h defaults
 // TX_OD to 0 for UART0 but to 1 (open drain) for every other port - an
@@ -144,6 +149,7 @@
 // UART2: the pin silently became open drain, nothing pulled it high, and
 // the instrument went mute while the firmware kept queueing bytes happily.
 #define MIOS32_UART2_TX_OD 0
+// BSL_RELAY_END
 
 #endif
 

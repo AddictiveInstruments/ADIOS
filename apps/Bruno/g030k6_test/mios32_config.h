@@ -286,8 +286,18 @@
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 #define MIOS32_BOARD_J15_LED_NUM 1
 
-#define MIOS32_USE_UART0
+// BSL_RELAY_BEGIN - copied verbatim into the bootloader and updater builds
+// by etc/gen_bsl_boundary.sh, so all three talk on the same connector.
+// UART0 = USART1 on PB6 (TX) / PB7 (RX): the only possible choice on a
+// G030K6, since MIOS32_UARTn is USART(n+1) and this chip has USART1/USART2
+// only - no USART3, which is exactly what the old numbering silently asked
+// for here. Plain MIDI output stage: no TX inversion, push-pull drive.
 #define MIOS32_USE_DIN_MIDI
+#define MIOS32_USE_UART0
+#define MIOS32_MIDI_DEFAULT_PORT DIN0
+#define MIOS32_MIDI_DEBUG_PORT DIN0
+#define MIOS32_UART0_TX_OD 0
+// BSL_RELAY_END
 
 #endif
 
