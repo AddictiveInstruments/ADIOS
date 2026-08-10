@@ -11,9 +11,20 @@
 //! chip tier (verified against the CMSIS device-tier macros - STM32G070xx
 //! etc, one of which stm32g0xx.h's own dispatcher requires be defined - not
 //! the exact MIOS32_PROCESSOR_STM32G070CB part number, so every flash/pin
-//! variant of the same silicon is covered automatically):
-//!   - 2-USART (G030/G050): UART1/UART2 only (USART1/USART2).
-//!   - 2-USART+LPUART1 (G031/G041/G051/G061): UART1/UART2, plus UART6
+//! variant of the same silicon is covered automatically).
+//!
+//! Port numbering follows ST's own peripheral numbering: MIOS32_UARTn is
+//! USART(n+1) - UART0=USART1, UART1=USART2, ... UART5=USART6 - then
+//! UART6/UART7 for LPUART1/LPUART2. Until 2026-08-10 the mapping was
+//! inherited from the MBHP core's connector wiring instead (UART0 was
+//! USART3), which made every project config read like a puzzle and silently
+//! dropped MIDI on the 2-USART chips, where USART3 doesn't exist. Projects
+//! written against the old numbering must renumber their MIOS32_USE_UARTx
+//! and any pin/peripheral overrides.
+//!
+//! Coverage by chip tier:
+//!   - 2-USART (G030/G050): UART0/UART1 only (USART1/USART2).
+//!   - 2-USART+LPUART1 (G031/G041/G051/G061): UART0/UART1, plus UART6
 //!     (LPUART1) on its own independent vector (LPUART1_IRQn) - not shared
 //!     with anything.
 //!   - 4-USART (G070): UART0..UART3 (USART1..USART4); USART3+4 share one
@@ -27,10 +38,10 @@
 //!     name as the 4-USART tier above, hence the tier-conditional
 //!     MIOS32_UART_SHARED_IRQ_CHANNEL/IRQHANDLER_FUNC macros below.
 //!   - 6-USART+2xLPUART (G0B1/G0C1): UART0..UART5 like G0B0, plus UART6
-//!     (LPUART1, sharing USART3_4_5_6_LPUART1_IRQn with UART0/3/4/5) and
-//!     UART7 (LPUART2) - which, unusually, shares UART2's own vector
+//!     (LPUART1, sharing USART3_4_5_6_LPUART1_IRQn with UART2/3/4/5) and
+//!     UART7 (LPUART2) - which, unusually, shares UART1's own vector
 //!     instead (USART2_LPUART2_IRQn) - USART2 is NOT independent on this
-//!     one tier, unlike every other G0 tier. See MIOS32_UART2_IRQ_CHANNEL/
+//!     one tier, unlike every other G0 tier. See MIOS32_UART1_IRQ_CHANNEL/
 //!     IRQHANDLER_FUNC below, which are tier-conditional for this reason.
 //!
 //! LPUART registers alias the same USART_TypeDef layout (ISR/RDR/TDR/CR1 -
@@ -50,18 +61,18 @@
 //! peripheral (e.g. STM32G050K8):
 //! \code
 //!   #define MIOS32_UART0_TX_PORT     GPIOB
-//!   #define MIOS32_UART0_TX_PIN      LL_GPIO_PIN_8
-//!   #define MIOS32_UART0_TX_AF       LL_GPIO_AF_4
+//!   #define MIOS32_UART0_TX_PIN      LL_GPIO_PIN_6
+//!   #define MIOS32_UART0_TX_AF       LL_GPIO_AF_0
 //!   #define MIOS32_UART0_RX_PORT     GPIOB
-//!   #define MIOS32_UART0_RX_PIN      LL_GPIO_PIN_9
-//!   #define MIOS32_UART0_RX_AF       LL_GPIO_AF_4
-//!   #define MIOS32_UART0             USART3
-//!   #define MIOS32_UART0_IRQ_CHANNEL USART3_4_IRQn
-//!   #define MIOS32_UART0_IRQHANDLER_FUNC void USART3_4_IRQHandler(void)
+//!   #define MIOS32_UART0_RX_PIN      LL_GPIO_PIN_7
+//!   #define MIOS32_UART0_RX_AF       LL_GPIO_AF_0
+//!   #define MIOS32_UART0             USART1
+//!   #define MIOS32_UART0_IRQ_CHANNEL USART1_IRQn
+//!   #define MIOS32_UART0_IRQHANDLER_FUNC void USART1_IRQHandler(void)
 //!   #define MIOS32_UART0_RESET_FUNC  { ... }
 //!   #define MIOS32_UART0_CLOCK_FUNC  { ... }
 //! \endcode
-//! (same set of defines exists for MIOS32_UART1/UART2/UART3)
+//! (same set of defines exists for MIOS32_UART1..UART7)
 //!
 //! If your board runs the TX pin through an external level-shifting stage
 //! that inverts the signal (e.g. a 3V3->5V transistor for a MIDI DIN output),
@@ -69,7 +80,7 @@
 //! normal (non-inverted) polarity, this is a per-project hardware fact, not
 //! a peripheral default, so it's opt-in only:
 //! \code
-//!   #define MIOS32_UART0_TX_INVERTED
+//!   #define MIOS32_UART2_TX_INVERTED
 //! \endcode
 //!
 //! \{
@@ -88,23 +99,9 @@
 
 #include <mios32.h>
 
-// auto-derive the master switch from any individual port actually wanted -
-// no need for the project to separately set MIOS32_USE_UART on top of
-// MIOS32_USE_UARTx. Safe to do locally in this .c file only because nothing
-// outside mios32_uart.c ever checks the bare MIOS32_USE_UART macro
-// (verified) - unlike MIOS32_USE_SPI, which programming_models/traditional/
-// main.c also checks directly, so that one is derived from the shared
-// header (mios32_spi.h) instead, not locally in mios32_spi.c.
-#if !defined(MIOS32_USE_UART) && (defined(MIOS32_USE_UART0) || defined(MIOS32_USE_UART1) || defined(MIOS32_USE_UART2) || defined(MIOS32_USE_UART3) || defined(MIOS32_USE_UART4) || defined(MIOS32_USE_UART5) || defined(MIOS32_USE_UART6) || defined(MIOS32_USE_UART7))
-#define MIOS32_USE_UART
-#endif
+// USART1 (UART0) and USART2 (UART1) exist on EVERY G0 chip - never gated.
 
-// this module can be optionally enabled in a local mios32_config.h file (included from mios32.h)
-#if defined(MIOS32_USE_UART)
-
-// USART1 (UART1) and USART2 (UART2) exist on EVERY G0 chip - never gated.
-
-// USART3 (UART0) and USART4 (UART3) exist on the 4-USART tier (G070/G071/
+// USART3 (UART2) and USART4 (UART3) exist on the 4-USART tier (G070/G071/
 // G081) and the 6-USART tier (G0B0/G0B1/G0C1) - checked via the CMSIS
 // device-tier macro (defined by stm32g0xx.h's own dispatcher once
 // MIOS32_PROCESSOR_xxx has selected a device header) rather than the exact
@@ -113,8 +110,8 @@
 // (G071/G081, G0B1/G0C1) are included here too - their shared vector name
 // differs (see MIOS32_UART_SHARED_IRQ_CHANNEL below, which is tier-
 // conditional for exactly this reason) but is now fully resolved.
-#if defined(MIOS32_USE_UART0) && !(defined(STM32G070xx) || defined(STM32G0B0xx) || defined(STM32G071xx) || defined(STM32G081xx) || defined(STM32G0B1xx) || defined(STM32G0C1xx))
-#undef MIOS32_USE_UART0
+#if defined(MIOS32_USE_UART2) && !(defined(STM32G070xx) || defined(STM32G0B0xx) || defined(STM32G071xx) || defined(STM32G081xx) || defined(STM32G0B1xx) || defined(STM32G0C1xx))
+#undef MIOS32_USE_UART2
 #endif
 #if defined(MIOS32_USE_UART3) && !(defined(STM32G070xx) || defined(STM32G0B0xx) || defined(STM32G071xx) || defined(STM32G081xx) || defined(STM32G0B1xx) || defined(STM32G0C1xx))
 #undef MIOS32_USE_UART3
@@ -140,6 +137,35 @@
 #undef MIOS32_USE_UART7
 #endif
 
+// auto-derive the master switch from any individual port actually wanted -
+// no need for the project to separately set MIOS32_USE_UART on top of
+// MIOS32_USE_UARTx. Safe to do locally in this .c file only because nothing
+// outside mios32_uart.c ever checks the bare MIOS32_USE_UART macro
+// (verified) - unlike MIOS32_USE_SPI, which programming_models/traditional/
+// main.c also checks directly, so that one is derived from the shared
+// header (mios32_spi.h) instead, not locally in mios32_spi.c.
+// Derived AFTER the tier guards above, deliberately: a port the project
+// asked for may have just been dropped because this chip doesn't have it,
+// and the master switch must reflect what actually survived - otherwise the
+// whole module would compile its buffers and Init() for zero usable ports.
+#if !defined(MIOS32_USE_UART) && (defined(MIOS32_USE_UART0) || defined(MIOS32_USE_UART1) || defined(MIOS32_USE_UART2) || defined(MIOS32_USE_UART3) || defined(MIOS32_USE_UART4) || defined(MIOS32_USE_UART5) || defined(MIOS32_USE_UART6) || defined(MIOS32_USE_UART7))
+#define MIOS32_USE_UART
+#endif
+
+// ...and if nothing survived while a UART-based transport was requested,
+// say so loudly. Silence is the wrong answer here: the build would succeed,
+// MIOS32_UART_Init() would drive nothing, and the symptom on the bench is a
+// board that simply never answers - diagnosed the hard way on a G030K6,
+// whose config asked for UART0 back when that meant USART3, a peripheral
+// that chip doesn't have.
+#if defined(MIOS32_USE_DIN_MIDI) && !defined(MIOS32_USE_UART)
+# error "MIOS32_USE_DIN_MIDI is enabled, but no MIOS32_USE_UARTx port survives on this chip - see the tier table at the top of this file and pick a port this device actually has (MIOS32_UARTn is USART(n+1))."
+#endif
+
+// this module can be optionally enabled in a local mios32_config.h file (included from mios32.h)
+#if defined(MIOS32_USE_UART)
+
+
 // Tier flag: does this chip's LPUART1 (UART6) share a vector with the
 // USART3+ group below (MIOS32_UART_SHARED_IRQ_CHANNEL) instead of having
 // its own independent LPUART1_IRQn? True on the 4-USART+LPUART1 and
@@ -151,7 +177,7 @@
 #endif
 
 // Tier flag: does this chip have a second LPUART (UART7), which always
-// shares USART2's (UART2's) own vector rather than USART2 being
+// shares USART2's (UART1's) own vector rather than USART2 being
 // independent? True only on the 6-USART+2xLPUART tier.
 #if defined(STM32G0B1xx) || defined(STM32G0C1xx)
 #define MIOS32_G0_LPUART2_TIER 1
@@ -189,96 +215,50 @@
 // are actually enabled via MIOS32_USE_UARTx, same pattern as mios32_spi.c
 #define MIOS32_UART_MAX_PORTS 8
 
-// UART0 (USART3 peripheral) - see MIOS32_USE_UART0 force-undef above (not
-// available on the 2-USART tiers). Wrapped in #if defined(MIOS32_USE_UART0)
-// like every other port block below (UART2..UART7) - unlike UART1 right
-// after it, USART3 does NOT exist on every G0 chip, so leaving this
-// unguarded would define MIOS32_UART0 (-> bare "USART3") even on chips
-// where that identifier isn't declared by CMSIS at all - harmless today
-// only because every actual USE of MIOS32_UART0 elsewhere already re-checks
-// MIOS32_USE_UART0 itself, but a latent trap for any future code that
-// doesn't.
+// UART0 (USART1 peripheral) - exists on EVERY G0 tier, never force-undef'd,
+// so this #if is purely for structural symmetry with every other port block
+// (not strictly required, but keeps "block == #if defined(MIOS32_USE_UARTx)"
+// a reliable invariant everywhere in this file).
 #if defined(MIOS32_USE_UART0)
 #ifndef MIOS32_UART0_TX_PORT
 #define MIOS32_UART0_TX_PORT     GPIOB
 #endif
 #ifndef MIOS32_UART0_TX_PIN
-#define MIOS32_UART0_TX_PIN      LL_GPIO_PIN_8
+#define MIOS32_UART0_TX_PIN      LL_GPIO_PIN_6
 #endif
 #ifndef MIOS32_UART0_TX_AF
-#define MIOS32_UART0_TX_AF       LL_GPIO_AF_4
+#define MIOS32_UART0_TX_AF       LL_GPIO_AF_0
 #endif
 #ifndef MIOS32_UART0_RX_PORT
 #define MIOS32_UART0_RX_PORT     GPIOB
 #endif
 #ifndef MIOS32_UART0_RX_PIN
-#define MIOS32_UART0_RX_PIN      LL_GPIO_PIN_9
+#define MIOS32_UART0_RX_PIN      LL_GPIO_PIN_7
 #endif
 #ifndef MIOS32_UART0_RX_AF
-#define MIOS32_UART0_RX_AF       LL_GPIO_AF_4
+#define MIOS32_UART0_RX_AF       LL_GPIO_AF_0
 #endif
 #ifndef MIOS32_UART0
-#define MIOS32_UART0             USART3
+#define MIOS32_UART0             USART1
 #endif
 #ifndef MIOS32_UART0_IRQ_CHANNEL
-#define MIOS32_UART0_IRQ_CHANNEL MIOS32_UART_SHARED_IRQ_CHANNEL
+#define MIOS32_UART0_IRQ_CHANNEL USART1_IRQn
 #endif
 #ifndef MIOS32_UART0_IRQHANDLER_FUNC
-#define MIOS32_UART0_IRQHANDLER_FUNC MIOS32_UART_SHARED_IRQHANDLER_FUNC
+#define MIOS32_UART0_IRQHANDLER_FUNC void USART1_IRQHandler(void)
 #endif
 #ifndef MIOS32_UART0_RESET_FUNC
-#define MIOS32_UART0_RESET_FUNC  { LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_USART3); LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_USART3); }
+#define MIOS32_UART0_RESET_FUNC  { LL_APB2_GRP1_ForceReset(LL_APB2_GRP1_PERIPH_USART1); LL_APB2_GRP1_ReleaseReset(LL_APB2_GRP1_PERIPH_USART1); }
 #endif
 #ifndef MIOS32_UART0_CLOCK_FUNC
-#define MIOS32_UART0_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART3); LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOB); }
+#define MIOS32_UART0_CLOCK_FUNC  { LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1); LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOB); }
 #endif
-// #define MIOS32_UART0_CLOCK_SOURCE <LL_RCC_USARTx_CLKSOURCE_...>  // not defined by default
-#endif
-
-// UART1 (USART1 peripheral) - exists on EVERY G0 tier, never force-undef'd,
-// so this #if is purely for structural symmetry with every other port block
-// (not strictly required, but keeps "block == #if defined(MIOS32_USE_UARTx)"
-// a reliable invariant everywhere in this file).
-#if defined(MIOS32_USE_UART1)
-#ifndef MIOS32_UART1_TX_PORT
-#define MIOS32_UART1_TX_PORT     GPIOB
-#endif
-#ifndef MIOS32_UART1_TX_PIN
-#define MIOS32_UART1_TX_PIN      LL_GPIO_PIN_6
-#endif
-#ifndef MIOS32_UART1_TX_AF
-#define MIOS32_UART1_TX_AF       LL_GPIO_AF_0
-#endif
-#ifndef MIOS32_UART1_RX_PORT
-#define MIOS32_UART1_RX_PORT     GPIOB
-#endif
-#ifndef MIOS32_UART1_RX_PIN
-#define MIOS32_UART1_RX_PIN      LL_GPIO_PIN_7
-#endif
-#ifndef MIOS32_UART1_RX_AF
-#define MIOS32_UART1_RX_AF       LL_GPIO_AF_0
-#endif
-#ifndef MIOS32_UART1
-#define MIOS32_UART1             USART1
-#endif
-#ifndef MIOS32_UART1_IRQ_CHANNEL
-#define MIOS32_UART1_IRQ_CHANNEL USART1_IRQn
-#endif
-#ifndef MIOS32_UART1_IRQHANDLER_FUNC
-#define MIOS32_UART1_IRQHANDLER_FUNC void USART1_IRQHandler(void)
-#endif
-#ifndef MIOS32_UART1_RESET_FUNC
-#define MIOS32_UART1_RESET_FUNC  { LL_APB2_GRP1_ForceReset(LL_APB2_GRP1_PERIPH_USART1); LL_APB2_GRP1_ReleaseReset(LL_APB2_GRP1_PERIPH_USART1); }
-#endif
-#ifndef MIOS32_UART1_CLOCK_FUNC
-#define MIOS32_UART1_CLOCK_FUNC  { LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1); LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOB); }
-#endif
-#ifndef MIOS32_UART1_CLOCK_SOURCE
-#define MIOS32_UART1_CLOCK_SOURCE LL_RCC_USART1_CLKSOURCE_PCLK1
+#ifndef MIOS32_UART0_CLOCK_SOURCE
+#define MIOS32_UART0_CLOCK_SOURCE LL_RCC_USART1_CLKSOURCE_PCLK1
 #endif
 #endif
 
-// UART2 (USART2 peripheral) - exists on EVERY G0 tier (2/4/6-USART, with or
+// UART1 (USART2 peripheral) - exists on EVERY G0 tier (2/4/6-USART, with or
 // without LPUART), no force-undef needed. PA2/PA3 chosen over the
 // alternative PA14/PA15 pins: those are SWCLK/SWDIO (debug port) on every
 // STM32, a real conflict avoided here rather than a hypothetical one.
@@ -287,55 +267,100 @@
 // (USART2_IRQn) like everywhere else in this file. On G0B1/G0C1 ONLY,
 // USART2 shares its vector with LPUART2/UART7 instead (USART2_LPUART2_IRQn)
 // - there is no USART2_IRQn on that one tier. See the combined handler
-// further below, which services UART2 and/or UART7 depending on which are
+// further below, which services UART1 and/or UART7 depending on which are
 // actually enabled.
+#if defined(MIOS32_USE_UART1)
+#ifndef MIOS32_UART1_TX_PORT
+#define MIOS32_UART1_TX_PORT     GPIOA
+#endif
+#ifndef MIOS32_UART1_TX_PIN
+#define MIOS32_UART1_TX_PIN      LL_GPIO_PIN_2
+#endif
+#ifndef MIOS32_UART1_TX_AF
+#define MIOS32_UART1_TX_AF       LL_GPIO_AF_1
+#endif
+#ifndef MIOS32_UART1_RX_PORT
+#define MIOS32_UART1_RX_PORT     GPIOA
+#endif
+#ifndef MIOS32_UART1_RX_PIN
+#define MIOS32_UART1_RX_PIN      LL_GPIO_PIN_3
+#endif
+#ifndef MIOS32_UART1_RX_AF
+#define MIOS32_UART1_RX_AF       LL_GPIO_AF_1
+#endif
+#ifndef MIOS32_UART1
+#define MIOS32_UART1             USART2
+#endif
+#ifndef MIOS32_UART1_IRQ_CHANNEL
+# if defined(MIOS32_G0_LPUART2_TIER)
+#  define MIOS32_UART1_IRQ_CHANNEL USART2_LPUART2_IRQn
+# else
+#  define MIOS32_UART1_IRQ_CHANNEL USART2_IRQn
+# endif
+#endif
+#ifndef MIOS32_UART1_IRQHANDLER_FUNC
+# if defined(MIOS32_G0_LPUART2_TIER)
+#  define MIOS32_UART1_IRQHANDLER_FUNC void USART2_LPUART2_IRQHandler(void)
+# else
+#  define MIOS32_UART1_IRQHANDLER_FUNC void USART2_IRQHandler(void)
+# endif
+#endif
+#ifndef MIOS32_UART1_RESET_FUNC
+#define MIOS32_UART1_RESET_FUNC  { LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_USART2); LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_USART2); }
+#endif
+#ifndef MIOS32_UART1_CLOCK_FUNC
+#define MIOS32_UART1_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2); LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOA); }
+#endif
+#endif
+
+// UART2 (USART3 peripheral) - see MIOS32_USE_UART2 force-undef above (not
+// available on the 2-USART tiers). Wrapped in #if defined(MIOS32_USE_UART2)
+// like every other port block here - unlike UART0/UART1 above, USART3 does
+// NOT exist on every G0 chip, so leaving this unguarded would define
+// MIOS32_UART2 (-> bare "USART3") even on chips where that identifier isn't
+// declared by CMSIS at all - harmless today only because every actual USE of
+// MIOS32_UART2 elsewhere already re-checks MIOS32_USE_UART2 itself, but a
+// latent trap for any future code that doesn't.
 #if defined(MIOS32_USE_UART2)
 #ifndef MIOS32_UART2_TX_PORT
-#define MIOS32_UART2_TX_PORT     GPIOA
+#define MIOS32_UART2_TX_PORT     GPIOB
 #endif
 #ifndef MIOS32_UART2_TX_PIN
-#define MIOS32_UART2_TX_PIN      LL_GPIO_PIN_2
+#define MIOS32_UART2_TX_PIN      LL_GPIO_PIN_8
 #endif
 #ifndef MIOS32_UART2_TX_AF
-#define MIOS32_UART2_TX_AF       LL_GPIO_AF_1
+#define MIOS32_UART2_TX_AF       LL_GPIO_AF_4
 #endif
 #ifndef MIOS32_UART2_RX_PORT
-#define MIOS32_UART2_RX_PORT     GPIOA
+#define MIOS32_UART2_RX_PORT     GPIOB
 #endif
 #ifndef MIOS32_UART2_RX_PIN
-#define MIOS32_UART2_RX_PIN      LL_GPIO_PIN_3
+#define MIOS32_UART2_RX_PIN      LL_GPIO_PIN_9
 #endif
 #ifndef MIOS32_UART2_RX_AF
-#define MIOS32_UART2_RX_AF       LL_GPIO_AF_1
+#define MIOS32_UART2_RX_AF       LL_GPIO_AF_4
 #endif
 #ifndef MIOS32_UART2
-#define MIOS32_UART2             USART2
+#define MIOS32_UART2             USART3
 #endif
 #ifndef MIOS32_UART2_IRQ_CHANNEL
-# if defined(MIOS32_G0_LPUART2_TIER)
-#  define MIOS32_UART2_IRQ_CHANNEL USART2_LPUART2_IRQn
-# else
-#  define MIOS32_UART2_IRQ_CHANNEL USART2_IRQn
-# endif
+#define MIOS32_UART2_IRQ_CHANNEL MIOS32_UART_SHARED_IRQ_CHANNEL
 #endif
 #ifndef MIOS32_UART2_IRQHANDLER_FUNC
-# if defined(MIOS32_G0_LPUART2_TIER)
-#  define MIOS32_UART2_IRQHANDLER_FUNC void USART2_LPUART2_IRQHandler(void)
-# else
-#  define MIOS32_UART2_IRQHANDLER_FUNC void USART2_IRQHandler(void)
-# endif
+#define MIOS32_UART2_IRQHANDLER_FUNC MIOS32_UART_SHARED_IRQHANDLER_FUNC
 #endif
 #ifndef MIOS32_UART2_RESET_FUNC
-#define MIOS32_UART2_RESET_FUNC  { LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_USART2); LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_USART2); }
+#define MIOS32_UART2_RESET_FUNC  { LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_USART3); LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_USART3); }
 #endif
 #ifndef MIOS32_UART2_CLOCK_FUNC
-#define MIOS32_UART2_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2); LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOA); }
+#define MIOS32_UART2_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART3); LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOB); }
 #endif
+// #define MIOS32_UART2_CLOCK_SOURCE <LL_RCC_USARTx_CLKSOURCE_...>  // not defined by default
 #endif
 
 // UART3 (USART4 peripheral) - exists on the 4-USART tier (G070) and the
 // 6-USART tier (G0B0), see MIOS32_USE_UART3 force-undef above. Shares the
-// tier-appropriate MIOS32_UART_SHARED_IRQ_CHANNEL vector with UART0 (and,
+// tier-appropriate MIOS32_UART_SHARED_IRQ_CHANNEL vector with UART2 (and,
 // on the 6-USART tier, also with UART4/UART5) - the IRQ handler is written
 // once below and services whichever of these ports is actually enabled.
 #if defined(MIOS32_USE_UART3)
@@ -373,12 +398,12 @@
 
 // UART4 (USART5 peripheral) - only exists on the 6-USART tier (G0B0), see
 // MIOS32_USE_UART4 force-undef above. Shares MIOS32_UART_SHARED_IRQ_CHANNEL
-// with UART0/UART3/UART5 on this tier.
+// with UART2/UART3/UART5 on this tier.
 // PIN MAPPING NOT VERIFIED against a real reference manual or reference
 // hardware (no G0B0 board in hand this session) - override
 // MIOS32_UART4_{TX,RX}_{PORT,PIN,AF} in your project's mios32_config.h once
 // you have real hardware. Chosen only to avoid an obvious collision with
-// UART0..UART3's own default pins above.
+// UART2..UART3's own default pins above.
 #if defined(MIOS32_USE_UART4)
 #ifndef MIOS32_UART4_TX_PORT
 #define MIOS32_UART4_TX_PORT     GPIOC
@@ -414,7 +439,7 @@
 
 // UART5 (USART6 peripheral) - only exists on the 6-USART tier (G0B0/G0B1/
 // G0C1), see MIOS32_USE_UART5 force-undef above. Shares
-// MIOS32_UART_SHARED_IRQ_CHANNEL with UART0/UART3/UART4 (and, on the
+// MIOS32_UART_SHARED_IRQ_CHANNEL with UART2/UART3/UART4 (and, on the
 // "+LPUART" sibling of this tier, UART6/LPUART1 too) on this tier.
 // PIN MAPPING NOT VERIFIED - see UART4 above, same caveat applies.
 #if defined(MIOS32_USE_UART5)
@@ -454,13 +479,13 @@
 // MIOS32_USE_UART6 force-undef above. Vector depends on tier
 // (MIOS32_G0_LPUART1_SHARED, set above): independent LPUART1_IRQn on the
 // 2-USART+LPUART1 tier, or the shared MIOS32_UART_SHARED_IRQ_CHANNEL
-// group (with UART0/UART3[/UART4/UART5]) on the 4-USART+LPUART1 and
+// group (with UART2/UART3[/UART4/UART5]) on the 4-USART+LPUART1 and
 // 6-USART+2xLPUART tiers.
 // PIN MAPPING NOT VERIFIED against a real reference manual or reference
 // hardware (no board with any of these chips in hand this session) -
 // override MIOS32_UART6_{TX,RX}_{PORT,PIN,AF} in your project's
 // mios32_config.h once you have real hardware. Chosen only to avoid an
-// obvious collision with UART0..UART5's own default pins above.
+// obvious collision with UART2..UART5's own default pins above.
 // Clock source defaults to PCLK1 like every other port (see module-level
 // comment) - LPUART's fixed x256 oversampling and PRESC-based BRR are
 // handled in MIOS32_UART_BaudrateSet, not here.
@@ -513,8 +538,8 @@
 
 // UART7 (LPUART2 peripheral) - exists ONLY on the 6-USART+2xLPUART tier
 // (G0B1/G0C1), see MIOS32_USE_UART7 force-undef above. Always shares
-// UART2's vector on this tier (MIOS32_UART2_IRQ_CHANNEL/IRQHANDLER_FUNC,
-// already tier-conditional - see UART2 above) - there's no separate
+// UART1's vector on this tier (MIOS32_UART1_IRQ_CHANNEL/IRQHANDLER_FUNC,
+// already tier-conditional - see UART1 above) - there's no separate
 // independent vector for LPUART2 on any G0 chip.
 // PIN MAPPING NOT VERIFIED - see UART6 above, same caveat applies.
 #if defined(MIOS32_USE_UART7)
@@ -540,10 +565,10 @@
 #define MIOS32_UART7             LPUART2
 #endif
 #ifndef MIOS32_UART7_IRQ_CHANNEL
-#define MIOS32_UART7_IRQ_CHANNEL MIOS32_UART2_IRQ_CHANNEL
+#define MIOS32_UART7_IRQ_CHANNEL MIOS32_UART1_IRQ_CHANNEL
 #endif
 #ifndef MIOS32_UART7_IRQHANDLER_FUNC
-#define MIOS32_UART7_IRQHANDLER_FUNC MIOS32_UART2_IRQHANDLER_FUNC
+#define MIOS32_UART7_IRQHANDLER_FUNC MIOS32_UART1_IRQHANDLER_FUNC
 #endif
 #ifndef MIOS32_UART7_RESET_FUNC
 #define MIOS32_UART7_RESET_FUNC  { LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_LPUART2); LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_LPUART2); }
@@ -1626,7 +1651,7 @@ s32 MIOS32_UART_TxBufferPut(u8 uart, u8 b)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Interrupt handler for UART1 (USART1) - independent NVIC vector
+// Interrupt handler for UART0 (USART1) - independent NVIC vector
 /////////////////////////////////////////////////////////////////////////////
 #if defined(MIOS32_USE_UART1)
 MIOS32_UART1_IRQHANDLER_FUNC
@@ -1659,11 +1684,11 @@ MIOS32_UART1_IRQHANDLER_FUNC
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Interrupt handler for UART2 (USART2) - independent NVIC vector on every
+// Interrupt handler for UART1 (USART2) - independent NVIC vector on every
 // tier except 6-USART+2xLPUART (G0B1/G0C1), where it's combined with UART7
 // (LPUART2) instead (USART2_LPUART2_IRQn - see MIOS32_UART2_IRQHANDLER_FUNC,
 // already tier-resolved to the right function name/signature above). Written
-// as a single function body (like the UART0 group below) so the same source
+// as a single function body (like the UART2 group below) so the same source
 // is correct on every tier: the UART7 block below simply never compiles in
 // on tiers where UART7 doesn't exist.
 /////////////////////////////////////////////////////////////////////////////
@@ -1724,7 +1749,7 @@ MIOS32_UART2_IRQHANDLER_FUNC
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Interrupt handler for UART0 (USART3), UART3 (USART4), on the 6-USART
+// Interrupt handler for UART2 (USART3), UART3 (USART4), on the 6-USART
 // tier UART4 (USART5)/UART5 (USART6) too, and on the "+LPUART" siblings of
 // the 4-USART and 6-USART tiers, UART6 (LPUART1) as well (see
 // MIOS32_G0_LPUART1_SHARED above - NOT on the 2-USART+LPUART1 tier, where
@@ -1736,7 +1761,7 @@ MIOS32_UART2_IRQHANDLER_FUNC
 // of which subset is active (on the plain 4-USART tier, UART4/UART5 are
 // always force-undef'd, so those blocks simply never compile in there).
 // uart_midi_act (activity flags for an optional LED indicator) only has
-// bits defined for UART0..UART3 (u8, already fully packed) - not extended
+// bits defined for UART2..UART3 (u8, already fully packed) - not extended
 // to UART4/UART5/UART6 here, matching this variable's existing scope.
 /////////////////////////////////////////////////////////////////////////////
 #if defined(MIOS32_USE_UART0) || defined(MIOS32_USE_UART3) || defined(MIOS32_USE_UART4) || defined(MIOS32_USE_UART5) || (defined(MIOS32_USE_UART6) && defined(MIOS32_G0_LPUART1_SHARED))
@@ -1904,8 +1929,8 @@ MIOS32_UART6_IRQHANDLER_FUNC
 
 /////////////////////////////////////////////////////////////////////////////
 //! Returns and clears the per-UART MIDI RX/TX activity flags (used to drive
-//! an activity LED); bit layout: UART0 RX=0x01 TX=0x02, UART1 RX=0x04 TX=0x08,
-//! UART2 RX=0x10 TX=0x20, UART3 RX=0x40 TX=0x80.
+//! an activity LED); bit layout: UART2 RX=0x01 TX=0x02, UART0 RX=0x04 TX=0x08,
+//! UART1 RX=0x10 TX=0x20, UART3 RX=0x40 TX=0x80.
 //! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
 /////////////////////////////////////////////////////////////////////////////
 u8 MIOS32_UART_RXTX_Act(void){

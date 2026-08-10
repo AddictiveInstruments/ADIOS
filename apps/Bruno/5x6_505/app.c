@@ -246,8 +246,8 @@ void APP_MIDI_Tick(void)
 /////////////////////////////////////////////////////////////////////////////
 void APP_MIDI_NotifyPackage(mios32_midi_port_t port, mios32_midi_package_t midi_package)
 {
-	if(port==DIN1){
-		if(normal_start)MIOS32_MIDI_SendPackage(DIN0,  midi_package);
+	if(port==DIN0){
+		if(normal_start)MIOS32_MIDI_SendPackage(DIN2,  midi_package);
 	}
 }
 
@@ -261,7 +261,7 @@ static s32 NOTIFY_MIDI_Rx(mios32_midi_port_t port, u8 midi_byte)
 //#if 0
 	// check for MIDI clock fom TR
 	if(normal_start){
-		if(port==DIN1){
+		if(port==DIN0){
 			if( midi_byte == 0xf8 ) {
 
 
@@ -315,8 +315,11 @@ static s32 NOTIFY_MIDI_Rx(mios32_midi_port_t port, u8 midi_byte)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
 {
-	if(port==DIN1){
-		MIOS32_UART_TxBufferPut(0, midi_in);
+	// host passthrough: whatever the TR-505 sends (DIN0 = UART0 = USART1) is
+	// merged straight onto the instrument's physical MIDI OUT (UART2 =
+	// USART3) - raw UART index here, not a MIDI port number
+	if(port==DIN0){
+		MIOS32_UART_TxBufferPut(2, midi_in);
 	}else{
 		// App sysex parser
 		MIDIO_SYSEX_Parser(port, midi_in);

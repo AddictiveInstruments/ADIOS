@@ -133,18 +133,23 @@
 
 
 #if defined(MIOS32_FAMILY_STM32G0xx)
+// same board-specific MIDI wiring as the bootloader this tool installs -
+// see the note in ../src/mios32_config.h: hardcoded to the 5x6_505's
+// UART2 (USART3, inverting output stage) until it is relayed per project.
 // debug messages default to USB0 (mios32_midi.h) which is disabled on this
-// family/project - route them to UART0 instead so they're actually visible.
-#define MIOS32_MIDI_DEFAULT_PORT DIN0
-#define MIOS32_MIDI_DEBUG_PORT DIN0
-#define MIOS32_USE_UART0
+// family/project - route them to the DIN port instead so they're visible.
+#define MIOS32_MIDI_DEFAULT_PORT DIN2
+#define MIOS32_MIDI_DEBUG_PORT DIN2
+#define MIOS32_USE_UART2
 #define MIOS32_USE_DIN_MIDI
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
-// UART0 (USART3) TX runs through an external 3V3->5V transistor stage on
+// UART2 (USART3) TX runs through an external 3V3->5V transistor stage on
 // this board that inverts the signal - see the module-level comment in
-// mios32_uart.c.
-#define MIOS32_UART0_TX_INVERTED
+// mios32_uart.c - and that stage must be driven, hence push-pull
+// (mios32_uart.h defaults TX_OD to 1 on every port except UART0).
+#define MIOS32_UART2_TX_INVERTED
+#define MIOS32_UART2_TX_OD 0
 # define MIOS32_SYS_DONT_INIT_RTC
 // debug-message support stripped: the updater is entirely driven by MIOS
 // Studio (errors travel as DISACK codes), and its 10K window on 32K parts

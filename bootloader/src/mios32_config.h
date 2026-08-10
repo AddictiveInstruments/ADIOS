@@ -133,18 +133,30 @@
 
 
 #if defined(MIOS32_FAMILY_STM32G0xx)
+// MIDI wiring of the board this bootloader is built for. NOTE (2026-08-10):
+// still hardcoded to the 5x6_505's arrangement - UART2 (USART3, PB8/PB9)
+// behind an inverting 3V3->5V transistor stage, which is that instrument's
+// physical MIDI connector. It is NOT valid for other G0 boards: a G030K6,
+// for one, has no USART3 at all, so this bootloader cannot talk to it (the
+// new guard in mios32_uart.c now says so at compile time instead of
+// producing a silently mute build). The fix is to relay these three facts
+// from the project's own mios32_config.h through etc/gen_bsl_boundary.sh,
+// the way MIOS32_BSL_HOLD_PORT/PIN_OVERRIDE already are - pending design
+// review with the user.
 // debug messages default to USB0 (mios32_midi.h) which is disabled on this
-// family/project - route them to UART0 instead so they're actually visible.
-#define MIOS32_MIDI_DEFAULT_PORT DIN0
-#define MIOS32_MIDI_DEBUG_PORT DIN0
-#define MIOS32_USE_UART0
+// family/project - route them to the DIN port instead so they're visible.
+#define MIOS32_MIDI_DEFAULT_PORT DIN2
+#define MIOS32_MIDI_DEBUG_PORT DIN2
+#define MIOS32_USE_UART2
 #define MIOS32_USE_DIN_MIDI
 #define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_MIDI
-// UART0 (USART3) TX runs through an external 3V3->5V transistor stage on
+// UART2 (USART3) TX runs through an external 3V3->5V transistor stage on
 // this board that inverts the signal - see the module-level comment in
-// mios32_uart.c.
-#define MIOS32_UART0_TX_INVERTED
+// mios32_uart.c - and that stage must be driven, hence push-pull
+// (mios32_uart.h defaults TX_OD to 1 on every port except UART0).
+#define MIOS32_UART2_TX_INVERTED
+#define MIOS32_UART2_TX_OD 0
 # define MIOS32_SYS_DONT_INIT_RTC
 // debug-message support stripped (production default): the vsprintf
 // machinery alone pushes the new-generation BSL over its 10240-byte page

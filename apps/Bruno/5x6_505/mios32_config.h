@@ -31,8 +31,11 @@
 #define TR5X6_VERSION      		"b0 . 002 (beta)"
 #endif
 //#define REDUCED_APP_LCD
-#define MIOS32_MIDI_DEFAULT_PORT DIN0
-#define MIOS32_MIDI_DEBUG_PORT DIN0
+// DIN2 = UART2 = USART3 = the instrument's physical MIDI OUT/IN (see the
+// UART section further below) - that's the connector the outside world,
+// and MIOS Studio, actually talk to. DIN0 is the internal host link.
+#define MIOS32_MIDI_DEFAULT_PORT DIN2
+#define MIOS32_MIDI_DEBUG_PORT DIN2
 // disable code modules
 // mios32_spi.c - SPI0 drives the ROM (tr5x6_rom.c), SPI1 drives the TFT
 // (5x6_tft.c). Both use MIOS32_SPI_CS_PinSet(spi, value) for chip select.
@@ -120,14 +123,27 @@
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 #define MIOS32_BOARD_J15_LED_NUM 1
 
+// This board's two MIDI links (MIOS32_UARTn is USART(n+1) on G0xx):
+//   UART0 = USART1, PB7 in  - the TR-505 host's MIDI output (RX only; its
+//           TX pin PB6 is not wired to anything)          -> port DIN0
+//   UART2 = USART3, PB8 out - the instrument's physical MIDI OUT, where
+//           everything is merged, and PB9 in, wired in parallel with the
+//           host's own MIDI input                          -> port DIN2
 #define MIOS32_USE_UART0
-#define MIOS32_USE_UART1
+#define MIOS32_USE_UART2
 #define MIOS32_USE_DIN_MIDI
-// UART0 (USART3) TX runs through an external 3V3->5V transistor stage on
+// UART2 (USART3) TX runs through an external 3V3->5V transistor stage on
 // this board that inverts the signal - every port defaults to normal
 // polarity in the common driver, this is the per-project override (see
 // the module-level comment in mios32_uart.c).
-#define MIOS32_UART0_TX_INVERTED
+#define MIOS32_UART2_TX_INVERTED
+// ...and that stage must be DRIVEN, so push-pull. mios32_uart.h defaults
+// TX_OD to 0 for UART0 but to 1 (open drain) for every other port - an
+// MBHP-core board convention, not a chip fact. It bit us the day UART
+// numbering was realigned and this board's output moved from UART0 to
+// UART2: the pin silently became open drain, nothing pulled it high, and
+// the instrument went mute while the firmware kept queueing bytes happily.
+#define MIOS32_UART2_TX_OD 0
 
 #endif
 

@@ -331,8 +331,12 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 /////////////////////////////////////////////////////////////////////////////
 s32 BSL_SYSEX_ReleaseHaltState(void)
 {
-	// always send upload request (like if we would come out of reset)
-	BSL_SYSEX_SendUploadReq(DIN0);
+	// always send upload request (like if we would come out of reset).
+	// MIOS32_MIDI_DEFAULT_PORT, not a hardcoded DIN0: this bootloader talks
+	// on whatever DIN port its board actually wires (see mios32_config.h) -
+	// announcing on a port that isn't even enabled makes the core look dead
+	// to MIOS Studio while everything else works.
+	BSL_SYSEX_SendUploadReq(MIOS32_MIDI_DEFAULT_PORT);
 	BSL_SYSEX_SendUploadReq(USB0);
 
 	// clear halt state

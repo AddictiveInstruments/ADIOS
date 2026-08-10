@@ -327,7 +327,13 @@ int main(void)
   ///////////////////////////////////////////////////////////////////////////
   if( !fastboot ) {
 #if defined(MIOS32_USE_DIN_MIDI)
-    BSL_SYSEX_SendUploadReq(DIN0);
+    // MIOS32_MIDI_DEFAULT_PORT, not a hardcoded DIN0: this bootloader talks
+    // on whatever DIN port its board actually wires (see mios32_config.h).
+    // Announcing on a port that isn't even enabled makes the core look dead
+    // to MIOS Studio while everything else works - which is exactly what
+    // happened once MIOS32_UARTn was realigned to USART(n+1) and this
+    // board's MIDI connector became DIN2 instead of DIN0.
+    BSL_SYSEX_SendUploadReq(MIOS32_MIDI_DEFAULT_PORT);
 #endif
     if( usb_was_initialized )
       BSL_SYSEX_SendUploadReq(USB0);
