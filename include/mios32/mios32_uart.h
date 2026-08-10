@@ -182,7 +182,24 @@ extern s32 MIOS32_UART_TxBufferPut(u8 uart, u8 b);
 extern s32 MIOS32_UART_TxBufferPutMore_NonBlocking(u8 uart, u8 *buffer, u16 len);
 extern s32 MIOS32_UART_TxBufferPutMore(u8 uart, u8 *buffer, u16 len);
 
-extern u8 MIOS32_UART_RXTX_Act(void);
+// Flags returned by MIOS32_UART_ActGet(), same values whatever the port
+#define MIOS32_UART_ACT_RX 0x01
+#define MIOS32_UART_ACT_TX 0x02
+
+// Line activity of ONE port, read-and-clear, normalised to the two flags
+// above - the accessor to use: it can't drift when ports are renumbered.
+extern u32 MIOS32_UART_ActGet(u8 uart);
+
+// Line activity of EVERY port at once, read-and-clear: two bits per port in
+// port order, RX = 1<<(2*n), TX = 1<<(2*n+1). u32 so the widest family fits
+// (F4xx goes up to UART9, needing 20 bits on its own). Prefer ActGet above
+// unless you really want the whole word - masking this one by hand means
+// hardcoding port positions, which silently broke on the G0 renumbering.
+extern u32 MIOS32_UART_RXTX_Act(void);
+
+// NOTE: both are implemented by STM32G0xx only today; an F4xx project
+// calling either will fail to link - see the F4xx driver.
+
 /////////////////////////////////////////////////////////////////////////////
 // Export global variables
 /////////////////////////////////////////////////////////////////////////////

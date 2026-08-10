@@ -1186,17 +1186,23 @@ static void TASK_TFT_Periodic(void *pvParameters)
 				}
 			}
 #endif
-			// MIDI activity
-			u8 act=(MIOS32_UART_RXTX_Act() & 0x5) | (MIDIO_SYSEX_Act() & 0x2);
-			if(act&0x01)APP_LCD_Rectangle(x_offset+335, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			// MIDI activity - each indicator names the port it watches, so
+			// this survives any future UART renumbering:
+			//   UART2 (USART3) = the instrument's MIDI IN
+			//   UART0 (USART1) = the TR-505 host link
+			//   MIDIO_SYSEX_Act() = application-level SysEx transfers
+			u8 act_midi_in = MIOS32_UART_ActGet(2) & MIOS32_UART_ACT_RX;
+			u8 act_host    = MIOS32_UART_ActGet(0) & MIOS32_UART_ACT_RX;
+			u8 act_sysex   = MIDIO_SYSEX_Act() & 0x2;
+			if(act_midi_in)APP_LCD_Rectangle(x_offset+335, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 			else APP_LCD_Rectangle(x_offset+335, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
-			if(act&0x04)APP_LCD_Rectangle(x_offset+441, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			if(act_host)APP_LCD_Rectangle(x_offset+441, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 			else APP_LCD_Rectangle(x_offset+441, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
-			if(act&0x02)APP_LCD_Rectangle(x_offset+441, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			if(act_sysex)APP_LCD_Rectangle(x_offset+441, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 			else APP_LCD_Rectangle(x_offset+441, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
 
 			APP_LCD_FColourSet(APP_LCD_WHITE);
-			
+
 			
 			
 #else // TR5X6_UNIT_SELECT==626
@@ -1692,13 +1698,17 @@ static void TASK_TFT_Periodic(void *pvParameters)
 			}
 #endif
 
-			// MIDI activity
-			u8 act=(MIOS32_UART_RXTX_Act() & 0x5) | (MIDIO_SYSEX_Act() & 0x2);
-			if(act&0x01)APP_LCD_Rectangle(x_offset+350, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			// MIDI activity - same ports as the 505 branch above. NOT verified
+			// against 626 hardware: this branch has never been built or run
+			// since the UART renumbering, see the 626 project's own state.
+			u8 act_midi_in = MIOS32_UART_ActGet(2) & MIOS32_UART_ACT_RX;
+			u8 act_host    = MIOS32_UART_ActGet(0) & MIOS32_UART_ACT_RX;
+			u8 act_sysex   = MIDIO_SYSEX_Act() & 0x2;
+			if(act_midi_in)APP_LCD_Rectangle(x_offset+350, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 			else APP_LCD_Rectangle(x_offset+350, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
-			if(act&0x04)APP_LCD_Rectangle(x_offset+446, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			if(act_host)APP_LCD_Rectangle(x_offset+446, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 			else APP_LCD_Rectangle(x_offset+446, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
-			if(act&0x02)APP_LCD_Rectangle(x_offset+446, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
+			if(act_sysex)APP_LCD_Rectangle(x_offset+446, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 			else APP_LCD_Rectangle(x_offset+446, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
 #endif
 		}
