@@ -125,7 +125,7 @@ ifneq ($(LD_TEMPLATE_S),)
 ifneq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
 $(CURDIR)/$(PROJECT_OUT)/cpu.ld: $(LD_TEMPLATE_S) $(MIOS32_PATH)/etc/ld/adios_body.ld.inc
 	@mkdir -p $(dir $@)
-	@echo "Resolving $(notdir $(LD_TEMPLATE_S)) for $(PROCESSOR), fixed BSL boundary $(ADIOS_LD_BSL_BOUNDARY_K)K -> $@"
+	@echo "Resolving $(notdir $(LD_TEMPLATE_S)) for $(PROCESSOR), $(if $(filter 0,$(MIOS32_USE_BOOTLOADER)),no bootloader - application owns the whole flash,fixed BSL boundary $(ADIOS_LD_BSL_BOUNDARY_K)K) -> $@"
 	@$(LD_PREPROCESS) $(LD_TEMPLATE_S) -o $@
 endif
 endif

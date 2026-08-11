@@ -139,17 +139,6 @@
 #endif
 
 
-// dynamic bootloader/app flash boundary (opt-in, MIOS32_USE_DYNAMIC_BSL_BOUNDARY
-// in the project's own Makefile - see programming_model.mk and
-// etc/gen_bsl_boundary.sh): if that mechanism generated a project-local
-// mios32_bsl_boundary.h, pull it in here so MIOS32_APP_FLASH_START_ADDR is
-// defined before it's used below. __has_include makes this a silent no-op
-// for every project that doesn't use the mechanism (noboot .ld projects,
-// the bootloader's own build) instead of requiring a per-project #include.
-#if __has_include("mios32_bsl_boundary.h")
-#include "mios32_bsl_boundary.h"
-#endif
-
 // Is there a bootloader at all? Set MIOS32_USE_BOOTLOADER = 0 in a project's
 // Makefile (programming_model.mk relays it as a -D) to build an application
 // linked at the base of flash, with no reserved bootloader region and no
@@ -159,6 +148,24 @@
 // bootloader" SysEx query in mios32_midi.c.
 #ifndef MIOS32_USE_BOOTLOADER
 # define MIOS32_USE_BOOTLOADER 1
+#endif
+
+// dynamic bootloader/app flash boundary (opt-in, MIOS32_USE_DYNAMIC_BSL_BOUNDARY
+// in the project's own Makefile - see programming_model.mk and
+// etc/gen_bsl_boundary.sh): if that mechanism generated a project-local
+// mios32_bsl_boundary.h, pull it in here so MIOS32_APP_FLASH_START_ADDR is
+// defined before it's used below. __has_include makes this a silent no-op
+// for every project that doesn't use the mechanism instead of requiring a
+// per-project #include.
+// The MIOS32_USE_BOOTLOADER guard matters: a project that HAS built with the
+// dynamic mechanism keeps that generated header in its directory forever, and
+// without this guard it would silently redefine MIOS32_APP_FLASH_START_ADDR
+// (0x2800...) over the 0 that programming_model.mk passes for a bootloader-less
+// build - reporting a boundary that no longer exists on the chip.
+#if MIOS32_USE_BOOTLOADER
+# if __has_include("mios32_bsl_boundary.h")
+#  include "mios32_bsl_boundary.h"
+# endif
 #endif
 
 // location of the Device ID and USB device name

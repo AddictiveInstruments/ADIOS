@@ -182,8 +182,8 @@ else
 # single define, ADIOS_LD_BSL_BOUNDARY_K, defaulted per family to the same
 # value the old per-chip scripts carried (10K on G0, 16K on F4) and
 # overridable by a project that reserves more.
-# (Building with NO bootloader at all is a separate, not-yet-implemented
-# switch - see the checklist.)
+# (Building with NO bootloader at all is the separate MIOS32_USE_BOOTLOADER
+# switch handled above, not a boundary of 0.)
 # The target is spelled literally rather than through $(PROJECT_OUT): that
 # variable comes from common.mk, included AFTER this file, and a rule's
 # target is fixed when the rule is read - it would resolve to an empty path.
