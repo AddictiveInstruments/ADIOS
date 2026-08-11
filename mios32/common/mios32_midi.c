@@ -235,19 +235,23 @@ s32 MIOS32_MIDI_Init(u32 mode)
 	last_sysex_port = DEFAULT;
 	sysex_state.ALL = 0;
 
-	// compile-time identity, overridable by the project (mios32_midi.h).
-	// Was a hardcoded 0x00: with a bootloader the info block below overrides
-	// it anyway, but WITHOUT one there is no persistent block at all and the
-	// device would be stuck on ID 0 for good - writing that block needs a
-	// probe today, the bootloader itself refusing to write below its own
-	// boundary.
+	// compile-time identity, overridable by the project (mios32_midi.h) and
+	// zero when it says nothing. Without MIOS32_DEVICE_ID_PERSIST this is the
+	// WHOLE story: no flash is read, nothing is searched for.
 	sysex_device_id = MIOS32_MIDI_DEFAULT_DEVICE_ID;
-#ifdef MIOS32_SYS_ADDR_BSL_INFO_BEGIN
-	// read from bootloader info range - wins over the default above
-	u8 *device_id_confirm = (u8 *)MIOS32_SYS_ADDR_DEVICE_ID_CONFIRM;
-	u8 *device_id = (u8 *)MIOS32_SYS_ADDR_DEVICE_ID;
-	if( *device_id_confirm == 0x42 && *device_id < 0x80 )
-		sysex_device_id = *device_id;
+
+#if MIOS32_DEVICE_ID_PERSIST
+	// ...otherwise the stored identity wins. Two bytes at the very top of
+	// flash, confirm marker then value - the one place an application and a
+	// bootloader both find without being told (see mios32_sys.h). Written by
+	// the application inside its own reserved pages, so it survives an
+	// application upload (which only erases the pages it writes) and even an
+	// interrupted one - a device left with no application still answers on
+	// the right ID, which is precisely when that matters.
+	u8 *persist_confirm = (u8 *)MIOS32_SYS_ADDR_PERSIST_DEVICE_ID_CONFIRM;
+	u8 *persist_id      = (u8 *)MIOS32_SYS_ADDR_PERSIST_DEVICE_ID;
+	if( *persist_confirm == 0x42 && *persist_id < 0x80 )
+		sysex_device_id = *persist_id;
 #endif
 
 	// SysEx timeout mechanism

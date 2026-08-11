@@ -20,6 +20,23 @@
  * project's ADIOS_LD_BSL_BOUNDARY_K.
  */
 
+/* MIOS32_USERDATA_PAGES: flash pages at the TOP of memory that belong to the
+   application but not to its image - sound banks, settings, the persistent
+   device-ID record. Reserving them HERE is the whole point: the FLASH region
+   below is shortened by exactly that much, so an application growing into its
+   own data fails to LINK instead of overwriting it at the first write.
+   The includer supplies the erase granularity; a family whose sectors are
+   unequal (F4: 16K then 64K then 128K, the last one useless for a few bytes)
+   declares none and must place such a region elsewhere entirely. */
+#ifdef ADIOS_LD_USERDATA_PAGES
+# ifndef ADIOS_USERDATA_PAGE_SIZE
+#  error "MIOS32_USERDATA_PAGES was requested, but this family's linker template declares no uniform erase-page size. The region cannot simply be carved off the top of flash here."
+# endif
+# define ADIOS_USERDATA_LEN (ADIOS_LD_USERDATA_PAGES * ADIOS_USERDATA_PAGE_SIZE)
+#else
+# define ADIOS_USERDATA_LEN 0
+#endif
+
 /* Memory Spaces Definitions */
 MEMORY
 {
@@ -31,10 +48,10 @@ MEMORY
      the same way etc/gen_bsl_boundary.sh does it for the bootloader's own
      build (an output section mapped to an undeclared region makes ld warn
      and mis-size its neighbours). */
-  FLASH (rx) :    ORIGIN = 0x08000000, LENGTH = ADIOS_FLASH_TOTAL_LEN
+  FLASH (rx) :    ORIGIN = 0x08000000, LENGTH = ADIOS_FLASH_TOTAL_LEN - ADIOS_USERDATA_LEN
 #else
   FLASH_BSL (rx) :    ORIGIN = 0x08000000, LENGTH = ADIOS_FLASH_BSL_LEN
-  FLASH (rx) :    ORIGIN = 0x08002800, LENGTH = ADIOS_FLASH_APP_LEN
+  FLASH (rx) :    ORIGIN = 0x08002800, LENGTH = ADIOS_FLASH_APP_LEN - ADIOS_USERDATA_LEN
 #endif
   FLASHB1 (rx) :  ORIGIN = 0x00000000, LENGTH = 0
   EXTMEMB0 (rx) : ORIGIN = 0x00000000, LENGTH = 0

@@ -490,9 +490,16 @@ s32 TR5X6_MEM_Format(void){
 	}
 	for(int p=0; p<4;p++){
 
-		// Magic number
-		if(p==3)datas[0x7ff]=TR5X6_MAGIC_NUMBER;
-		if(p==3)datas[0x7fe]=0; // stored bank num
+		// System fields of the last page. This path builds the page from
+		// scratch, so unlike TR5X6_ROM_BankStore() it cannot inherit what was
+		// there - the device ID has to be carried over explicitly, or a
+		// format would silently reset the instrument's identity.
+		if(p==3){
+			datas[TR5X6_FLASH_SYS_MAGIC_OFS]     = TR5X6_MAGIC_NUMBER;
+			datas[TR5X6_FLASH_SYS_BANK_OFS]      = 0; // stored bank num
+			datas[TR5X6_FLASH_SYS_ID_CONFIRM_OFS]= 0x42;
+			datas[TR5X6_FLASH_SYS_ID_OFS]        = MIOS32_MIDI_DeviceIDGet();
+		}
 		// Page erase
 		LL_FLASH_Unlock();
 		LL_FLASH_Status status;
@@ -619,14 +626,38 @@ s32 TR5X6_FLASH_BankRead(tr5x6_flash_info_t* slot){
 
 
 /* ********* */
-s32 TR5X6_ROM_BankStore(u8 bank){
-	// determine the page and address range depending on host 505/626
-	u8 page= 3;		// TR5X6_FLASH_PAGE_BASE
-	// store page content to RAM
+// Read-modify-write of the LAST page, the one carrying the system fields:
+// copies it into datas[], lets the caller change what it wants, then erases
+// and reprograms it. Everything the caller does not touch is inherited - which
+// is how the device-ID record survives a bank change and vice versa.
+// Split out of TR5X6_ROM_BankStore() when the device ID gained its own field,
+// rather than duplicating forty lines of erase-and-program.
+static s32 TR5X6_ROM_SysPageWrite(void);
+
+static s32 TR5X6_ROM_SysPageRead(void){
+	u8 page= 3;
 	for(int i=0;i<0x800;i++)
 		datas[i]=(*((volatile u8*)(TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*page)+i)));
-	// Modify datas in RAM
-	datas[0x07fe]=bank;
+	return 0;
+}
+
+s32 TR5X6_ROM_DeviceIDStore(u8 device_id){
+	TR5X6_ROM_SysPageRead();
+	datas[TR5X6_FLASH_SYS_ID_CONFIRM_OFS]= 0x42;
+	datas[TR5X6_FLASH_SYS_ID_OFS]        = device_id & 0x7f;
+	return TR5X6_ROM_SysPageWrite();
+}
+
+s32 TR5X6_ROM_BankStore(u8 bank){
+	TR5X6_ROM_SysPageRead();
+	// Modify datas in RAM - everything else in the page, the device-ID record
+	// included, is inherited from the copy above
+	datas[TR5X6_FLASH_SYS_BANK_OFS]=bank;
+	return TR5X6_ROM_SysPageWrite();
+}
+
+static s32 TR5X6_ROM_SysPageWrite(void){
+	u8 page= 3;		// TR5X6_FLASH_PAGE_BASE
 	// refresh the whole page by erasing it
 	LL_FLASH_Unlock();
 	LL_FLASH_Status status;
@@ -666,7 +697,7 @@ s32 TR5X6_ROM_BankStore(u8 bank){
 /* ********* */
 u8 TR5X6_ROM_BankRecall(void){
 	u8 page= 3;
-	u32 addr=TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*page) + 0x07fe;
+	u32 addr=TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*page) + TR5X6_FLASH_SYS_BANK_OFS;
 	return (*((volatile u8*)(addr++)));
 }
 

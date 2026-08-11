@@ -106,4 +106,9 @@
 #define ADIOS_FLASH_BSL_LEN (ADIOS_LD_BSL_BOUNDARY_K * 1K)
 #define ADIOS_FLASH_APP_LEN (ADIOS_FLASH_TOTAL_LEN - ADIOS_FLASH_BSL_LEN)
 
+/* erase granularity, needed only to size a MIOS32_USERDATA_PAGES region:
+   uniform 2K page-erase across the whole G0 family. A family whose sectors
+   are unequal must NOT define this - see adios_body.ld.inc. */
+#define ADIOS_USERDATA_PAGE_SIZE 2048
+
 #include "adios_body.ld.inc"

@@ -146,7 +146,12 @@ void APP_Init(void)
 	APP_LCD_Clear();	// clear the TFT
 	// check magic number and boot page request
 	u8 rom_empty = 0;
-	if((*((volatile u8*)(TR5X6_FLASH_END_ADDR)))!=TR5X6_MAGIC_NUMBER)rom_empty = 1;
+	// NOT the very last byte of flash any more: the last two belong to the
+	// persistent device-ID record (see tr5x6_rom.h). A machine formatted by an
+	// older firmware still carries its magic at the old address, looks empty
+	// here, and would be formatted - hence the one-shot migration app, to be
+	// run once after the bootloader update and before this firmware.
+	if((*((volatile u8*)(TR5X6_FLASH_MAGIC_ADDR)))!=TR5X6_MAGIC_NUMBER)rom_empty = 1;
 	if( (tr5x6_decod_buttons.ALL==0x0a) || rom_empty ){
 		tr5x6_decod_buttons_flags.ALL=0;
 		curr_id = MIOS32_MIDI_DeviceIDGet();
@@ -1953,6 +1958,10 @@ void TASK_SettingsMenu(void *pvParameters){
 				}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
 					last_id = curr_id;
 					MIOS32_MIDI_DeviceIDSet(curr_id);
+					// ...and make it stick. DeviceIDSet only touches a RAM
+					// variable, so until now a new ID was forgotten at the
+					// next power-up and the menu was purely cosmetic.
+					TR5X6_ROM_DeviceIDStore(curr_id);
 					menu_edit=0;
 					SettingsMenu_Draw();
 					SettingsMenu_Legend();

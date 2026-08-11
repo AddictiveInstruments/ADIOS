@@ -433,6 +433,14 @@ write_header () {
         # chip - lets mios32_bsl.c include it directly instead of re-deriving
         # it from a MIOS32_BOARD_xxx define (removed 2026-08-01)
         echo "#define MIOS32_BSL_INC_FILE \"mios32_bsl_${CHIP}.inc\""
+        # the persistent device-ID opt-in, relayed from the project's Makefile:
+        # WITHOUT it the bootloader looks for no ID at all and answers on the
+        # compile-time default. It has to arrive this way rather than through
+        # the BSL_RELAY block because the reservation it depends on is a
+        # Makefile matter (the linker script needs it at preprocessing time).
+        if [ "${MIOS32_DEVICE_ID_PERSIST:-0}" = "1" ]; then
+            echo "#define MIOS32_DEVICE_ID_PERSIST 1"
+        fi
         if [ "$WITH_OVERRIDES" = "yes" ] && [ -n "$HOLD_PIN_OVERRIDES" ]; then
             echo "// BSL_HOLD pin override relayed from the project's mios32_config.h:"
             echo "$HOLD_PIN_OVERRIDES"
@@ -481,13 +489,26 @@ BOUNDARY=$(( PAGES * PAGE_SIZE ))
 if [ "$BOUNDARY" -lt "$MIN_BOUNDARY" ]; then
     BOUNDARY=$MIN_BOUNDARY
 fi
-APP_FLASH_LENGTH=$(( TOTAL_FLASH - BOUNDARY ))
+# Pages the application reserves for its own data at the TOP of flash
+# (MIOS32_USERDATA_PAGES, relayed through the environment by
+# programming_model.mk). The linker template already carves them out of its
+# FLASH region - but the rewrite further down recomputes that length from the
+# chip's TOTAL flash, so the same pages have to come off here too or the
+# reservation would be silently undone on every dynamic-boundary build.
+# PAGE_SIZE is this family's erase granularity, already resolved above.
+USERDATA_PAGES="${ADIOS_USERDATA_PAGES:-0}"
+USERDATA_LEN=$(( USERDATA_PAGES * PAGE_SIZE ))
+
+APP_FLASH_LENGTH=$(( TOTAL_FLASH - BOUNDARY - USERDATA_LEN ))
 
 BOUNDARY_HEX=$(printf '0x%X' "$BOUNDARY")
 APP_FLASH_ORIGIN_HEX=$(printf '0x%08X' $((0x08000000 + BOUNDARY)))
 
 echo "Bootloader actual size : $BSL_SIZE bytes (+ $PADDING_BYTES padding = $BSL_SIZE_PADDED)"
 echo "Final boundary (rounded to $PAGE_SIZE, min $MIN_BOUNDARY) : $BOUNDARY_HEX ($BOUNDARY bytes)"
+if [ "$USERDATA_PAGES" != "0" ]; then
+    echo "Application data reserved : $USERDATA_PAGES page(s) = $USERDATA_LEN bytes at the top of flash"
+fi
 
 
 # --- generated header for the BOOTLOADER's own build (so bsl_sysex.c's

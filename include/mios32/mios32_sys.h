@@ -168,6 +168,41 @@
 # endif
 #endif
 
+
+/////////////////////////////////////////////////////////////////////////////
+// Persistent SysEx device ID (MIOS32_DEVICE_ID_PERSIST, opt-in from the
+// project's Makefile - see programming_models/traditional/programming_model.mk)
+//
+// The record occupies the LAST TWO BYTES of flash: a 0x42 confirm marker
+// followed by the value. Deliberately the very top of memory, because that is
+// the one address an application and a bootloader both compute for themselves
+// - so neither has to be told where the other put it, and the two stay
+// independent. It sits inside the MIOS32_USERDATA_PAGES region, which the
+// linker script carves out of the application's own FLASH region: reserving
+// the page is what makes an application that grows into it fail to link.
+//
+// A project that already keeps data at the top of flash moves its own fields
+// down rather than relocating this record. Anchoring system fields at the END
+// of the last page keeps them independent of whatever layout the project uses
+// below - which is exactly how the 5x6 holds its magic number and current bank.
+/////////////////////////////////////////////////////////////////////////////
+#ifndef MIOS32_DEVICE_ID_PERSIST
+# define MIOS32_DEVICE_ID_PERSIST 0
+#endif
+
+#if MIOS32_DEVICE_ID_PERSIST
+// No check on MIOS32_USERDATA_PAGES here, deliberately: the reservation is the
+// APPLICATION's business and its Makefile already enforces it (the switch
+// defaults the page count, and an explicit 0 is a build error). The BOOTLOADER
+// compiles this same file with the switch relayed through its generated header
+// and knows nothing of page counts - it only ever READS the two bytes. A check
+// here therefore broke the bootloader build instead of catching anything.
+// runtime expressions: the flash size comes from the chip itself, so one
+// binary stays correct across the derivatives of a family
+# define MIOS32_SYS_ADDR_PERSIST_DEVICE_ID_CONFIRM (0x08000000 + MIOS32_SYS_FlashSizeGet() - 2)
+# define MIOS32_SYS_ADDR_PERSIST_DEVICE_ID         (0x08000000 + MIOS32_SYS_FlashSizeGet() - 1)
+#endif
+
 // location of the Device ID and USB device name
 // The bootloader update tool allows to change these values from MIOS terminal
 // NOTE: deliberately left UNDEFINED when there is no bootloader. The block

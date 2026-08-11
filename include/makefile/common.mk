@@ -176,8 +176,14 @@ $(DYNAMIC_BSL_APP_NAME)_app_only.hex: project_build/$(PROJECT).elf
 #    the updater build back at THIS app's mios32_config.h: the board's MIDI
 #    wiring lives there (BSL_RELAY block), and the updater must come up on
 #    the same connector as the bootloader it replaces.
+#    MIOS32_DEVICE_ID_PERSIST travels the same way, and it MUST: that sub-make
+#    re-runs gen_bsl_boundary.sh, which rebuilds bootloader/src in place and
+#    REGENERATES the embedded .inc this application links. Without the switch
+#    here, the bootloader that ends up in the combined image is the one built
+#    by this second pass - i.e. one that never looks for the stored device ID,
+#    silently undoing what the application's own pass produced (2026-08-11).
 $(DYNAMIC_BSL_APP_NAME)_bsl_updater.hex: project_build/$(PROJECT).elf
-	+$(MAKE) -C $(MIOS32_PATH)/bootloader/updater MIOS32_PATH=../.. PROCESSOR=$(PROCESSOR) BSL_RELAY_SRC=$(CURDIR)
+	+$(MAKE) -C $(MIOS32_PATH)/bootloader/updater MIOS32_PATH=../.. PROCESSOR=$(PROCESSOR) BSL_RELAY_SRC=$(CURDIR) MIOS32_DEVICE_ID_PERSIST=$(MIOS32_DEVICE_ID_PERSIST)
 	cp $(MIOS32_PATH)/bootloader/updater/updater_$(PROCESSOR).hex $@
 endif
 
