@@ -113,6 +113,9 @@ static s32 BSL_SYSEX_RecAddrAndLen(u8 midi_in);
 static s32 BSL_SYSEX_SendAck(mios32_midi_port_t port, u8 ack_code, u8 ack_arg);
 static s32 BSL_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len);
 static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer);
+#ifndef BSL_UPDATER
+static s32 BSL_SYSEX_EraseAppHead(void);
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -190,6 +193,23 @@ static u8 soft_hold;
 // POST-upload one (Studio asking to start the app - release the soft hold)
 static u8 upload_started;
 
+#ifndef BSL_UPDATER
+// The application's head page (its vector table) is erased on the FIRST write
+// block of a session and written by the LAST one, because MIOS Studio holds
+// that block back deliberately. Together they make an interrupted upload
+// detectable: main() only branches to the application when its reset vector
+// is valid, so an upload that never reached its final block leaves no
+// application at all - instead of the plausible-looking mixture of old and
+// new code a power cut used to leave behind, which the bootloader happily
+// started (observed 2026-08-11: two blank holes and three different builds
+// stacked in one app image, with an intact vector table on top).
+//
+// This flag is what stops the head page from being erased a SECOND time when
+// that final block arrives: its address is page aligned, and the erase rule
+// below would wipe everything else already written into that same page.
+static u8 app_head_erased;
+#endif
+
 
 /////////////////////////////////////////////////////////////////////////////
 // This function initializes the SysEx handler
@@ -205,6 +225,9 @@ s32 BSL_SYSEX_Init(u32 mode)
 
 	soft_hold = 0;
 	upload_started = 0;
+#ifndef BSL_UPDATER
+	app_head_erased = 0;
+#endif
 
 #ifdef BSL_UPDATER
 	// capture the device's persistent info block NOW - the first write block
@@ -557,11 +580,28 @@ s32 BSL_SYSEX_Cmd_WriteMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_
 			halt_state = 1;
 			upload_started = 1;
 
+			s32 error = 0;
+#ifndef BSL_UPDATER
+			// FIRST block of this session that targets the application:
+			// invalidate the application NOW by erasing its head page, so
+			// that an upload interrupted anywhere from here on leaves a
+			// device with no application rather than a half-replaced one.
+			// The block that refills that page is the one MIOS Studio sends
+			// last, which is what makes "upload complete" and "application
+			// valid" the same statement.
+			// bounded on BOTH sides: WriteMem also accepts SRAM targets,
+			// whose addresses are numerically above the flash range
+			if( !app_head_erased &&
+			    sysex_addr >= FLASH_START_ADDR && sysex_addr <= FLASH_END_ADDR ) {
+				app_head_erased = 1;
+				error = BSL_SYSEX_EraseAppHead();
+			}
+#endif
+
 			// write received data into memory (the updater build accepts
 			// exclusively the bootloader region, every other build exclusively
 			// the range above it - see BSL_FLASH_WRITE_FLOOR/CEIL)
-			s32 error;
-			if( (error = BSL_SYSEX_WriteMem(sysex_addr, sysex_len, sysex_buffer)) ) {
+			if( error || (error = BSL_SYSEX_WriteMem(sysex_addr, sysex_len, sysex_buffer)) ) {
 				// write failed - return negated error status
 				BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, -error);
 			} else {
@@ -726,6 +766,54 @@ s32 BSL_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
 }
 
 
+#ifndef BSL_UPDATER
+/////////////////////////////////////////////////////////////////////////////
+// Erases the application's head page/sector - the one holding its vector
+// table - so that from the first received block onwards this device has no
+// application main() would agree to start. Called once per upload session;
+// MIOS Studio sends the block that refills it last (see app_head_erased).
+/////////////////////////////////////////////////////////////////////////////
+static s32 BSL_SYSEX_EraseAppHead(void)
+{
+#if defined(MIOS32_FAMILY_STM32G0xx)
+	LL_FLASH_Unlock();
+	// page INDEX, not the absolute address divided by the page size: the
+	// erase below writes it straight into FLASH_CR's PNB field
+	LL_FLASH_Status status = LL_FLASH_PageErase(LL_FLASH_BANK_1,
+						    (FLASH_START_ADDR - 0x08000000) / FLASH_PAGE_SIZE);
+	LL_FLASH_Lock();
+	if( status != FLASH_COMPLETE ) {
+#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+		MIOS32_MIDI_SendDebugMessage("app head erase failed: code %d err 0x%08x\n", status, LL_FLASH_GetError());
+#endif
+		return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+	}
+#elif defined(MIOS32_FAMILY_STM32F4xx)
+	// find the sector the application starts in, and mark it erased in the
+	// session bookkeeping so the write path does not erase it again
+	int sector;
+	for(sector=MAX_FLASH_SECTOR-1; sector>=0; --sector) {
+		if( FLASH_START_ADDR >= flash_sector_map[sector][0] ) {
+			LL_FLASH_Unlock();
+			LL_FLASH_Status status = LL_FLASH_EraseSector(flash_sector_map[sector][1], LL_FLASH_VOLTRG_3);
+			LL_FLASH_Lock();
+			if( status != FLASH_COMPLETE ) {
+				LL_FLASH_ClearFlag(0xffffffff);
+#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+				MIOS32_MIDI_SendDebugMessage("app head erase failed: code %d\n", status);
+#endif
+				return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+			}
+			flash_erase_done |= (1 << sector);
+			break;
+		}
+	}
+#endif
+	return 0;
+}
+#endif /* !BSL_UPDATER */
+
+
 /////////////////////////////////////////////////////////////////////////////
 // This function writes into a memory
 // We expect that address and length are aligned to 4
@@ -747,8 +835,20 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 		for(i=0; i<len; addr+=8, i+=8) {
 			//MIOS32_IRQ_Disable();
 
-			if( (addr % FLASH_PAGE_SIZE) == 0 ) {
-				uint32_t page = addr/FLASH_PAGE_SIZE;
+			// erase on entering a page - EXCEPT the application's head page
+			// when this session already erased it up front: MIOS Studio
+			// sends that page's first block LAST, and erasing again here
+			// would wipe the rest of the page it has just filled
+			if( (addr % FLASH_PAGE_SIZE) == 0
+#ifndef BSL_UPDATER
+			    && !(app_head_erased && addr == FLASH_START_ADDR)
+#endif
+			    ) {
+				// page INDEX, not the absolute address divided by the page
+				// size: LL_FLASH_PageErase shifts this straight into
+				// FLASH_CR's PNB field. The old form only worked because
+				// the surplus high bits happened to land on reserved CR bits
+				uint32_t page = (addr - 0x08000000)/FLASH_PAGE_SIZE;
 				//FLASH->SR = LL_FLASH_SR_CLEAR;
 				if( (status=LL_FLASH_PageErase(LL_FLASH_BANK_1, page)) != FLASH_COMPLETE ) {
 					//LL_FLASH_ClearFlag(LL_FLASH_SR_CLEAR); // clear error flags, otherwise next program attempts will fail
@@ -768,6 +868,19 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 					((uint64_t)buffer[i+5] << 40) |
 					((uint64_t)buffer[i+6] << 48) |
 					((uint64_t)buffer[i+7] << 56);
+			// Skip double words that already hold exactly this value. Two
+			// things depend on it on G0, where flash carries ECC and a double
+			// word may be programmed only ONCE per erase cycle:
+			//  - retries. MIOS Studio re-sends a block whose acknowledge was
+			//    lost, and re-programming an identical double word raises
+			//    PROGERR. That used to be survivable only for the block at a
+			//    page start, which re-erased the page - and that block is now
+			//    sent last, on purpose, so it must not rely on re-erasing.
+			//  - blank stretches. The page was just erased, so writing 0xFF..
+			//    over it changes nothing but still consumes its one allowed
+			//    programming, and applications contain a lot of them.
+			if( *(volatile uint64_t *)addr == data )
+				continue;
 			//FLASH->SR = LL_FLASH_SR_CLEAR;
 			if( (status=LL_FLASH_ProgramDoubleWord(addr, data)) != FLASH_COMPLETE ) {
 				//LL_FLASH_ClearFlag(LL_FLASH_SR_CLEAR); // clear error flags, otherwise next program attempts will fail
@@ -837,9 +950,19 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 					// period...
 					u8 erase_required = 0;
 					{
+#ifdef BSL_UPDATER
 						if( addr == FLASH_START_ADDR ) { // using app start address as an indicator that all flash sectors have to be erased (again)
 							flash_erase_done = 0;
 						}
+#else
+						// NOT reset on the application's start address any
+						// more: MIOS Studio now sends that block LAST, so
+						// clearing the bookkeeping here would re-erase the
+						// head sector and destroy the whole upload. The
+						// session starts (and the head sector is erased) at
+						// the FIRST received block instead - see
+						// BSL_SYSEX_EraseAppHead().
+#endif
 
 						u32 flash_sector_mask = (1 << sector);
 						if( !(flash_erase_done & flash_sector_mask) ) {

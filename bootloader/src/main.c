@@ -198,6 +198,112 @@ static const srio_pin_t srio_mosi_pin[SRIO_NUM_MOSI_PINS] = {
 // Local prototypes
 /////////////////////////////////////////////////////////////////////////////
 static s32 ResetSRIOChains(void);
+static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized, volatile u32 *app_reset_vector);
+
+/////////////////////////////////////////////////////////////////////////////
+// The bootloader's MIDI service loop: announces that it is ready to receive
+// an upload, pulsates the LED and dispatches incoming SysEx (parsed by MIOS32
+// internally, which calls back into BSL_SYSEX_Cmd).
+//
+// main() enters it from exactly two places, and they are the only two reasons
+// to be here at all:
+//   - held, by the BSL_HOLD pin or by the software request an application
+//     sets before rebooting on MIOS Studio's behalf (app_reset_vector NULL).
+//     Leaves when released.
+//   - no valid application to hand over to, the state a power cut during an
+//     upload leaves behind. app_reset_vector then points at the application's
+//     reset vector and the loop watches it: it leaves as soon as an upload
+//     has put a valid one there. Watching the vector rather than a flag
+//     captured on entry is what lets a device recover WITHOUT a power cycle.
+//
+// The LED tells the two apart: pulsating = held, fast blink = no application.
+//
+// There is deliberately NO timeout. The former 2-second window existed so
+// MIOS Studio could catch a core it had just asked to reboot; the software
+// hold flag does that explicitly now, so the delay only ever slowed down
+// every single boot (it was disabled outright by the "fastboot" info-block
+// field, which this makes pointless - see main()).
+/////////////////////////////////////////////////////////////////////////////
+static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized, volatile u32 *app_reset_vector)
+{
+  u8 no_app = app_reset_vector ? 1 : 0;
+  // tell whoever is listening that this core takes uploads now. Belongs HERE
+  // rather than in main(): every path that waits must announce, and the one
+  // that hands over immediately has nothing to announce.
+#if defined(MIOS32_USE_DIN_MIDI)
+  // MIOS32_MIDI_DEFAULT_PORT, not a hardcoded DIN0: this bootloader talks
+  // on whatever DIN port its board actually wires (see mios32_config.h).
+  // Announcing on a port that isn't even enabled makes the core look dead
+  // to MIOS Studio while everything else works - which is exactly what
+  // happened once MIOS32_UARTn was realigned to USART(n+1) and this
+  // board's MIDI connector became DIN2 instead of DIN0.
+  BSL_SYSEX_SendUploadReq(MIOS32_MIDI_DEFAULT_PORT);
+#endif
+  if( usb_was_initialized )
+    BSL_SYSEX_SendUploadReq(USB0);
+
+  MIOS32_STOPWATCH_Reset();
+  do {
+    // This is a simple way to pulsate a LED via PWM
+    // A timer in incrementer mode is used as reference, the counter value is incremented each 100 uS
+    // Within the given PWM period, we define a duty cycle based on the current counter value
+    // We periodically sweep the PWM duty cycle 100 steps up, and 100 steps down
+    u32 cnt = MIOS32_STOPWATCH_ValueGet();  // the reference counter (incremented each 100 uS)
+    // the stopwatch is a 16-bit timer at 100 uS: it overruns after 6.55 s and
+    // ValueGet() then returns 0xffffffff for good. Every LED pattern below is
+    // derived from this counter, so without restarting it the LED freezes -
+    // lit, in the fast-blink case - a few seconds after the last SysEx (which
+    // is what BSL_SYSEX_Cmd's own reset used to hide during an upload)
+    if( cnt == 0xffffffff ) {
+      MIOS32_STOPWATCH_Reset();
+      cnt = 0;
+    }
+    if( no_app ) {
+      // 200 mS on, 200 mS off - same cadence as the former dead-end loop, but
+      // derived from the counter instead of blocking on it, so MIDI is served
+      MIOS32_BOARD_LED_Set(BSL_LED_MASK, ((cnt / 2000) & 1) ? BSL_LED_MASK : 0);
+    } else {
+      const u32 pwm_period = 50;       // *100 uS -> 5 mS
+      const u32 pwm_sweep_steps = 100; // * 5 mS -> 500 mS
+      u32 pwm_duty = ((cnt / pwm_period) % pwm_sweep_steps) / (pwm_sweep_steps/pwm_period);
+      if( (cnt % (2*pwm_period*pwm_sweep_steps)) > pwm_period*pwm_sweep_steps )
+	pwm_duty = pwm_period-pwm_duty; // negative direction each 50*100 ticks
+      u32 led_on = ((cnt % pwm_period) > pwm_duty) ? 1 : 0;
+      MIOS32_BOARD_LED_Set(BSL_LED_MASK, led_on ? BSL_LED_MASK : 0);
+    }
+
+    // call periodic hook each mS (!!! important - not shorter due to timeout counters which are handled here)
+    if( (cnt % 10) == 0 ) {
+      MIOS32_MIDI_Periodic_mS();
+    }
+
+    // check for incoming MIDI messages - no hooks are used
+    // SysEx requests will be parsed by MIOS32 internally, BSL_SYSEX_Cmd() will be called
+    // directly by MIOS32 to enhance command set
+    MIOS32_MIDI_Receive_Handler(NULL);
+
+    // re-READ, never a flag captured on entry: an upload finishing here is
+    // precisely what turns "no application" into "application", and the loop
+    // has to notice by itself for the device to recover without a power cycle
+  } while( (no_app && ((*app_reset_vector >> 24) != 0x08)) ||
+	   BSL_SYSEX_HaltStateGet() ||                        // BSL not halted due to flash write operation
+	   (hold_mode_active_after_reset && (BSL_HOLD_STATE || BSL_SYSEX_SoftHoldGet()))); // held by pin, or by the software request (released by Studio's post-upload reboot query)
+
+#if defined(MIOS32_USE_DIN_MIDI)
+  // Let whatever was just queued actually LEAVE the UART before this function
+  // returns - main() hands over to the application (or resets) immediately
+  // after, and both wipe the USART while transmission is interrupt driven.
+  // BSL_SYSEX_ReleaseHaltState() answers MIOS Studio's post-upload reboot
+  // query with an upload request exactly here, and losing it made Studio
+  // report "No response from core after reboot" on an upload that had in
+  // fact succeeded (2026-08-11). The former 2-second timeout hid this by
+  // lingering long enough; the flush has to be explicit now.
+  MIOS32_STOPWATCH_Reset();
+  while( MIOS32_UART_TxBufferFree(MIOS32_MIDI_DEFAULT_PORT & 0xf) < MIOS32_UART_TX_BUFFER_SIZE &&
+	 MIOS32_STOPWATCH_ValueGet() < 2000 ); // 200 mS ceiling
+  MIOS32_DELAY_Wait_uS(1000); // the byte still in the shift register
+#endif
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // Main function
@@ -254,7 +360,6 @@ int main(void)
   // succeed (the physical BSL_HOLD pin remains the fallback if it doesn't)
   u8 bootloader_mode_requested = MIOS32_SYS_BootloaderModeRequested();
   u8 hold_mode_active_after_reset = BSL_HOLD_STATE | bootloader_mode_requested;
-//  if(hold_mode_active_after_reset)fastboot = 0;
   MIOS32_BOARD_LED_Set(BSL_LED_MASK, 1);
   ///////////////////////////////////////////////////////////////////////////
   // initialize USB only if already done (-> not after Power On) or Hold mode enabled
@@ -307,76 +412,28 @@ int main(void)
 #endif
 
 
-  ///////////////////////////////////////////////////////////////////////////
-  // check for optional fast boot
-  ///////////////////////////////////////////////////////////////////////////
-  u8 fastboot = 0;
-#ifdef MIOS32_SYS_ADDR_BSL_INFO_BEGIN
-  if( !usb_was_initialized && !hold_mode_active_after_reset ) {
-    // read from bootloader info range
-    u8 *bsl_info_fastboot_confirm = (u8 *)MIOS32_SYS_ADDR_FASTBOOT_CONFIRM;
-    u8 *bsl_info_fastboot = (u8 *)MIOS32_SYS_ADDR_FASTBOOT;
-    if( *bsl_info_fastboot_confirm == 0x42 )
-      fastboot = *bsl_info_fastboot;
-  }
-#endif
-
-
-  ///////////////////////////////////////////////////////////////////////////
-  // send upload request to USB and UART MIDI
-  ///////////////////////////////////////////////////////////////////////////
-  if( !fastboot ) {
-#if defined(MIOS32_USE_DIN_MIDI)
-    // MIOS32_MIDI_DEFAULT_PORT, not a hardcoded DIN0: this bootloader talks
-    // on whatever DIN port its board actually wires (see mios32_config.h).
-    // Announcing on a port that isn't even enabled makes the core look dead
-    // to MIOS Studio while everything else works - which is exactly what
-    // happened once MIOS32_UARTn was realigned to USART(n+1) and this
-    // board's MIDI connector became DIN2 instead of DIN0.
-    BSL_SYSEX_SendUploadReq(MIOS32_MIDI_DEFAULT_PORT);
-#endif
-    if( usb_was_initialized )
-      BSL_SYSEX_SendUploadReq(USB0);
-  }
+  // NOTE: there is no "fastboot" any more, and no timed wait either. This
+  // bootloader now ALWAYS hands over immediately when it has an application
+  // and nothing asks it to stay - what the info block's fastboot field used
+  // to switch on. Its opposite was not a feature but a 2-second delay on
+  // every boot, whose only purpose was to give MIOS Studio a chance to catch
+  // a core it had just asked to reboot; the software hold flag does that
+  // explicitly and reliably. The field at MIOS32_SYS_ADDR_FASTBOOT(_CONFIRM)
+  // is simply no longer read - the bytes stay in the info block, and the
+  // updater keeps relaying the block verbatim, so nothing has to migrate.
 
 #ifdef BSL_LCD_PRE_RESET
 	MIOS32_SYS_STM_PINSET_0(LCD_RST_PORT, LCD_RST_PIN);
 	MIOS32_DELAY_Wait_uS(15000);							// wait for 10ms
 	MIOS32_SYS_STM_PINSET_1(LCD_RST_PORT, LCD_RST_PIN);
 #endif
+
   ///////////////////////////////////////////////////////////////////////////
-  // reset stopwatch timer and start wait loop
-  if( !fastboot ) {
-    MIOS32_STOPWATCH_Reset();
-    do {
-      // This is a simple way to pulsate a LED via PWM
-      // A timer in incrementer mode is used as reference, the counter value is incremented each 100 uS
-      // Within the given PWM period, we define a duty cycle based on the current counter value
-      // We periodically sweep the PWM duty cycle 100 steps up, and 100 steps down
-      u32 cnt = MIOS32_STOPWATCH_ValueGet();  // the reference counter (incremented each 100 uS)
-      const u32 pwm_period = 50;       // *100 uS -> 5 mS
-      const u32 pwm_sweep_steps = 100; // * 5 mS -> 500 mS
-      u32 pwm_duty = ((cnt / pwm_period) % pwm_sweep_steps) / (pwm_sweep_steps/pwm_period);
-      if( (cnt % (2*pwm_period*pwm_sweep_steps)) > pwm_period*pwm_sweep_steps )
-	pwm_duty = pwm_period-pwm_duty; // negative direction each 50*100 ticks
-      u32 led_on = ((cnt % pwm_period) > pwm_duty) ? 1 : 0;
-      MIOS32_BOARD_LED_Set(BSL_LED_MASK, led_on ? BSL_LED_MASK : 0);
-
-
-      // call periodic hook each mS (!!! important - not shorter due to timeout counters which are handled here)
-      if( (cnt % 10) == 0 ) {
-	MIOS32_MIDI_Periodic_mS();
-      }
-
-      // check for incoming MIDI messages - no hooks are used
-      // SysEx requests will be parsed by MIOS32 internally, BSL_SYSEX_Cmd() will be called
-      // directly by MIOS32 to enhance command set
-      MIOS32_MIDI_Receive_Handler(NULL);
-
-    } while( MIOS32_STOPWATCH_ValueGet() < 20000 ||             // wait for 2 seconds
-	     BSL_SYSEX_HaltStateGet() ||                        // BSL not halted due to flash write operation
-	     (hold_mode_active_after_reset && (BSL_HOLD_STATE || BSL_SYSEX_SoftHoldGet()))); // held by pin, or by the software request (released by Studio's post-upload reboot query)
-  }
+  // 1) asked to stay? (BSL_HOLD pin, or the software request relayed above)
+  //    Serve MIDI until whoever holds us lets go, then carry on to 2).
+  ///////////////////////////////////////////////////////////////////////////
+  if( hold_mode_active_after_reset )
+    BSL_WaitLoop(hold_mode_active_after_reset, usb_was_initialized, NULL);
 
 #if defined(MIOS32_FAMILY_STM32F10x) || defined(MIOS32_FAMILY_STM32F4xx)
   // ensure that flash write access is locked
@@ -386,6 +443,10 @@ int main(void)
   // turn off LED
   MIOS32_BOARD_LED_Set(BSL_LED_MASK, 0);
 
+  ///////////////////////////////////////////////////////////////////////////
+  // 2) valid application? Hand over. Otherwise fall through to the permanent
+  //    service loop at the end of this function.
+  ///////////////////////////////////////////////////////////////////////////
   // branch to application if reset vector is valid (should be inside flash range)
 #if defined(MIOS32_FAMILY_STM32F10x) || defined(MIOS32_FAMILY_STM32F4xx) || defined(MIOS32_FAMILY_STM32G0xx)
 #if defined (MIOS32_FAMILY_STM32G0xx) || defined(MIOS32_FAMILY_STM32F4xx)
@@ -473,16 +534,19 @@ int main(void)
     application();
   }
 
-  // otherwise flash LED fast (BSL failed to start application)
-  while( 1 ) {
-    MIOS32_STOPWATCH_Reset();
-    MIOS32_BOARD_LED_Set(BSL_LED_MASK, BSL_LED_MASK);
-    while( MIOS32_STOPWATCH_ValueGet() < 2000 );
+  // No valid application (reset vector not pointing into flash). This is
+  // EXACTLY the state a power cut during an upload leaves behind, so it must
+  // stay recoverable over MIDI: the former code blinked the LED forever
+  // without ever calling MIOS32_MIDI_Receive_Handler(), which made MIOS
+  // Studio see a dead core and left the BSL_HOLD strap as the only way out.
+  BSL_WaitLoop(hold_mode_active_after_reset, usb_was_initialized, reset_vector);
 
-    MIOS32_STOPWATCH_Reset();
-    MIOS32_BOARD_LED_Set(BSL_LED_MASK, 0);
-    while( MIOS32_STOPWATCH_ValueGet() < 2000 );
-  }
+  // ...and it returned, so an upload just wrote a valid application. Reset
+  // rather than jump from here: the boot path above already knows how to
+  // hand over (stack pointer, entry override, peripheral reset), and a fresh
+  // start is also what MIOS Studio asked for with the reboot query that
+  // released the hold. Everything queued for it has been flushed by the loop.
+  MIOS32_SYS_Reset();
 
   return 0; // will never be reached
 }
