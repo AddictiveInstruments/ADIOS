@@ -11,8 +11,8 @@
 #define _MIOS32_CONFIG_H
 
 // The boot message which is on a SysEx query (LCD not enabled, therefore not print on startup)
-#define MIOS32_LCD_BOOT_MSG_LINE1 "MIOS32 Bootloader"
-#define MIOS32_LCD_BOOT_MSG_LINE2 "(c) 2014 T. Klose"
+#define MIOS32_LCD_BOOT_MSG_LINE1 "ADIOS Bootloader"
+#define MIOS32_LCD_BOOT_MSG_LINE2 "(c) 2026 B.Dupeyron"
 
 // disable code modules
 // mios32_sys.c/mios32_irq.c: indispensable, always compiled, no toggle.

@@ -1808,13 +1808,20 @@ static s32 MIOS32_MIDI_SYSEX_Cmd_Query(mios32_midi_port_t port, mios32_midi_syse
 				}
 			}
 #endif
-			MIOS32_MIDI_SYSEX_SendAckStr(port, "MIOS32");
+			// the operating system's own name. MIOS Studio checks it before
+			// starting an upload, so the two must change together - it
+			// accepts both spellings (UploadHandler.cpp).
+			MIOS32_MIDI_SYSEX_SendAckStr(port, "ADIOS");
 			break;
 		case 0x02: // Board
 			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_BOARD_STR);
 			break;
-		case 0x03: // Core Family
-			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_FAMILY_STR);
+		case 0x03: // Processor
+			// the exact part (STM32G070CB...), not its family: the family is
+			// implied by it, while the part number is what actually tells you
+			// what you are talking to - flash and RAM size, peripherals.
+			// Both come from the project's own PROCESSOR, see mios32/mios32.mk
+			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_PROCESSOR_STR);
 			break;
 		case 0x04: // Chip ID
 			sprintf(str_buffer, "%08x", MIOS32_SYS_ChipIDGet());

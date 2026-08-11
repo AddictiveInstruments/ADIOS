@@ -198,7 +198,7 @@ static const srio_pin_t srio_mosi_pin[SRIO_NUM_MOSI_PINS] = {
 // Local prototypes
 /////////////////////////////////////////////////////////////////////////////
 static s32 ResetSRIOChains(void);
-static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized, volatile u32 *app_reset_vector);
+static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized, u8 no_app);
 
 /////////////////////////////////////////////////////////////////////////////
 // The bootloader's MIDI service loop: announces that it is ready to receive
@@ -208,13 +208,13 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
 // main() enters it from exactly two places, and they are the only two reasons
 // to be here at all:
 //   - held, by the BSL_HOLD pin or by the software request an application
-//     sets before rebooting on MIOS Studio's behalf (app_reset_vector NULL).
-//     Leaves when released.
-//   - no valid application to hand over to, the state a power cut during an
-//     upload leaves behind. app_reset_vector then points at the application's
-//     reset vector and the loop watches it: it leaves as soon as an upload
-//     has put a valid one there. Watching the vector rather than a flag
-//     captured on entry is what lets a device recover WITHOUT a power cycle.
+//     sets before rebooting on MIOS Studio's behalf (no_app = 0). Leaves when
+//     released, and main() hands over to the application below.
+//   - no valid application to hand over to (no_app = 1), the state a power cut
+//     during an upload leaves behind. Leaves as soon as something HAS been
+//     uploaded and released, upon which main() resets and the whole boot
+//     decision is taken again - which is what lets a device recover without a
+//     power cycle, and what lets the entry override be honoured.
 //
 // The LED tells the two apart: pulsating = held, fast blink = no application.
 //
@@ -224,9 +224,8 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
 // every single boot (it was disabled outright by the "fastboot" info-block
 // field, which this makes pointless - see main()).
 /////////////////////////////////////////////////////////////////////////////
-static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized, volatile u32 *app_reset_vector)
+static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized, u8 no_app)
 {
-  u8 no_app = app_reset_vector ? 1 : 0;
   // tell whoever is listening that this core takes uploads now. Belongs HERE
   // rather than in main(): every path that waits must announce, and the one
   // that hands over immediately has nothing to announce.
@@ -282,10 +281,16 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
     // directly by MIOS32 to enhance command set
     MIOS32_MIDI_Receive_Handler(NULL);
 
-    // re-READ, never a flag captured on entry: an upload finishing here is
-    // precisely what turns "no application" into "application", and the loop
-    // has to notice by itself for the device to recover without a power cycle
-  } while( (no_app && ((*app_reset_vector >> 24) != 0x08)) ||
+    // The "no application" case leaves as soon as SOMETHING has been written
+    // and MIOS Studio has released - main() then resets, and the whole boot
+    // decision is taken again from scratch. Watching the application's reset
+    // vector instead was too narrow: MIOS Studio also installs the BSL update
+    // tool ABOVE the boundary and redirects a single boot to it with the entry
+    // override, which is read once per startup, before this loop. The loop
+    // never saw the boundary become valid - because it does not, in that flow -
+    // and the bootloader stayed put, answering "BSL" when Studio expected the
+    // updater to have started (2026-08-11).
+  } while( (no_app && !BSL_SYSEX_UploadStartedGet()) ||
 	   BSL_SYSEX_HaltStateGet() ||                        // BSL not halted due to flash write operation
 	   (hold_mode_active_after_reset && (BSL_HOLD_STATE || BSL_SYSEX_SoftHoldGet()))); // held by pin, or by the software request (released by Studio's post-upload reboot query)
 
@@ -433,7 +438,7 @@ int main(void)
   //    Serve MIDI until whoever holds us lets go, then carry on to 2).
   ///////////////////////////////////////////////////////////////////////////
   if( hold_mode_active_after_reset )
-    BSL_WaitLoop(hold_mode_active_after_reset, usb_was_initialized, NULL);
+    BSL_WaitLoop(hold_mode_active_after_reset, usb_was_initialized, 0);
 
 #if defined(MIOS32_FAMILY_STM32F10x) || defined(MIOS32_FAMILY_STM32F4xx)
   // ensure that flash write access is locked
@@ -539,7 +544,7 @@ int main(void)
   // stay recoverable over MIDI: the former code blinked the LED forever
   // without ever calling MIOS32_MIDI_Receive_Handler(), which made MIOS
   // Studio see a dead core and left the BSL_HOLD strap as the only way out.
-  BSL_WaitLoop(hold_mode_active_after_reset, usb_was_initialized, reset_vector);
+  BSL_WaitLoop(hold_mode_active_after_reset, usb_was_initialized, 1);
 
   // ...and it returned, so an upload just wrote a valid application. Reset
   // rather than jump from here: the boot path above already knows how to

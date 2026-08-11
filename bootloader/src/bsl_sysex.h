@@ -59,6 +59,7 @@ typedef enum {
 
 extern s32 BSL_SYSEX_Init(u32 mode);
 extern s32 BSL_SYSEX_HaltStateGet(void);
+extern s32 BSL_SYSEX_UploadStartedGet(void);
 extern s32 BSL_SYSEX_SoftHoldSet(u8 hold);
 extern s32 BSL_SYSEX_SoftHoldGet(void);
 extern s32 BSL_SYSEX_ReleaseHaltState(void);

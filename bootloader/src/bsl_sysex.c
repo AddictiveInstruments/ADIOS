@@ -275,6 +275,18 @@ s32 BSL_SYSEX_HaltStateGet(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
+// Returns 1 once anything has been written in this session. main()'s
+// "no application" wait loop uses it as its way out: something arrived and
+// MIOS Studio released, so the boot decision has to be taken again from
+// scratch - which may now mean an entry override, not just a fresh app.
+/////////////////////////////////////////////////////////////////////////////
+s32 BSL_SYSEX_UploadStartedGet(void)
+{
+	return upload_started;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
 // Software-requested hold state - set by main() from the RTC backup flag,
 // polled by main()'s wait loop (same role as the physical BSL_HOLD pin)
 /////////////////////////////////////////////////////////////////////////////
@@ -300,13 +312,11 @@ s32 BSL_SYSEX_SoftHoldGet(void)
 //    1) restore the persistent info block (captured to RAM at init) at its
 //       NEW position, boundary-0x100 (the incoming image ends well before
 //       it, so that area is still erased and programmable);
-//    2) clear the entry override, set the TAMP flag so the fresh bootloader
-//       stays resident, reset.
-//    No app-page erase: the flag alone keeps the fresh BSL resident, so the
-//    updater never has to erase the page it might be sitting on - which is
-//    what lets it link right at the boundary ceiling. (Trade-off: if power
-//    is cut in the gap before the app is uploaded, the device reboots into
-//    this still-present updater - harmless, case B below just relays.)
+//    2) clear the entry override and STAY RESIDENT - no reset. The tool is
+//       what the machine visibly runs until an application is sent, which is
+//       the only way the state can be read from outside. upload_started is
+//       cleared, so the next 0x7f falls into case B: sending the application
+//       is how a bootloader update ends, and it goes through the relay.
 //
 // B) Nothing written this session (an app-load request, not a BSL update):
 //    behave like a normal application's 0x7f - set the flag and reset, so
@@ -333,9 +343,30 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 		}
 
 		MIOS32_SYS_AppEntryOverrideSet(0);
-		MIOS32_SYS_BootloaderModeRequest();
-		MIOS32_SYS_Reset();
-		return 0; // never reached
+
+		MIOS32_IRQ_Enable();
+
+		// deliberately NO reset here. Resetting handed control straight back
+		// to the fresh bootloader, which looks exactly like an ordinary
+		// bootloader from the outside - so nothing ever told you that the
+		// update had happened and that the application space now holds this
+		// tool rather than an application. Staying resident makes the state
+		// visible: a query answers UPDATER, and MIOS Studio says so.
+		//
+		// upload_started goes back to zero, which is what makes the NEXT 0x7f
+		// take case B below - the app-load relay. Sending an application from
+		// here is therefore the normal way to finish a bootloader update, and
+		// that relay is now exercised on every single update instead of never.
+		halt_state = 0;
+		upload_started = 0;
+
+		// answer MIOS Studio's finalize (it waits ~3 s for any sign of life,
+		// which used to be the fresh bootloader announcing itself after the
+		// reset). No peripheral reset happens here, so nothing can eat these
+		// bytes on their way out.
+		BSL_SYSEX_SendUploadReq(MIOS32_MIDI_DEFAULT_PORT);
+		BSL_SYSEX_SendUploadReq(USB0);
+		return 0;
 	}
 
 	// B) nothing written -> app-load relay: step aside for the fresh
