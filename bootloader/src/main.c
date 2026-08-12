@@ -43,9 +43,6 @@ extern USB_OTG_CORE_HANDLE  USB_OTG_FS_dev;
 // Local definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// LEDs used by BSL to notify the status
-#define BSL_LED_MASK 0x00000001 // green LED
-
 // the "hold" pin - single default (PA11, pull-down/high-active) for every
 // currently supported family (F4xx, G0xx) - no per-processor branching here,
 // override both BSL_HOLD_PORT/BSL_HOLD_PIN together via the project-facing
@@ -76,8 +73,6 @@ extern USB_OTG_CORE_HANDLE  USB_OTG_FS_dev;
 // Local variables
 /////////////////////////////////////////////////////////////////////////////
 
-// note: adaptions also have to be done in MIOS32_BOARD_J5_(Set/Get),
-// since these functions access the ports directly
 #if defined(MIOS32_FAMILY_STM32F10x) || defined(MIOS32_FAMILY_STM32F4xx)
 typedef struct {
   GPIO_TypeDef *port;
@@ -260,7 +255,7 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
     if( no_app ) {
       // 200 mS on, 200 mS off - same cadence as the former dead-end loop, but
       // derived from the counter instead of blocking on it, so MIDI is served
-      MIOS32_BOARD_LED_Set(BSL_LED_MASK, ((cnt / 2000) & 1) ? BSL_LED_MASK : 0);
+      ((cnt / 2000) & 1) ? MIOS32_SOL_Set() : MIOS32_SOL_Clr();
     } else {
       const u32 pwm_period = 50;       // *100 uS -> 5 mS
       const u32 pwm_sweep_steps = 100; // * 5 mS -> 500 mS
@@ -268,7 +263,7 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
       if( (cnt % (2*pwm_period*pwm_sweep_steps)) > pwm_period*pwm_sweep_steps )
 	pwm_duty = pwm_period-pwm_duty; // negative direction each 50*100 ticks
       u32 led_on = ((cnt % pwm_period) > pwm_duty) ? 1 : 0;
-      MIOS32_BOARD_LED_Set(BSL_LED_MASK, led_on ? BSL_LED_MASK : 0);
+      led_on ? MIOS32_SOL_Set() : MIOS32_SOL_Clr();
     }
 
     // call periodic hook each mS (!!! important - not shorter due to timeout counters which are handled here)
@@ -334,7 +329,7 @@ int main(void)
 #endif
 
 
-  MIOS32_BOARD_LED_Init(BSL_LED_MASK);
+  MIOS32_SOL_Init();
 
   // BSL_HOLD_PIN (PA11)
 #if !defined(MIOS32_FAMILY_STM32F10x) && !defined(MIOS32_FAMILY_STM32F4xx)
@@ -352,7 +347,7 @@ int main(void)
 
   // initialize stopwatch which is used to measure a 2 second delay 
   // before application will be started
-  //MIOS32_BOARD_LED_Set(BSL_LED_MASK, 1);
+  //MIOS32_SOL_Set();
   MIOS32_STOPWATCH_Init(100); // 100 uS accuracy
 
   //MIOS32_STOPWATCH_Reset();
@@ -365,7 +360,7 @@ int main(void)
   // succeed (the physical BSL_HOLD pin remains the fallback if it doesn't)
   u8 bootloader_mode_requested = MIOS32_SYS_BootloaderModeRequested();
   u8 hold_mode_active_after_reset = BSL_HOLD_STATE | bootloader_mode_requested;
-  MIOS32_BOARD_LED_Set(BSL_LED_MASK, 1);
+  MIOS32_SOL_Set();
   ///////////////////////////////////////////////////////////////////////////
   // initialize USB only if already done (-> not after Power On) or Hold mode enabled
   ///////////////////////////////////////////////////////////////////////////
@@ -446,7 +441,7 @@ int main(void)
 #endif
 
   // turn off LED
-  MIOS32_BOARD_LED_Set(BSL_LED_MASK, 0);
+  MIOS32_SOL_Clr();
 
   ///////////////////////////////////////////////////////////////////////////
   // 2) valid application? Hand over. Otherwise fall through to the permanent

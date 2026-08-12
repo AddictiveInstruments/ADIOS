@@ -2,7 +2,7 @@
 
 ################################################################################
 # g030k6_test - real dynamic bootloader/app boundary test on a Nucleo-G030K6
-# (onboard user LED on PC6, see MIOS32_SOF_LED_PORT/PIN override in
+# (onboard user LED on PC6, see MIOS32_SOL_PORT/PIN override in
 # mios32_config.h). Deliberately the SMALLEST chip in the reference library
 # (32K flash, 8K RAM, "small tier" FreeRTOS-off) - the tightest, most
 # revealing test of etc/gen_bsl_boundary.sh: the bootloader's own minimum

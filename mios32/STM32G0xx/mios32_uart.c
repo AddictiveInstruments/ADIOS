@@ -603,7 +603,7 @@
 static u32 uart_midi_act=0;
 static u8  uart_assigned_to_midi;
 static u32 uart_baudrate[MIOS32_UART_MAX_PORTS];
-static mios32_board_pin_mode_t  uart_tx_pin_mode[MIOS32_UART_MAX_PORTS];
+static mios32_pin_mode_t  uart_tx_pin_mode[MIOS32_UART_MAX_PORTS];
 
 // named per-port RX/TX buffers - only allocated for ports actually enabled
 // via MIOS32_USE_UARTx, unlike the small per-port state above (baudrate,
@@ -887,13 +887,13 @@ s32 MIOS32_UART_IsAssignedToMIDI(u8 uart)
 //! \param[in] baudrate the baudrate
 //! \param[in] tx_pin_mode the TX pin mode
 //!   <UL>
-//!     <LI>MIOS32_BOARD_PIN_MODE_OUTPUT_PP: TX pin configured for push-pull mode
-//!     <LI>MIOS32_BOARD_PIN_MODE_OUTPUT_OD: TX pin configured for open drain mode
+//!     <LI>MIOS32_PIN_MODE_OUTPUT_PP: TX pin configured for push-pull mode
+//!     <LI>MIOS32_PIN_MODE_OUTPUT_OD: TX pin configured for open drain mode
 //!   </UL>
 //! \param[in] is_midi MIDI or common UART interface?
 //! \return < 0 if initialisation failed
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_mode, u8 is_midi)
+s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_pin_mode_t tx_pin_mode, u8 is_midi)
 {
   LL_GPIO_InitTypeDef GPIO_InitStructure;
   LL_GPIO_StructInit(&GPIO_InitStructure);
@@ -917,7 +917,7 @@ s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_m
   case 0: {
     GPIO_InitStructure.Pin = MIOS32_UART0_TX_PIN;
     GPIO_InitStructure.Mode  = LL_GPIO_MODE_ALTERNATE;
-    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_BOARD_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
+    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
     GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
     GPIO_InitStructure.Alternate = MIOS32_UART0_TX_AF;
     LL_GPIO_Init(MIOS32_UART0_TX_PORT, &GPIO_InitStructure);
@@ -937,7 +937,7 @@ s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_m
   case 1: {
     GPIO_InitStructure.Pin = MIOS32_UART1_TX_PIN;
     GPIO_InitStructure.Mode  = LL_GPIO_MODE_ALTERNATE;
-    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_BOARD_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
+    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
     GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
     GPIO_InitStructure.Alternate = MIOS32_UART1_TX_AF;
     LL_GPIO_Init(MIOS32_UART1_TX_PORT, &GPIO_InitStructure);
@@ -957,7 +957,7 @@ s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_m
   case 2: {
     GPIO_InitStructure.Pin = MIOS32_UART2_TX_PIN;
     GPIO_InitStructure.Mode  = LL_GPIO_MODE_ALTERNATE;
-    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_BOARD_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
+    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
     GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
     GPIO_InitStructure.Alternate = MIOS32_UART2_TX_AF;
     LL_GPIO_Init(MIOS32_UART2_TX_PORT, &GPIO_InitStructure);
@@ -977,7 +977,7 @@ s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_m
   case 3: {
     GPIO_InitStructure.Pin = MIOS32_UART3_TX_PIN;
     GPIO_InitStructure.Mode  = LL_GPIO_MODE_ALTERNATE;
-    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_BOARD_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
+    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
     GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
     GPIO_InitStructure.Alternate = MIOS32_UART3_TX_AF;
     LL_GPIO_Init(MIOS32_UART3_TX_PORT, &GPIO_InitStructure);
@@ -997,7 +997,7 @@ s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_m
   case 4: {
     GPIO_InitStructure.Pin = MIOS32_UART4_TX_PIN;
     GPIO_InitStructure.Mode  = LL_GPIO_MODE_ALTERNATE;
-    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_BOARD_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
+    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
     GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
     GPIO_InitStructure.Alternate = MIOS32_UART4_TX_AF;
     LL_GPIO_Init(MIOS32_UART4_TX_PORT, &GPIO_InitStructure);
@@ -1017,7 +1017,7 @@ s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_m
   case 5: {
     GPIO_InitStructure.Pin = MIOS32_UART5_TX_PIN;
     GPIO_InitStructure.Mode  = LL_GPIO_MODE_ALTERNATE;
-    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_BOARD_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
+    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
     GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
     GPIO_InitStructure.Alternate = MIOS32_UART5_TX_AF;
     LL_GPIO_Init(MIOS32_UART5_TX_PORT, &GPIO_InitStructure);
@@ -1037,7 +1037,7 @@ s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_m
   case 6: {
     GPIO_InitStructure.Pin = MIOS32_UART6_TX_PIN;
     GPIO_InitStructure.Mode  = LL_GPIO_MODE_ALTERNATE;
-    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_BOARD_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
+    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
     GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
     GPIO_InitStructure.Alternate = MIOS32_UART6_TX_AF;
     LL_GPIO_Init(MIOS32_UART6_TX_PORT, &GPIO_InitStructure);
@@ -1057,7 +1057,7 @@ s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_m
   case 7: {
     GPIO_InitStructure.Pin = MIOS32_UART7_TX_PIN;
     GPIO_InitStructure.Mode  = LL_GPIO_MODE_ALTERNATE;
-    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_BOARD_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
+    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN;
     GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
     GPIO_InitStructure.Alternate = MIOS32_UART7_TX_AF;
     LL_GPIO_Init(MIOS32_UART7_TX_PORT, &GPIO_InitStructure);
@@ -1092,9 +1092,9 @@ s32 MIOS32_UART_InitPortDefault(u8 uart)
 #if defined(MIOS32_USE_UART0) && MIOS32_UART0_ASSIGNMENT != 0
   case 0: {
 # if MIOS32_UART0_TX_OD
-    MIOS32_UART_InitPort(0, MIOS32_UART0_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_OD, MIOS32_UART0_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(0, MIOS32_UART0_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_OD, MIOS32_UART0_ASSIGNMENT == 1);
 # else
-    MIOS32_UART_InitPort(0, MIOS32_UART0_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, MIOS32_UART0_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(0, MIOS32_UART0_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_PP, MIOS32_UART0_ASSIGNMENT == 1);
 # endif
   } break;
 #endif
@@ -1102,9 +1102,9 @@ s32 MIOS32_UART_InitPortDefault(u8 uart)
 #if defined(MIOS32_USE_UART1) && MIOS32_UART1_ASSIGNMENT != 0
   case 1: {
 # if MIOS32_UART1_TX_OD
-    MIOS32_UART_InitPort(1, MIOS32_UART1_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_OD, MIOS32_UART1_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(1, MIOS32_UART1_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_OD, MIOS32_UART1_ASSIGNMENT == 1);
 # else
-    MIOS32_UART_InitPort(1, MIOS32_UART1_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, MIOS32_UART1_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(1, MIOS32_UART1_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_PP, MIOS32_UART1_ASSIGNMENT == 1);
 # endif
   } break;
 #endif
@@ -1112,9 +1112,9 @@ s32 MIOS32_UART_InitPortDefault(u8 uart)
 #if defined(MIOS32_USE_UART2) && MIOS32_UART2_ASSIGNMENT != 0
   case 2: {
 # if MIOS32_UART2_TX_OD
-    MIOS32_UART_InitPort(2, MIOS32_UART2_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_OD, MIOS32_UART2_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(2, MIOS32_UART2_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_OD, MIOS32_UART2_ASSIGNMENT == 1);
 # else
-    MIOS32_UART_InitPort(2, MIOS32_UART2_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, MIOS32_UART2_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(2, MIOS32_UART2_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_PP, MIOS32_UART2_ASSIGNMENT == 1);
 # endif
   } break;
 #endif
@@ -1122,9 +1122,9 @@ s32 MIOS32_UART_InitPortDefault(u8 uart)
 #if defined(MIOS32_USE_UART3) && MIOS32_UART3_ASSIGNMENT != 0
   case 3: {
 # if MIOS32_UART3_TX_OD
-    MIOS32_UART_InitPort(3, MIOS32_UART3_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_OD, MIOS32_UART3_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(3, MIOS32_UART3_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_OD, MIOS32_UART3_ASSIGNMENT == 1);
 # else
-    MIOS32_UART_InitPort(3, MIOS32_UART3_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, MIOS32_UART3_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(3, MIOS32_UART3_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_PP, MIOS32_UART3_ASSIGNMENT == 1);
 # endif
   } break;
 #endif
@@ -1132,9 +1132,9 @@ s32 MIOS32_UART_InitPortDefault(u8 uart)
 #if defined(MIOS32_USE_UART4) && MIOS32_UART4_ASSIGNMENT != 0
   case 4: {
 # if MIOS32_UART4_TX_OD
-    MIOS32_UART_InitPort(4, MIOS32_UART4_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_OD, MIOS32_UART4_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(4, MIOS32_UART4_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_OD, MIOS32_UART4_ASSIGNMENT == 1);
 # else
-    MIOS32_UART_InitPort(4, MIOS32_UART4_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, MIOS32_UART4_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(4, MIOS32_UART4_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_PP, MIOS32_UART4_ASSIGNMENT == 1);
 # endif
   } break;
 #endif
@@ -1142,9 +1142,9 @@ s32 MIOS32_UART_InitPortDefault(u8 uart)
 #if defined(MIOS32_USE_UART5) && MIOS32_UART5_ASSIGNMENT != 0
   case 5: {
 # if MIOS32_UART5_TX_OD
-    MIOS32_UART_InitPort(5, MIOS32_UART5_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_OD, MIOS32_UART5_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(5, MIOS32_UART5_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_OD, MIOS32_UART5_ASSIGNMENT == 1);
 # else
-    MIOS32_UART_InitPort(5, MIOS32_UART5_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, MIOS32_UART5_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(5, MIOS32_UART5_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_PP, MIOS32_UART5_ASSIGNMENT == 1);
 # endif
   } break;
 #endif
@@ -1152,9 +1152,9 @@ s32 MIOS32_UART_InitPortDefault(u8 uart)
 #if defined(MIOS32_USE_UART6) && MIOS32_UART6_ASSIGNMENT != 0
   case 6: {
 # if MIOS32_UART6_TX_OD
-    MIOS32_UART_InitPort(6, MIOS32_UART6_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_OD, MIOS32_UART6_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(6, MIOS32_UART6_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_OD, MIOS32_UART6_ASSIGNMENT == 1);
 # else
-    MIOS32_UART_InitPort(6, MIOS32_UART6_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, MIOS32_UART6_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(6, MIOS32_UART6_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_PP, MIOS32_UART6_ASSIGNMENT == 1);
 # endif
   } break;
 #endif
@@ -1162,9 +1162,9 @@ s32 MIOS32_UART_InitPortDefault(u8 uart)
 #if defined(MIOS32_USE_UART7) && MIOS32_UART7_ASSIGNMENT != 0
   case 7: {
 # if MIOS32_UART7_TX_OD
-    MIOS32_UART_InitPort(7, MIOS32_UART7_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_OD, MIOS32_UART7_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(7, MIOS32_UART7_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_OD, MIOS32_UART7_ASSIGNMENT == 1);
 # else
-    MIOS32_UART_InitPort(7, MIOS32_UART7_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, MIOS32_UART7_ASSIGNMENT == 1);
+    MIOS32_UART_InitPort(7, MIOS32_UART7_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_PP, MIOS32_UART7_ASSIGNMENT == 1);
 # endif
   } break;
 #endif

@@ -39,7 +39,6 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_irq.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_spi.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_i2s.c \
-	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_board.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_utils.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_ain.c \
 	$(MIOS32_PATH)/mios32/common/printf-stdarg.c \

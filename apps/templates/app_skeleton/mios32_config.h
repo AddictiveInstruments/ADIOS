@@ -71,11 +71,11 @@
 // together only if TIM17 conflicts with something else on your hardware:
 //#define STOPWATCH_TIMER_BASE TIM17						// (default)
 //#define STOPWATCH_TIMER_RCC  LL_APB2_GRP1_PERIPH_TIM17	// (default)
-#define MIOS32_USE_SOF
-// MIOS32_SOF_LED_PORT/MIOS32_SOF_LED_PIN default to PA12 (same on every
+#define MIOS32_USE_SOL
+// MIOS32_SOL_PORT/MIOS32_SOL_PIN default to PA12 (same on every
 // family/processor) - override both together here for custom hardware:
-//#define MIOS32_SOF_LED_PORT GPIOA				// (default)
-//#define MIOS32_SOF_LED_PIN  LL_GPIO_PIN_12		// (default)
+//#define MIOS32_SOL_PORT GPIOA				// (default)
+//#define MIOS32_SOL_PIN  LL_GPIO_PIN_12		// (default)
 
 // ---------------------------------------------------------------------------
 // mios32_spi.c - left commented = SPI entirely disabled (default). Uncomment
@@ -160,7 +160,6 @@
 
 // disable code modules
 //#define MIOS32_USE_I2S
-//#define MIOS32_DONT_USE_BOARD
 #define MIOS32_DONT_USE_SRIO
 #define MIOS32_DONT_USE_SRIN
 #define MIOS32_DONT_USE_SROUT

@@ -474,44 +474,45 @@ u32 MIOS32_STOPWATCH_ValueGet(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// MIOS32_SOF - sign-of-life LED
+// MIOS32_SOL - Sign Of Life LED ("SOF" was the USB term Start Of Frame,
+// misleading for a heartbeat indicator - renamed 2026-08-11)
 // A single GPIO toggled as a heartbeat - project-configurable pin, meant as
 // a lightweight replacement for mios32_board.c's fixed on-board LED.
 /////////////////////////////////////////////////////////////////////////////
-#if defined(MIOS32_USE_SOF)
+#if defined(MIOS32_USE_SOL)
 
 // single default (same for every family/processor) - override both
 // together in your project's mios32_config.h for custom hardware
-#ifndef MIOS32_SOF_LED_PORT
-#define MIOS32_SOF_LED_PORT GPIOA
+#ifndef MIOS32_SOL_PORT
+#define MIOS32_SOL_PORT GPIOA
 #endif
-#ifndef MIOS32_SOF_LED_PIN
-#define MIOS32_SOF_LED_PIN LL_GPIO_PIN_12
+#ifndef MIOS32_SOL_PIN
+#define MIOS32_SOL_PIN LL_GPIO_PIN_12
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
 //! Initializes the sign-of-life LED GPIO as a push-pull output (cleared)
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SOF_LED_Init(void)
+s32 MIOS32_SOL_Init(void)
 {
   LL_GPIO_InitTypeDef GPIO_InitStructure;
   LL_GPIO_StructInit(&GPIO_InitStructure);
   GPIO_InitStructure.Mode = LL_GPIO_MODE_OUTPUT;
   GPIO_InitStructure.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
-  GPIO_InitStructure.Pin = MIOS32_SOF_LED_PIN;
-  LL_GPIO_Init(MIOS32_SOF_LED_PORT, &GPIO_InitStructure);
+  GPIO_InitStructure.Pin = MIOS32_SOL_PIN;
+  LL_GPIO_Init(MIOS32_SOL_PORT, &GPIO_InitStructure);
 
-  return MIOS32_SOF_LED_Clr();
+  return MIOS32_SOL_Clr();
 }
 
 /////////////////////////////////////////////////////////////////////////////
 //! Turns the sign-of-life LED on
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SOF_LED_Set(void)
+s32 MIOS32_SOL_Set(void)
 {
-  MIOS32_SYS_STM_PINSET_1(MIOS32_SOF_LED_PORT, MIOS32_SOF_LED_PIN);
+  MIOS32_SYS_STM_PINSET_1(MIOS32_SOL_PORT, MIOS32_SOL_PIN);
   return 0;
 }
 
@@ -519,9 +520,9 @@ s32 MIOS32_SOF_LED_Set(void)
 //! Turns the sign-of-life LED off
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SOF_LED_Clr(void)
+s32 MIOS32_SOL_Clr(void)
 {
-  MIOS32_SYS_STM_PINSET_0(MIOS32_SOF_LED_PORT, MIOS32_SOF_LED_PIN);
+  MIOS32_SYS_STM_PINSET_0(MIOS32_SOL_PORT, MIOS32_SOL_PIN);
   return 0;
 }
 
@@ -529,12 +530,12 @@ s32 MIOS32_SOF_LED_Clr(void)
 //! Toggles the sign-of-life LED
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SOF_LED_Tog(void)
+s32 MIOS32_SOL_Tog(void)
 {
-  MIOS32_SOF_LED_PORT->ODR ^= MIOS32_SOF_LED_PIN;
+  MIOS32_SOL_PORT->ODR ^= MIOS32_SOL_PIN;
   return 0;
 }
 
-#endif /* MIOS32_USE_SOF */
+#endif /* MIOS32_USE_SOL */
 
 //! \}

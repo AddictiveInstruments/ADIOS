@@ -128,6 +128,20 @@
 # define MIOS32_SYS_STM_PINGET(port, pin_mask)    ((port->IDR & (pin_mask)) ? 1 : 0)
 #endif
 
+// How a pin is driven. Lived in mios32_board.h until that module was removed
+// (2026-08-11) - it never had anything to do with a particular board, and its
+// real user is MIOS32_UART_InitPort(), which needs to say whether a TX line is
+// push-pull or open drain. It lost the "board" in its name on the way out.
+typedef enum {
+  MIOS32_PIN_MODE_IGNORE = 0,
+  MIOS32_PIN_MODE_ANALOG,
+  MIOS32_PIN_MODE_INPUT,
+  MIOS32_PIN_MODE_INPUT_PD,
+  MIOS32_PIN_MODE_INPUT_PU,
+  MIOS32_PIN_MODE_OUTPUT_PP,
+  MIOS32_PIN_MODE_OUTPUT_OD
+} mios32_pin_mode_t;
+
 // STM32 only:
 // The DBGMCU_CR register allows to suspend peripherals when CPU is in halt
 // state to simplify debugging (e.g. no timer interrupt is triggered each

@@ -144,8 +144,11 @@ int main(void)
 #ifndef MIOS32_DONT_USE_TIMESTAMP
   MIOS32_TIMESTAMP_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_BOARD
-  MIOS32_BOARD_Init(0);
+#ifdef MIOS32_USE_SOL
+  // was MIOS32_BOARD_Init(): the board module carried the MBHP boards' frozen
+  // connector definitions (J5/J10/J15/J28/LED/DAC) and is gone. All that
+  // survived of it here is the status LED, which is the sign-of-life pin.
+  MIOS32_SOL_Init();
 #endif
 #ifdef MIOS32_USE_SPI
   MIOS32_SPI_Init(0);
@@ -511,8 +514,11 @@ void _abort(void)
     MIOS32_MIDI_Receive_Handler(APP_MIDI_NotifyPackage);
 
     if( (delay_ctr % 10000) == 0 ) {
-      // toggle board LED
-      MIOS32_BOARD_LED_Set(1, ~MIOS32_BOARD_LED_Get());
+#ifdef MIOS32_USE_SOL
+      // heartbeat. The board module offered a read-back to invert the LED;
+      // the sign-of-life pin toggles itself, so nothing has to be read.
+      MIOS32_SOL_Tog();
+#endif
     }
   }
 }

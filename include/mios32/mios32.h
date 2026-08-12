@@ -61,8 +61,7 @@ extern "C" {
 // include mios32_*.h files of all MIOS modules
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32_board.h>
-#include <mios32_sof.h>
+#include <mios32_sol.h>
 #include <mios32_irq.h>
 #include <mios32_sys.h>
 #include <mios32_spi.h>

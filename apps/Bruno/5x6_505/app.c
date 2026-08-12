@@ -134,7 +134,7 @@ void APP_Init(void)
 	TR5X6_ROM_Init();
 	TR5X6_ROM_HOST();
 	// initialize all LEDs
-	MIOS32_BOARD_LED_Init(0xffffffff);
+	MIOS32_SOL_Init();
 
 	// initialize LCD Bus Decoder.
 	TR5X6_DECOD_Init();
@@ -1732,7 +1732,7 @@ void EXTI2_3_IRQHandler(void){
 	TR5X6_DECOD_EXTI_BUTT_Callback();
 	//if(EXTI->FPR1 & EXTI_FPR1_FPIF3)
 	//{
-		//MIOS32_BOARD_LED_Set(1, 1);
+		//MIOS32_SOL_Set();
 
 	//	tr5x6_decod_buttons.ALL=(u8)(GPIOD->IDR & 0xf);
 		//if(tr5x6_decod_buttons.ALL)
@@ -1744,7 +1744,7 @@ void EXTI2_3_IRQHandler(void){
 
 		//LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_3);
 	//	EXTI->FPR1 |=EXTI_FPR1_FPIF3;
-		//MIOS32_BOARD_LED_Set(1, 0);
+		//MIOS32_SOL_Clr();
 	//}
 }
 

@@ -41,7 +41,10 @@
 
 #define MIOS32_DONT_USE_IIC
 //#define MIOS32_USE_I2S
-//#define MIOS32_DONT_USE_BOARD
+// The board module is gone (2026-08-11): it carried the MBHP boards frozen
+// connectors (J5/J10/J15/J28/LED/DAC). All that survived is its status LED,
+// now the sign-of-life pin - same default as before, GPIOA pin 12.
+#define MIOS32_USE_SOL
 #define MIOS32_DONT_USE_SDCARD
 #define MIOS32_DONT_USE_ENC28J60
 

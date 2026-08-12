@@ -157,10 +157,10 @@ void APP_Init(void)
   RetrieveBootInfos();
 
   // initialize all LEDs
-  MIOS32_BOARD_LED_Init(0xffffffff);
+  MIOS32_SOL_Init();
 
   // turn off green LED as a clear indication that core shouldn't be powered-off/rebooted
-  MIOS32_BOARD_LED_Set(0xffffffff, 0);
+  MIOS32_SOL_Clr();
 
   // install the callback function which is called on incoming characters
   // from MIOS Terminal
@@ -182,7 +182,7 @@ s32 Wait1Second(u8 dont_toggle_led)
   for(i=0; i<50; ++i) {
     if( !dont_toggle_led ) {
       // toggle LED and wait for 20 mS (sign of life)
-      MIOS32_BOARD_LED_Set(0xffffffff, ~MIOS32_BOARD_LED_Get());
+      MIOS32_SOL_Tog();
     }
     MIOS32_DELAY_Wait_uS(20000);
   }
@@ -206,7 +206,7 @@ s32 CompareBSL(void)
 
   for(addr=0; addr<sizeof(bsl_image); ++addr) {
     // toggle LED (sign of life)
-    MIOS32_BOARD_LED_Set(0xffffffff, ~MIOS32_BOARD_LED_Get());
+    MIOS32_SOL_Tog();
 
     if( (addr & 0xf) == 0 ) {
       MIOS32_LCD_CursorSet(9, 1);
@@ -247,7 +247,7 @@ s32 UpdateBSL(void)
   
   for(i=0; i<len; addr+=2, i+=2) {
     // toggle LED (sign of life)
-    MIOS32_BOARD_LED_Set(0xffffffff, ~MIOS32_BOARD_LED_Get());
+    MIOS32_SOL_Tog();
 
     if( (addr % FLASH_PAGE_SIZE) == 0 ) {
 #if defined(MIOS32_FAMILY_STM32F4xx)
@@ -311,7 +311,7 @@ s32 UpdateBSL(void)
 
   for(i=0; i<len; addr+=256, i+=256) {
     // toggle LED (sign of life)
-    MIOS32_BOARD_LED_Set(0xffffffff, ~MIOS32_BOARD_LED_Get());
+    MIOS32_SOL_Tog();
 
     // copy into RAM buffer
     int j;
@@ -480,7 +480,7 @@ void APP_Background(void)
     MIOS32_LCD_PrintString("up-to-date! :-) ");
 
     // turn on green LED as a clear indication that core can be powered-off/rebooted
-    MIOS32_BOARD_LED_Set(0xffffffff, 1);
+    MIOS32_SOL_Set();
 
     DEBUG_MSG("No mismatches found.\n");
     DEBUG_MSG("The bootloader is up-to-date!\n");
@@ -532,7 +532,7 @@ void APP_Background(void)
 
 
   // turn on green LED as a clear indication that core can be powered-off/rebooted
-  MIOS32_BOARD_LED_Set(0xffffffff, 1);
+  MIOS32_SOL_Set();
 
   if( !mismatches ) {
     MIOS32_LCD_CursorSet(0, 0);
@@ -576,7 +576,7 @@ void APP_Background(void)
 void APP_Tick(void)
 {
   // toggle the status LED (this is a sign of life)
-  MIOS32_BOARD_LED_Set(0x0001, ~MIOS32_BOARD_LED_Get());
+  MIOS32_SOL_Tog();
 }
 
 

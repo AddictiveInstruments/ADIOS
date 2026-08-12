@@ -153,7 +153,7 @@ s32 ESP8266_InitUart(mios32_midi_port_t port, u32 baudrate)
   dev_uart = port;
 
   // init default baudrate
-  MIOS32_UART_InitPort(dev_uart & 0xf, baudrate, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, 0);
+  MIOS32_UART_InitPort(dev_uart & 0xf, baudrate, MIOS32_PIN_MODE_OUTPUT_PP, 0);
 
   return 0; // no error
 }

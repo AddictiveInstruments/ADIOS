@@ -25,10 +25,10 @@ u32 count = 0;
 void APP_Init(void)
 {
   // initialize all LEDs
-  MIOS32_BOARD_LED_Init(0xffffffff);
+  MIOS32_SOL_Init();
 
   // initialize the sign-of-life LED
-  MIOS32_SOF_LED_Init();
+  MIOS32_SOL_Init();
 }
 
 
@@ -57,7 +57,7 @@ void APP_Tick(void)
   static u32 tick_count = 0;
   if( ++tick_count >= 500 ) {
     tick_count = 0;
-    MIOS32_SOF_LED_Tog();
+    MIOS32_SOL_Tog();
   }
 }
 

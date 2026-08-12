@@ -25,10 +25,10 @@ u32 count = 0;
 void APP_Init(void)
 {
   // initialize all LEDs
-  MIOS32_BOARD_LED_Init(0xffffffff);
+  MIOS32_SOL_Init();
 
   // initialize the sign-of-life LED
-  MIOS32_SOF_LED_Init();
+  MIOS32_SOL_Init();
 }
 
 
@@ -53,9 +53,9 @@ void APP_Tick(void)
   // PWM modulate the SOF LED (this is a sign of life)
   u32 timestamp = MIOS32_TIMESTAMP_Get();
   if( ((timestamp % 20) <= ((timestamp / 100) % 10)) & 1 )
-    MIOS32_SOF_LED_Set();
+    MIOS32_SOL_Set();
   else
-    MIOS32_SOF_LED_Clr();
+    MIOS32_SOL_Clr();
 }
 
 

@@ -17,8 +17,8 @@
 // Nucleo-G030K6 onboard user LED is on PC6 (not the STM32G0xx family
 // default of GPIOA/LL_GPIO_PIN_12 - see mios32_utils.c) - overridden here
 // rather than in the template, this is board-specific wiring.
-#define MIOS32_SOF_LED_PORT GPIOC
-#define MIOS32_SOF_LED_PIN  LL_GPIO_PIN_6
+#define MIOS32_SOL_PORT GPIOC
+#define MIOS32_SOL_PIN  LL_GPIO_PIN_6
 
 // ---------------------------------------------------------------------------
 // mios32_sys.c - core system init (clock, vector table, timebase). Always
@@ -73,11 +73,11 @@
 // STOPWATCH now defaults to TIM17 (mios32_utils.c) - confirmed present on
 // every STM32G0 tier including this board's G030K6 - no override needed
 // here anymore.
-#define MIOS32_USE_SOF
-// MIOS32_SOF_LED_PORT/MIOS32_SOF_LED_PIN default to PA12 (same on every
+#define MIOS32_USE_SOL
+// MIOS32_SOL_PORT/MIOS32_SOL_PIN default to PA12 (same on every
 // family/processor) - override both together here for custom hardware:
-//#define MIOS32_SOF_LED_PORT GPIOA				// (default)
-//#define MIOS32_SOF_LED_PIN  LL_GPIO_PIN_12		// (default)
+//#define MIOS32_SOL_PORT GPIOA				// (default)
+//#define MIOS32_SOL_PIN  LL_GPIO_PIN_12		// (default)
 
 // ---------------------------------------------------------------------------
 // mios32_spi.c - left commented = SPI entirely disabled (default). Uncomment
@@ -162,7 +162,6 @@
 
 // disable code modules
 //#define MIOS32_USE_I2S
-//#define MIOS32_DONT_USE_BOARD
 #define MIOS32_DONT_USE_SRIO
 #define MIOS32_DONT_USE_SRIN
 #define MIOS32_DONT_USE_SROUT

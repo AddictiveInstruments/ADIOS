@@ -142,3 +142,9 @@ gen_bsl_boundary_build.log
 # Embedded bootloader blobs regenerated from the .bin above (etc/gen_bsl_boundary.sh)
 mios32/STM32G0xx/mios32_bsl_*.inc
 mios32/STM32F4xx/mios32_bsl_*.inc
+
+# Reference-only MIDIbox heritage, kept on disk but out of the repository
+# (decided 2026-08-11): modules and LCD drivers that depended on the removed
+# mios32_board, plus the original MIDIbox application tree. Nothing here is
+# built or maintained - it is kept locally to consult, not to carry.
+old_midibox_ref_only/

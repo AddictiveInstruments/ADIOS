@@ -71,15 +71,15 @@
 // together only if TIM17 conflicts with something else on your hardware:
 //#define STOPWATCH_TIMER_BASE TIM17						// (default)
 //#define STOPWATCH_TIMER_RCC  LL_APB2_GRP1_PERIPH_TIM17	// (default)
-#define MIOS32_USE_SOF
-// MIOS32_SOF_LED_PORT/MIOS32_SOF_LED_PIN default to PA12 (same on every
+#define MIOS32_USE_SOL
+// MIOS32_SOL_PORT/MIOS32_SOL_PIN default to PA12 (same on every
 // family/processor) - overridden here: PA12 is USB_OTG_FS DP on STM32F4xx,
 // not safe to toggle as a plain GPIO on a board with USB wired up. PD12 is
 // free of every MIOS32 default peripheral pin used by this project (UART0
 // TX/RX = PA2/PA3, UART1 TX/RX = PC10/PC11) and is the usual "user LED"
 // location on STM32F4 boards (e.g. STM32F4-Discovery's green LED).
-#define MIOS32_SOF_LED_PORT GPIOD
-#define MIOS32_SOF_LED_PIN  LL_GPIO_PIN_12
+#define MIOS32_SOL_PORT GPIOD
+#define MIOS32_SOL_PIN  LL_GPIO_PIN_12
 
 // ---------------------------------------------------------------------------
 // mios32_spi.c - left commented = SPI entirely disabled (default). Uncomment
@@ -164,7 +164,6 @@
 
 // disable code modules
 //#define MIOS32_USE_I2S
-//#define MIOS32_DONT_USE_BOARD
 #define MIOS32_DONT_USE_SRIO
 #define MIOS32_DONT_USE_SRIN
 #define MIOS32_DONT_USE_SROUT

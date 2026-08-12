@@ -799,13 +799,13 @@ s32 MIOS32_UART_IsAssignedToMIDI(u8 uart)
 //! \param[in] baudrate the baudrate
 //! \param[in] tx_pin_mode the TX pin mode
 //!   <UL>
-//!     <LI>MIOS32_BOARD_PIN_MODE_OUTPUT_PP: TX pin configured for push-pull mode
-//!     <LI>MIOS32_BOARD_PIN_MODE_OUTPUT_OD: TX pin configured for open drain mode
+//!     <LI>MIOS32_PIN_MODE_OUTPUT_PP: TX pin configured for push-pull mode
+//!     <LI>MIOS32_PIN_MODE_OUTPUT_OD: TX pin configured for open drain mode
 //!   </UL>
 //! \param[in] is_midi MIDI or common UART interface?
 //! \return < 0 if initialisation failed
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_mode, u8 is_midi)
+s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_pin_mode_t tx_pin_mode, u8 is_midi)
 {
   LL_GPIO_InitTypeDef GPIO_InitStructure;
   LL_GPIO_StructInit(&GPIO_InitStructure);
@@ -825,7 +825,7 @@ s32 MIOS32_UART_InitPort(u8 uart, u32 baudrate, mios32_board_pin_mode_t tx_pin_m
   case n: { \
     GPIO_InitStructure.Pin = MIOS32_UART##n##_TX_PIN; \
     GPIO_InitStructure.Mode  = LL_GPIO_MODE_ALTERNATE; \
-    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_BOARD_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN; \
+    GPIO_InitStructure.OutputType = (tx_pin_mode == MIOS32_PIN_MODE_OUTPUT_PP) ? LL_GPIO_OUTPUT_PUSHPULL : LL_GPIO_OUTPUT_OPENDRAIN; \
     GPIO_InitStructure.Pull = LL_GPIO_PULL_NO; \
     GPIO_InitStructure.Alternate = MIOS32_UART##n##_TX_AF; \
     LL_GPIO_Init(MIOS32_UART##n##_TX_PORT, &GPIO_InitStructure); \
@@ -890,9 +890,9 @@ s32 MIOS32_UART_InitPortDefault(u8 uart)
 #define MIOS32_UART_INITPORTDEFAULT_CASE(n) \
   case n: { \
     if( MIOS32_UART##n##_TX_OD ) \
-      MIOS32_UART_InitPort(n, MIOS32_UART##n##_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_OD, MIOS32_UART##n##_ASSIGNMENT == 1); \
+      MIOS32_UART_InitPort(n, MIOS32_UART##n##_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_OD, MIOS32_UART##n##_ASSIGNMENT == 1); \
     else \
-      MIOS32_UART_InitPort(n, MIOS32_UART##n##_BAUDRATE, MIOS32_BOARD_PIN_MODE_OUTPUT_PP, MIOS32_UART##n##_ASSIGNMENT == 1); \
+      MIOS32_UART_InitPort(n, MIOS32_UART##n##_BAUDRATE, MIOS32_PIN_MODE_OUTPUT_PP, MIOS32_UART##n##_ASSIGNMENT == 1); \
   } break;
 
   switch( uart ) {
