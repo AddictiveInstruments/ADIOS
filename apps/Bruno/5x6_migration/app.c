@@ -97,16 +97,10 @@ static s32 ROM_Migrate(void)
   page_buffer[NEW_MAGIC_OFS] = ROM_MAGIC_NUMBER;
   page_buffer[NEW_BANK_OFS]  = page_buffer[OLD_BANK_OFS];
 
-  // ...and hand the freed pair to MIOS32, carrying the ID the bootloader info
-  // block still holds. No marker there means the user never set one, and 0 is
-  // then the right answer - the same default a fresh build uses.
-  u8 rescued_id = 0;
-#ifdef MIOS32_SYS_ADDR_BSL_INFO_BEGIN
-  u8 *info_confirm = (u8 *)MIOS32_SYS_ADDR_DEVICE_ID_CONFIRM;
-  u8 *info_id      = (u8 *)MIOS32_SYS_ADDR_DEVICE_ID;
-  if( *info_confirm == 0x42 && *info_id < 0x80 )
-    rescued_id = *info_id;
-#endif
+  // ...and hand the freed pair to MIOS32, carrying the instrument's identity -
+  // which APP_Init already adopted, so this simply writes down what the machine
+  // is currently answering on.
+  u8 rescued_id = MIOS32_MIDI_DeviceIDGet();
   page_buffer[ID_CONFIRM_OFS] = 0x42;
   page_buffer[ID_OFS]         = rescued_id;
 
@@ -138,18 +132,8 @@ static s32 ROM_Migrate(void)
   }
   LL_FLASH_Lock();
 
-  // Report BEFORE adopting the ID: a SysEx debug message carries the device ID
-  // it is sent with, so this last word has to go out on the one MIOS Studio is
-  // still addressing.
   MIOS32_MIDI_SendDebugMessage("[5x6 migration] done - bank %d kept, device ID %d stored\n",
 			       page_buffer[NEW_BANK_OFS], rescued_id);
-  MIOS32_MIDI_Periodic_mS(); // ...and let it actually leave before the switch
-
-  // Now answer on the ID that was just stored. Without this the machine would
-  // keep replying on whatever it booted with (0, since the record did not exist
-  // yet) while the firmware uploaded next comes up on the rescued one - the ID
-  // would change silently in the middle of the sequence.
-  MIOS32_MIDI_DeviceIDSet(rescued_id);
   return 1;
 }
 
@@ -159,14 +143,30 @@ static s32 ROM_Migrate(void)
 /////////////////////////////////////////////////////////////////////////////
 void APP_Init(void)
 {
+  // FIRST of all, take the instrument's identity. MIOS32 has just read the
+  // persistent record, which on a machine that has not been migrated yet does
+  // not exist - so it settled on the compile-time default, 0. But the answer is
+  // right there in the bootloader info block, still holding whatever ID was set
+  // with the old bootloader update tool. Adopting it here means this tool talks
+  // on the instrument's real ID from its first word rather than on 0, and that
+  // the record it writes below simply records what is already true.
+#ifdef MIOS32_SYS_ADDR_BSL_INFO_BEGIN
+  {
+    u8 *info_confirm = (u8 *)MIOS32_SYS_ADDR_DEVICE_ID_CONFIRM;
+    u8 *info_id      = (u8 *)MIOS32_SYS_ADDR_DEVICE_ID;
+    u8 *rec_confirm  = (u8 *)MIOS32_SYS_ADDR_PERSIST_DEVICE_ID_CONFIRM;
+    // the record wins when it exists - it is the newer statement of the two
+    if( *rec_confirm != 0x42 && *info_confirm == 0x42 && *info_id < 0x80 )
+      MIOS32_MIDI_DeviceIDSet(*info_id);
+  }
+#endif
+
   // give MIOS Studio a moment to be listening before the verdict goes out:
   // the whole job is over long before a human could open a terminal
   MIOS32_DELAY_Wait_uS(50000);
 
   ROM_Migrate();
 
-  // sent with the device ID now in force - which, after a successful
-  // migration, is the instrument's own again
   MIOS32_MIDI_SendDebugMessage("[5x6 migration] device ID %d in force - upload the firmware now\n",
 			       MIOS32_MIDI_DeviceIDGet());
 }
