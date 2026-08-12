@@ -9,7 +9,7 @@
 //!
 //! If SPI low-level functions should be used to access other peripherals,
 //! please ensure that the appr. MIOS32_* drivers are disabled (e.g.
-//! add '#define MIOS32_DONT_USE_SDCARD' and '#define MIOS32_DONT_USE_ENC28J60'
+//! add '#define MIOS32_DONT_USE_SDCARD'
 //! to your mios_config.h file)
 //!
 //! Note that additional chip select lines can be easily added by using
@@ -676,7 +676,7 @@ s32 MIOS32_SPI_TransferModeInit(u8 spi, mios32_spi_mode_t spi_mode, mios32_spi_p
 	if( (prev_cr1 ^ MIOS32_SPI0_PTR->CR1) & 3 ) { // CPOL and CPHA located at bit #1 and #0
 	  // clock configuration has been changed - we should send a dummy byte
 	  // before the application activates chip select.
-	  // this solves a dependency between SDCard and ENC28J60 driver
+	  // this solves a dependency between two drivers sharing the port
 	  MIOS32_SPI_TransferByte(spi, 0xff);
 	}
       }
@@ -701,7 +701,7 @@ s32 MIOS32_SPI_TransferModeInit(u8 spi, mios32_spi_mode_t spi_mode, mios32_spi_p
         if( (prev_cr1 ^ MIOS32_SPI1_PTR->CR1) & 3 ) { // CPOL and CPHA located at bit #1 and #0
           // clock configuration has been changed - we should send a dummy byte
           // before the application activates chip select.
-          // this solves a dependency between SDCard and ENC28J60 driver
+          // this solves a dependency between two drivers sharing the port
           MIOS32_SPI_TransferByte(spi, 0xff);
         }
       }
@@ -723,7 +723,7 @@ s32 MIOS32_SPI_TransferModeInit(u8 spi, mios32_spi_mode_t spi_mode, mios32_spi_p
 	if( (prev_cr1 ^ MIOS32_SPI2_PTR->CR1) & 3 ) { // CPOL and CPHA located at bit #1 and #0
 	  // clock configuration has been changed - we should send a dummy byte
 	  // before the application activates chip select.
-	  // this solves a dependency between SDCard and ENC28J60 driver
+	  // this solves a dependency between two drivers sharing the port
 	  MIOS32_SPI_TransferByte(spi, 0xff);
 	}
       }

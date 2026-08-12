@@ -184,7 +184,6 @@
 #define MIOS32_DONT_USE_IIC
 #define MIOS32_DONT_USE_IIC_BS
 #define MIOS32_DONT_USE_SDCARD
-#define MIOS32_DONT_USE_ENC28J60
 
 // =============================================================================
 // FreeRTOS: two independent, numeric (0/1) opt-in switches, both with a

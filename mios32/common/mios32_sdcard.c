@@ -26,9 +26,9 @@
 //! (8 MBit/s)
 //!
 //! 08 Jan 2009: Modified by philetaylor to add MMC and HCSD support also added
-//! a first attempt at using a mutex to allow sharing of SPI0 between SD cards and 
-//! ENC28J60 ethernet. If used in this way, SD card must be inserted at poweron and
-//! will not be recognised if inserted after. Hopefully a fix will be found for this!
+//! a first attempt at using a mutex to allow sharing of the SPI port between SD
+//! cards and another driver. If used in this way, SD card must be inserted at
+//! poweron and will not be recognised if inserted after.
 //! \{
 /* ==========================================================================
  *

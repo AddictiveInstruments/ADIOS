@@ -66,7 +66,6 @@
 //#define MIOS32_DONT_USE_STOPWATCH
 //#define MIOS32_DONT_USE_DELAY
 #define MIOS32_DONT_USE_SDCARD
-#define MIOS32_DONT_USE_ENC28J60
 
 // calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
 // opt-in, renamed from MIOS32_DONT_USE_FREERTOS

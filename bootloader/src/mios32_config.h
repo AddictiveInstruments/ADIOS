@@ -46,7 +46,6 @@
 // now the sign-of-life pin - same default as before, GPIOA pin 12.
 #define MIOS32_USE_SOL
 #define MIOS32_DONT_USE_SDCARD
-#define MIOS32_DONT_USE_ENC28J60
 
 // calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
 // MIOS32_APP_USE_FREERTOS is opt-in (renamed from MIOS32_DONT_USE_FREERTOS),
