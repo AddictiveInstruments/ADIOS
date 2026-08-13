@@ -171,9 +171,6 @@ int main(void)
 #if !defined(MIOS32_DONT_USE_AIN)
   MIOS32_AIN_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_IIC_BS
-  MIOS32_IIC_BS_Init(0);
-#endif
   // the MIDI core is always initialized - it is not optional (2026-08-09,
   // see mios32_midi.c): only the transports underneath are opt-in
   MIOS32_MIDI_Init(0);
