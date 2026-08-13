@@ -373,8 +373,14 @@ TIMER2_IRQ_HANDLER
 #define STOPWATCH_TIMER_RCC_ENABLE() LL_APB2_GRP1_EnableClock(STOPWATCH_TIMER_RCC)
 #endif
 
-// timers clocked at CPU/2 clock
+// Timer clock, which is NOT necessarily the bus clock. This family has a
+// single APB, left undivided by mios32_sys.c, so a timer here runs at HCLK
+// - hence no /2. (The "clocked at CPU/2" comment that used to sit on this
+// line was a leftover from the days of an APB1 timer, and contradicted the
+// very value below it.)
+#ifndef STOPWATCH_TIM_PERIPHERAL_FRQ
 #define STOPWATCH_TIM_PERIPHERAL_FRQ (MIOS32_SYS_CPU_FREQUENCY)
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 //! Initializes the 16bit stopwatch timer with the desired resolution:

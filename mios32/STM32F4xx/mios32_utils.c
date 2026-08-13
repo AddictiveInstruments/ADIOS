@@ -308,22 +308,45 @@ TIMER2_IRQ_HANDLER
 /////////////////////////////////////////////////////////////////////////////
 #if defined(MIOS32_USE_STOPWATCH)
 
-// single default timer - override all three together in your project's
-// mios32_config.h if TIM6 is unavailable/conflicts on your hardware
-// (STOPWATCH_TIMER_RCC_ENABLE must call the LL_APBx_GRP1_EnableClock()
-// matching whichever bus your chosen timer sits on).
+// Single default timer - TIM11, confirmed present on EVERY STM32F4 whose
+// device header ships here (17 of them, checked one by one). The former
+// default TIM6 is NOT universal: the F401 and F411 have neither TIM6 nor
+// TIM7, and the F410 carries only TIM1/TIM5/TIM6/TIM9/TIM11. Found the day
+// the CMSIS device macro stopped being hand-listed (2026-08-13) and an F401
+// could be built for the first time - it stopped right here, on a timer
+// that does not exist in its silicon. Before that, such a chip silently
+// compiled against the F405 header, where TIM6 resolves to a real address.
+//
+// Of the four universal ones, TIM11 is the one an application is least
+// likely to want: single channel, 16 bits. TIM1 is already taken by
+// MIOS32_DELAY on this family, TIM5 is the 32-bit general purpose timer,
+// TIM9 has two channels. Same reasoning that picked TIM17 on the G0.
+//
+// Override all four together in your project's mios32_config.h if TIM11
+// conflicts with something on your hardware. FOUR, not three:
+// STOPWATCH_TIMER_RCC_ENABLE must call the LL_APBx_GRP1_EnableClock()
+// matching the bus your timer sits on, AND STOPWATCH_TIM_PERIPHERAL_FRQ
+// must match that bus too - see just below, it is not the same number on
+// APB1 and APB2.
 #ifndef STOPWATCH_TIMER_BASE
-#define STOPWATCH_TIMER_BASE                 TIM6
+#define STOPWATCH_TIMER_BASE                 TIM11
 #endif
 #ifndef STOPWATCH_TIMER_RCC
-#define STOPWATCH_TIMER_RCC   LL_APB1_GRP1_PERIPH_TIM6
+#define STOPWATCH_TIMER_RCC   LL_APB2_GRP1_PERIPH_TIM11
 #endif
 #ifndef STOPWATCH_TIMER_RCC_ENABLE
-#define STOPWATCH_TIMER_RCC_ENABLE() LL_APB1_GRP1_EnableClock(STOPWATCH_TIMER_RCC)
+#define STOPWATCH_TIMER_RCC_ENABLE() LL_APB2_GRP1_EnableClock(STOPWATCH_TIMER_RCC)
 #endif
 
-// timers clocked at CPU/2 clock
-#define STOPWATCH_TIM_PERIPHERAL_FRQ (MIOS32_SYS_CPU_FREQUENCY/2)
+// Timer clock, which is NOT the bus clock: on STM32F4 a timer runs at twice
+// its APB clock whenever that APB prescaler is not 1. mios32_sys.c sets
+// APB1 to /4 and APB2 to /2, so an APB1 timer (the former TIM6) is clocked
+// at HCLK/2 while an APB2 timer (TIM11) is clocked at HCLK. Getting this
+// wrong does not break the build - it silently doubles or halves every
+// duration the stopwatch reports.
+#ifndef STOPWATCH_TIM_PERIPHERAL_FRQ
+#define STOPWATCH_TIM_PERIPHERAL_FRQ (MIOS32_SYS_CPU_FREQUENCY)
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 //! Initializes the 16bit stopwatch timer with the desired resolution:
@@ -355,7 +378,7 @@ TIMER2_IRQ_HANDLER
 //!   else
 //!     printf("%d.%d mS\n\r", delay/10, delay%10);
 //! \endcode
-//! \note: this function uses TIM6 of the STM32 chip
+//! \note: this function uses STOPWATCH_TIMER_BASE, TIM11 by default
 //! \param[in] resolution 1, 10, 100 or 1000
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
