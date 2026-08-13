@@ -22,7 +22,6 @@
 #define MIOS32_USE_STOPWATCH
 
 #define MIOS32_DONT_USE_AIN
-#define MIOS32_DONT_USE_MF
 #define MIOS32_DONT_USE_LCD
 
 // (MIDI core is always compiled - not optional, see mios32_midi.c; only the

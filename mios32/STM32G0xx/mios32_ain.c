@@ -501,10 +501,6 @@ void DMA2_Stream0_IRQHandler(void)
   // whenever we reached the last sample:
   // copy conversion values to ain_pin_values if difference > deadband
   if( oversampling_ctr == 0 ) {
-#if MIOS32_MF_NUM && !defined(MIOS32_DONT_USE_MF)
-    u16 ain_deltas[NUM_CHANNELS_MAX];
-    u16 *ain_deltas_ptr = (u16 *)ain_deltas;
-#endif
     u8 pin_offset = num_used_channels * mux_ctr;
     u8 bit_offset = pin_offset & 0x1f;
     u8 word_offset = pin_offset >> 5;
@@ -527,11 +523,7 @@ void DMA2_Stream0_IRQHandler(void)
 #endif
 
       // takeover new value if difference to old value is outside the deadband
-#if MIOS32_MF_NUM && !defined(MIOS32_DONT_USE_MF)
-      if( (*ain_deltas_ptr++ = abs(*src_ptr - *dst_ptr)) > deadband ) {
-#else
       if( abs(*src_ptr - *dst_ptr) > deadband ) {
-#endif
 	*dst_ptr = *src_ptr;
 	ain_pin_changed[word_offset] |= (1 << bit_offset);
 #if MIOS32_AIN_DEADBAND_IDLE
@@ -557,17 +549,6 @@ void DMA2_Stream0_IRQHandler(void)
 	++word_offset;
       }
     }
-
-#if MIOS32_MF_NUM && !defined(MIOS32_DONT_USE_MF)
-    // if motorfader driver enabled: forward conversion values + deltas
-#if MIOS32_AIN_OVERSAMPLING_RATE >= 2
-    u16 change_flag_mask = MIOS32_MF_Tick((u16 *)adc_conversion_values_sum, (u16 *)ain_deltas);
-#else
-    u16 change_flag_mask = MIOS32_MF_Tick((u16 *)adc_conversion_values, (u16 *)ain_deltas);
-#endif
-    // do an AND operation on all "changed" flags (MF driver takes control over these flags)
-    ain_pin_changed[0] &= 0xffff0000 | change_flag_mask;
-#endif
   }
 
 #if MIOS32_AIN_MUX_PINS >= 1

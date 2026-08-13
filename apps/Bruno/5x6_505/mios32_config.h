@@ -42,7 +42,6 @@
 #ifdef TR5X6_DECOD_SOFT_SPI
 #endif
 #define MIOS32_DONT_USE_AIN
-#define MIOS32_DONT_USE_MF
 //#define MIOS32_DONT_USE_LCD
 // (the MIDI core itself is always compiled - not optional, see mios32_midi.c;
 // only the transports are opt-in: MIOS32_USE_DIN_MIDI etc, further below)

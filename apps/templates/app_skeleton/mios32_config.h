@@ -161,7 +161,6 @@
 // disable code modules
 //#define MIOS32_USE_I2S
 #define MIOS32_DONT_USE_AIN
-#define MIOS32_DONT_USE_MF
 #define MIOS32_DONT_USE_LCD
 // (the MIDI core itself is always compiled - not optional, see mios32_midi.c;
 // only the transports are opt-in: MIOS32_USE_DIN_MIDI etc, further below)

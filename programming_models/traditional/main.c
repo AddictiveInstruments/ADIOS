@@ -170,9 +170,6 @@ int main(void)
 #ifdef MIOS32_USE_ENC
   MIOS32_ENC_Init(0);
 #endif
-#if !defined(MIOS32_DONT_USE_MF)
-  MIOS32_MF_Init(0);
-#endif
 #if !defined(MIOS32_DONT_USE_AIN)
   MIOS32_AIN_Init(0);
 #endif
