@@ -51,36 +51,27 @@
 #define STM32G0
 #endif /* STM32G0 */
 
-/* Device selection - driven by MIOS32_PROCESSOR_xxx (defined via
-   -DMIOS32_PROCESSOR_$(PROCESSOR) in mios32/mios32.mk, same macro family
-   MIOS32_PROCESSOR selection uses everywhere else in this codebase, e.g.
-   mios32_board.c). NOT a bare "MIOS32_PROCESSOR==STM32G070CB" style value
-   comparison: MIOS32_PROCESSOR itself (no suffix) and the bare RHS tokens
-   (STM32G070CB etc) are never actually defined as macros anywhere in the
-   real build, so that comparison used to silently evaluate as 0==0 (true)
-   for EVERY G0 build regardless of which processor was actually selected -
-   every non-G070CB chip (G030K6, G031K8, G050K8) was silently compiled
-   against STM32G070xx's peripheral set instead of its own. Found via a real
-   G030K6 build referencing TIM6 (STM32G0xx MIOS32_STOPWATCH default timer,
-   which doesn't exist in silicon on that chip) without a compile error -
-   the preprocessed output showed TIM6 resolving to a real address, proving
-   the wrong device header was in effect. */
-#if defined(MIOS32_PROCESSOR_STM32G070CB)
-  #define STM32G070xx    /*!< STM32G070xx Devices */
-  /* #define STM32G071xx */   /*!< STM32G071xx Devices */
-  /* #define STM32G081xx */   /*!< STM32G081xx Devices */
-#elif defined(MIOS32_PROCESSOR_STM32G050K8)
-#define STM32G050xx   /*!< STM32G050xx Devices */
-  /* #define STM32G051xx */   /*!< STM32G051xx Devices */
-  /* #define STM32G061xx */   /*!< STM32G061xx Devices */
-#elif defined(MIOS32_PROCESSOR_STM32G030K6)
-#define STM32G030xx    /*!< STM32G030xx Devices */
-#elif defined(MIOS32_PROCESSOR_STM32G031K8)
- #define STM32G031xx
-  /* #define STM32G041xx */   /*!< STM32G041xx Devices */
-#else
-#error "Unknown/not yet wired MIOS32_PROCESSOR for STM32G0xx - add a branch above (see mios32/mios32.mk for how MIOS32_PROCESSOR_xxx is defined, and programming_models/traditional/programming_model.mk for the list of processors with a real LD_FILE/startup file)."
-#endif
+/* Device selection - NOTHING IS SELECTED HERE ANY MORE.
+   The device macro (STM32G030xx, STM32G0B1xx, ...) is derived from
+   PROCESSOR and passed with -D by mios32/mios32.mk, exactly the way the
+   .ld and startup files are derived in programming_model.mk. See the long
+   comment there for the naming rule. If none is defined, the #error at the
+   end of the include chain below (ST's own) stops the build.
+
+   HISTORY, kept because it cost a day to find. This spot used to hold a
+   hand-written #if/#elif table over MIOS32_PROCESSOR_xxx, and before that a
+   bare "MIOS32_PROCESSOR==STM32G070CB" style value comparison. That
+   comparison was silently WRONG: MIOS32_PROCESSOR (no suffix) and the bare
+   RHS tokens are never defined as macros in the real build, so it evaluated
+   as 0==0 - true for EVERY G0 build regardless of the chip selected, and
+   every non-G070CB part (G030K6, G031K8, G050K8) was compiled against
+   STM32G070xx's peripheral set instead of its own. Found via a G030K6 build
+   referencing TIM6 (the family's default MIOS32_STOPWATCH timer, absent from
+   that chip's silicon) without a compile error - the preprocessed output
+   showed TIM6 resolving to a real address, proving the wrong device header
+   was in effect. The table that replaced it was correct but knew only four
+   parts, and rejected the other eight G0 lines the rest of the tree already
+   supported. Deriving the macro removes both failure modes at once. */
 
 /*  Tip: To avoid modifying this file each time you need to switch between these
         devices, you can define the device in your toolchain compiler preprocessor.

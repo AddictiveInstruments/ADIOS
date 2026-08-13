@@ -15,6 +15,48 @@ CFLAGS    +=    -DMIOS32_PROCESSOR_$(PROCESSOR) \
 		-DMIOS32_LCD_STR=\"$(LCD)\"
 
 
+# CMSIS device macro (STM32G070xx, STM32F407xx, ...) - the thing that tells
+# ST's stm32<family>.h WHICH device header to pull in, and therefore which
+# peripheral set the whole build sees.
+#
+# DERIVED from PROCESSOR, never hand-listed. Until 2026-08-13 this was a
+# hand-written #if/#elif table inside each stm32<family>.h, knowing four G0
+# and three F4 parts and stopping the build with an #error for anything else
+# - while the .ld and startup files, derived mechanically right next door in
+# programming_model.mk, already covered every chip in the tree. That table
+# was also where a silent miscompilation had lived (see the comment it left
+# behind in stm32g0xx.h): the wrong device header selected for every G0
+# build, caught only because a G030K6 referenced a timer it does not have.
+#
+# ST's format is fixed at 11 characters: STM32 + 4-char line + 1-char
+# package + 1-char density (STM32G0B1CB = G0B1 line, C package, B density).
+# Their device headers are named after the line, with "x" standing in for
+# whatever the peripheral layout does NOT depend on:
+#
+#   default        STM32<line>xx     STM32G0B1CB -> STM32G0B1xx
+#   F401, F411     STM32<line>x<D>   split by DENSITY  (STM32F401RC -> STM32F401xC)
+#   F410, F412     STM32<line><P>x   split by PACKAGE  (STM32F410RB -> STM32F410Rx)
+#
+# A wrong or empty PROCESSOR does not slip through: with no device macro
+# defined, ST's own header stops with "Please select first the target
+# STM32xxx device used in your application".
+PROCESSOR_LINE    := $(shell echo $(PROCESSOR) | cut -c1-9)
+PROCESSOR_PACKAGE := $(shell echo $(PROCESSOR) | cut -c10)
+PROCESSOR_DENSITY := $(shell echo $(PROCESSOR) | cut -c11)
+
+ifneq ($(filter STM32F401 STM32F411,$(PROCESSOR_LINE)),)
+CMSIS_DEVICE := $(PROCESSOR_LINE)x$(PROCESSOR_DENSITY)
+else
+ifneq ($(filter STM32F410 STM32F412,$(PROCESSOR_LINE)),)
+CMSIS_DEVICE := $(PROCESSOR_LINE)$(PROCESSOR_PACKAGE)x
+else
+CMSIS_DEVICE := $(PROCESSOR_LINE)xx
+endif
+endif
+
+CFLAGS    +=    -D$(CMSIS_DEVICE)
+
+
 # add modules to thumb sources
 # TODO: provide makefile option to add code to ARM sources
 THUMB_SOURCE += \

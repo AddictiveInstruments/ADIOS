@@ -395,7 +395,12 @@ LL_FLASH_Status LL_FLASH_PageErase(uint32_t Banks, uint32_t Page)
 
 #if defined(FLASH_DBANK_SUPPORT)
 		/* Check if page has to be erased in bank 1 or 2 */
-		if (Banks != FLASH_BANK_1)
+		/* LL_FLASH_BANK_1, not FLASH_BANK_1: the latter is the HAL's spelling
+		   and this file is the LL. Never caught because this branch is
+		   dual-bank only (G0B0/G0B1/G0C1), and no such chip could be built at
+		   all until the CMSIS device macro stopped being hand-listed
+		   (2026-08-13) - the first G0B build attempt stopped right here. */
+		if (Banks != LL_FLASH_BANK_1)
 		{
 			tmp |= FLASH_CR_BKER;
 		}

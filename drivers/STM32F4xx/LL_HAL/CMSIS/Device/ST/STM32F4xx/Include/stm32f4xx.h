@@ -52,32 +52,27 @@ extern "C" {
 #define STM32F4
 #endif /* STM32F4 */
 
-/* Device selection - driven by MIOS32_PROCESSOR_xxx (defined via
-   -DMIOS32_PROCESSOR_$(PROCESSOR) in mios32/mios32.mk), same pattern
-   already used on STM32G0xx (see stm32g0xx.h in the sibling family
-   directory) after a real silent-wrong-device-header bug was found there
-   (a G030K6 build compiling clean against G070xx's peripheral set, only
-   caught because it referenced a timer G030K6 doesn't actually have).
-   The original ST template here had the exact same class of bug, just
-   never caught: whenever NONE of the STM32F4xxxx macros below were
-   pre-defined, it fell through to an UNCONDITIONAL "#define STM32F405xx"
-   default - meaning every F4 build, regardless of the real target chip,
-   silently compiled against F405's device header. Confirmed 2026-08-04:
-   the F407VE bring-up that day built and ran correctly on real hardware
-   only because F405/F407/F415/F417 happen to share a close-enough
-   peripheral set for what MIOS32 currently touches (GPIO/UART/basic
-   timers) - it would have silently miscompiled against a chip with a
-   materially different peripheral set (F429, F446, F469, ...). */
-#if defined(MIOS32_PROCESSOR_STM32F405RG)
-#define STM32F405xx   /*!< STM32F405RG, STM32F405VG and STM32F405ZG Devices */
-#elif defined(MIOS32_PROCESSOR_STM32F407VG) || defined(MIOS32_PROCESSOR_STM32F407VE)
-/* VE (Waveshare bring-up board, 2026-08-04, real hardware) and VG share the
-   same F407 device header - only flash density differs, irrelevant to the
-   peripheral/register layout this macro selects. */
-#define STM32F407xx   /*!< STM32F407VG, STM32F407VE, STM32F407ZG, STM32F407ZE, STM32F407IG  and STM32F407IE Devices */
-#else
-#error "Unknown/not yet wired MIOS32_PROCESSOR for STM32F4xx - add a branch above (see mios32/mios32.mk for how MIOS32_PROCESSOR_xxx is defined, and programming_models/traditional/programming_model.mk for the list of processors with a real LD_FILE)."
-#endif
+/* Device selection - NOTHING IS SELECTED HERE ANY MORE.
+   The device macro (STM32F407xx, STM32F446xx, STM32F410Rx, ...) is derived
+   from PROCESSOR and passed with -D by mios32/mios32.mk, exactly the way
+   the .ld and startup files are derived in programming_model.mk. This
+   family is the one with irregular header names - F401/F411 split by
+   density, F410/F412 by package - and the derivation rule there covers
+   them; see its comment. If no device macro is defined, the #error at the
+   end of the include chain below (ST's own) stops the build.
+
+   HISTORY, kept because both failure modes were real. The original ST
+   template here fell through to an UNCONDITIONAL "#define STM32F405xx"
+   whenever no device macro was pre-defined - so every F4 build, whatever
+   the real target, silently compiled against F405's device header.
+   Confirmed 2026-08-04: the F407VE bring-up that day built and ran
+   correctly on real hardware only because F405/F407/F415/F417 share a
+   close-enough peripheral set for what the OS touches (GPIO/UART/basic
+   timers); it would have miscompiled in silence against an F429, F446 or
+   F469. The sibling family had the same class of bug in a different guise
+   (see stm32g0xx.h). Both were replaced by a hand-written table, correct
+   but knowing three F4 parts out of the twenty-three whose headers ship
+   here. Deriving the macro removes the silent default AND the hand-list. */
 
 /*  Tip: To avoid modifying this file each time you need to switch between these
         devices, you can define the device in your toolchain compiler preprocessor.
