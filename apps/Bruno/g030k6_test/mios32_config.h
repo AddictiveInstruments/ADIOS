@@ -179,7 +179,6 @@
 //#define MIOS32_DONT_USE_USB_MIDI
 //#define MIOS32_USE_USB_COM
 
-#define MIOS32_DONT_USE_IIC
 #define MIOS32_DONT_USE_SDCARD
 
 // =============================================================================

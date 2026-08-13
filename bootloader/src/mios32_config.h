@@ -39,7 +39,6 @@
 #define MIOS32_DONT_USE_USB_MIDI
 //#define MIOS32_USE_USB_COM
 
-#define MIOS32_DONT_USE_IIC
 //#define MIOS32_USE_I2S
 // The board module is gone (2026-08-11): it carried the MBHP boards frozen
 // connectors (J5/J10/J15/J28/LED/DAC). All that survived is its status LED,

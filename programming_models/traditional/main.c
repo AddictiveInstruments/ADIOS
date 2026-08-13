@@ -153,6 +153,11 @@ int main(void)
 #ifdef MIOS32_USE_SPI
   MIOS32_SPI_Init(0);
 #endif
+#ifdef MIOS32_USE_I2C
+  // auto-derived in mios32_i2c.h from any MIOS32_USE_I2C0/1/2 or
+  // MIOS32_USE_FMPI2C0 the project declared
+  MIOS32_I2C_Init(0);
+#endif
 #ifndef MIOS32_DONT_USE_SRIO
   MIOS32_SRIO_Init(0);
 #endif

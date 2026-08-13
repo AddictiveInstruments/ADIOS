@@ -41,7 +41,7 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_ain.c \
 	$(MIOS32_PATH)/mios32/common/printf-stdarg.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_uart.c \
-	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_iic.c \
+	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_i2c.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_can.c 
 	
 ifneq ($(FAMILY),STM32G0xx)

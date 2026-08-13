@@ -54,12 +54,13 @@
 
 
 
-// IIC IRQs used by MIOS32_IIC, called rarely on IIC accesses
-// should be very high to overcome peripheral flaws (see header of mios32_iic.c)
+// I2C IRQs used by MIOS32_I2C, called rarely on I2C accesses
+// should be very high to overcome peripheral flaws
 // estimated requirement for "reaction time": less than 9/400 kHz = 22.5 uS
-// EV and ER IRQ should have same priority since they are sharing resources
-#define MIOS32_IRQ_IIC_EV_PRIORITY      2
-#define MIOS32_IRQ_IIC_ER_PRIORITY      2
+// EV and ER IRQ share the same priority: they share resources, and on G0
+// they are not even two vectors (I2C1_IRQn / I2C2_3_IRQn carry both)
+#define MIOS32_IRQ_I2C_EV_PRIORITY      2
+#define MIOS32_IRQ_I2C_ER_PRIORITY      2
 
 
 // UART IRQs used by MIOS32_UART

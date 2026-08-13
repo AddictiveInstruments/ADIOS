@@ -76,6 +76,7 @@
 #include <stm32g0xx_ll_utils.h>
 #include <stm32g0xx_ll_flash.h>
 #include <stm32g0xx_ll_spi.h>
+#include <stm32g0xx_ll_i2c.h>
 #include <stm32g0xx_ll_dma.h>
 #include <stm32g0xx_ll_dmamux.h>
 

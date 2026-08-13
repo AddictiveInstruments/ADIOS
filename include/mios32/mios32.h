@@ -82,7 +82,7 @@ extern "C" {
 #include <mios32_uart.h>
 #include <mios32_din_midi.h>
 #include <mios32_spi_midi.h>
-#include <mios32_iic.h>
+#include <mios32_i2c.h>
 #include <mios32_i2s.h>
 #include <mios32_timer.h>
 #include <mios32_stopwatch.h>
