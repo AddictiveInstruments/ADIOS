@@ -192,7 +192,9 @@ s32 MIOS32_SYS_Reset(void)
   MIOS32_IRQ_Disable();
 
   // turn the sign-of-life LED off
+#ifdef MIOS32_USE_SOL
   MIOS32_SOL_Clr();
+#endif
 
   // wait for 50 mS to ensure that all ongoing operations (e.g. DMA driver SPI transfers) are finished
   {
