@@ -28,6 +28,10 @@ THUMB_SOURCE += \
 	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_exti.c \
 	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_utils.c \
 	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_flash.c \
+	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_spi.c \
+	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_dma.c \
+	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_i2c.c \
+	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_fmpi2c.c \
 	$(DRIVER_USB_LIB)/STM32_USB_Device_Library/Core/src/usbd_core.c \
 	$(DRIVER_USB_LIB)/STM32_USB_Device_Library/Core/src/usbd_ioreq.c \
 	$(DRIVER_USB_LIB)/STM32_USB_Device_Library/Core/src/usbd_req.c \

@@ -30,6 +30,7 @@ THUMB_SOURCE += \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_utils.c \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_spi.c \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_dma.c \
+	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_i2c.c \
 	$(DRIVER_LIB)/STM32G0xx_HAL_Driver/src/stm32g0xx_ll_flash.c
 	
 
