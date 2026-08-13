@@ -10,10 +10,10 @@
 //! control - there is no second CS line on this family (unlike some
 //! STM32F4xx boards).
 //!
-//! If SPI low-level functions should be used to access other peripherals,
-//! please ensure that the appr. MIOS32_* drivers are disabled (e.g.
-//! add '#define MIOS32_DONT_USE_SDCARD'
-//! to your mios_config.h file)
+//! If SPI low-level functions are used to talk to something else on the same
+//! port, make sure no MIOS32_* driver is claiming it at the same time. Those
+//! drivers are opt-in since 2026-08-13, so this is a matter of NOT declaring
+//! them (MIOS32_USE_SDCARD and the like) rather than of refusing them.
 //!
 //! Note that additional chip select lines can be easily added by using
 //! the remaining free GPIOs. Shared SPI ports should be arbitrated with

@@ -18,18 +18,29 @@
 // Global definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// Which SPI peripheral should be used
-// allowed values: 0 and 1
-// (note: SPI0 will allocate DMA channel 2 and 3, SPI1 will allocate DMA channel 4 and 5)
+// An SD card is not a peripheral of the chip: it is a device at the end of an
+// SPI bus, and this driver only knows how to move 512-byte sectors over it.
+// Everything file-shaped lives above, in modules/ - fatfs (ChaN's FatFs) and
+// dosfs bind to the four entry points SectorRead/SectorWrite/CheckAvailable/
+// CSDRead, modules/file adds the MIDIbox layer that MIOS Studio's file
+// browser talks to over SysEx.
+//
+// Opt-in since 2026-08-13: declare MIOS32_USE_SDCARD in your project's
+// mios32_config.h, together with the SPI port below.
+
+// Which SPI port carries the card. The port itself must be declared too
+// (MIOS32_USE_SPI0 / MIOS32_USE_SPI1) - see the #error in mios32_sdcard.c,
+// which says so at compile time rather than letting the link fail on four
+// missing MIOS32_SPI_* symbols.
 #ifndef MIOS32_SDCARD_SPI
 #define MIOS32_SDCARD_SPI 0
 #endif
 
-// Which RC pin of the SPI port should be used
-// allowed values: 0 or 1 for SPI0 (J16:RC1, J16:RC2), 0 for SPI1 (J8/9:RC)
-#ifndef MIOS32_SDCARD_SPI_RC_PIN
-#define MIOS32_SDCARD_SPI_RC_PIN 0
-#endif
+// (MIOS32_SDCARD_SPI_RC_PIN was defined here and used NOWHERE - a leftover
+// from the MBHP boards, where one SPI port exposed two chip select lines,
+// J16:RC1 and J16:RC2. A port now has a single CS under manual GPIO control,
+// named by MIOS32_SPIn_CS_PORT/_PIN in the family driver, and this driver
+// drives it through MIOS32_SPI_CS_PinSet(port, level). Removed 2026-08-13.)
 
 
 /////////////////////////////////////////////////////////////////////////////

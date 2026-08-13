@@ -177,7 +177,6 @@
 //#define MIOS32_DONT_USE_USB_MIDI
 //#define MIOS32_USE_USB_COM
 
-#define MIOS32_DONT_USE_SDCARD
 
 // =============================================================================
 // FreeRTOS: two independent, numeric (0/1) opt-in switches, both with a

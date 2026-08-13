@@ -67,7 +67,6 @@
 // are opt-in:
 #define MIOS32_USE_STOPWATCH
 // MIOS32_USE_TIMER / MIOS32_USE_SOF left undefined - unused by this project
-#define MIOS32_DONT_USE_SDCARD
 
 // calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
 // opt-in, renamed from MIOS32_DONT_USE_FREERTOS - left undefined here since

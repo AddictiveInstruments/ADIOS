@@ -44,7 +44,6 @@
 // connectors (J5/J10/J15/J28/LED/DAC). All that survived is its status LED,
 // now the sign-of-life pin - same default as before, GPIOA pin 12.
 #define MIOS32_USE_SOL
-#define MIOS32_DONT_USE_SDCARD
 
 // calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
 // MIOS32_APP_USE_FREERTOS is opt-in (renamed from MIOS32_DONT_USE_FREERTOS),

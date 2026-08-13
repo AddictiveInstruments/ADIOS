@@ -45,8 +45,28 @@
 
 #include <mios32.h>
 
-// this module can be optionally disabled in a local mios32_config.h file (included from mios32.h)
-#if !defined(MIOS32_DONT_USE_SDCARD)
+// Opt-in since 2026-08-13: declare MIOS32_USE_SDCARD in your project's
+// mios32_config.h. It used to arrive on its own and had to be refused with
+// MIOS32_DONT_USE_SDCARD, which every project in the tree did.
+#if defined(MIOS32_USE_SDCARD)
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This driver is a block device, nothing more: sectors in, sectors out, over
+// an SPI bus. It therefore needs that bus to exist. Saying so here turns what
+// used to be four "undefined reference to MIOS32_SPI_..." at link time into
+// one sentence at compile time.
+/////////////////////////////////////////////////////////////////////////////
+
+#if MIOS32_SDCARD_SPI == 0 && !defined(MIOS32_USE_SPI0)
+# error "MIOS32_USE_SDCARD needs its SPI port: add #define MIOS32_USE_SPI0 to your mios32_config.h, or point MIOS32_SDCARD_SPI at another port."
+#elif MIOS32_SDCARD_SPI == 1 && !defined(MIOS32_USE_SPI1)
+# error "MIOS32_USE_SDCARD needs its SPI port: add #define MIOS32_USE_SPI1 to your mios32_config.h, or point MIOS32_SDCARD_SPI at another port."
+#elif MIOS32_SDCARD_SPI == 2 && !defined(MIOS32_USE_SPI2)
+# error "MIOS32_USE_SDCARD needs its SPI port: add #define MIOS32_USE_SPI2 to your mios32_config.h, or point MIOS32_SDCARD_SPI at another port."
+#elif MIOS32_SDCARD_SPI > 2
+# error "MIOS32_SDCARD_SPI points at a port that does not exist."
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -59,12 +79,13 @@
 #endif
 
 
-// SPI prescaler used for fast transfers
+// SPI prescaler used for fast transfers. The threshold is about the SPI clock
+// the divider lands on, not about any particular board: below 80 MHz a /4
+// keeps the bus inside what a card tolerates, above it takes a /8.
 #ifndef MIOS32_SDCARD_SPI_PRESCALER
 #if MIOS32_SYS_CPU_FREQUENCY < 80000000
 # define MIOS32_SDCARD_SPI_PRESCALER MIOS32_SPI_PRESCALER_4
 #else
-// for LPC17 module
 # define MIOS32_SDCARD_SPI_PRESCALER MIOS32_SPI_PRESCALER_8
 #endif
 #endif
@@ -806,5 +827,5 @@ error:
 
 //! \}
 
-#endif /* MIOS32_DONT_USE_SDCARD */
+#endif /* MIOS32_USE_SDCARD */
 
