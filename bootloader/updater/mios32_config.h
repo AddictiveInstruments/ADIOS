@@ -21,9 +21,6 @@
 // bsl_sysex.c for the flash-erase/write timing measurement printed over SysEx.
 #define MIOS32_USE_STOPWATCH
 
-#define MIOS32_DONT_USE_SRIN
-#define MIOS32_DONT_USE_SROUT
-#define MIOS32_DONT_USE_ENC
 #define MIOS32_DONT_USE_AIN
 #define MIOS32_DONT_USE_MF
 #define MIOS32_DONT_USE_LCD

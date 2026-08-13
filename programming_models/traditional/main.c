@@ -161,13 +161,13 @@ int main(void)
 #ifdef MIOS32_USE_SRIO
   MIOS32_SRIO_Init(0);
 #endif
-#if !defined(MIOS32_DONT_USE_SRIN) && defined(MIOS32_USE_SRIO)
+#ifdef MIOS32_USE_SRIN
   MIOS32_SRIN_Init(0);
 #endif
-#if !defined(MIOS32_DONT_USE_SROUT) && defined(MIOS32_USE_SRIO)
+#ifdef MIOS32_USE_SROUT
   MIOS32_SROUT_Init(0);
 #endif
-#if !defined(MIOS32_DONT_USE_ENC) && defined(MIOS32_USE_SRIO)
+#ifdef MIOS32_USE_ENC
   MIOS32_ENC_Init(0);
 #endif
 #if !defined(MIOS32_DONT_USE_MF)
@@ -248,7 +248,7 @@ void SRIO_ServiceFinish(void)
 {
 #ifdef MIOS32_USE_SRIO
 
-# ifndef MIOS32_DONT_USE_ENC
+# ifdef MIOS32_USE_ENC
   // update encoder states
   MIOS32_ENC_UpdateStates();
 # endif
@@ -315,7 +315,7 @@ static void MIOS32_CORE_NonMIDI_Tick(void)
 #endif
 #endif
 
-#if !defined(MIOS32_DONT_USE_SRIN) && defined(MIOS32_USE_SRIO)
+#ifdef MIOS32_USE_SRIN
   // check for input shift register pin changes, call APP_DIN_NotifyToggle on
   // each toggled pin. The application-facing hook keeps its DIN name on
   // purpose: what an app sees is still a digital input pin, whatever the
@@ -323,7 +323,7 @@ static void MIOS32_CORE_NonMIDI_Tick(void)
   MIOS32_SRIN_Handler(APP_DIN_NotifyToggle);
 
   // check for encoder changes, call APP_ENC_NotifyChanged on each change
-# ifndef MIOS32_DONT_USE_ENC
+# ifdef MIOS32_USE_ENC
   MIOS32_ENC_Handler(APP_ENC_NotifyChange);
 # endif
 #endif

@@ -162,9 +162,6 @@
 
 // disable code modules
 //#define MIOS32_USE_I2S
-#define MIOS32_DONT_USE_SRIN
-#define MIOS32_DONT_USE_SROUT
-#define MIOS32_DONT_USE_ENC
 #define MIOS32_DONT_USE_AIN
 #define MIOS32_DONT_USE_MF
 #define MIOS32_DONT_USE_LCD

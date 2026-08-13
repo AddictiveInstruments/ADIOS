@@ -19,8 +19,16 @@
 
 #include <mios32.h>
 
-// this module can be optionally disabled in a local mios32_config.h file (included from mios32.h)
-#if !defined(MIOS32_DONT_USE_SRIN)
+// Opt-in since 2026-08-13: declare MIOS32_USE_SRIN in your project's
+// mios32_config.h. It used to arrive on its own and had to be refused with
+// MIOS32_DONT_USE_SRIN, which every project in the tree did.
+#if defined(MIOS32_USE_SRIN)
+
+// This module reads the input half of the shift register chain that SRIO
+// clocks; it has nothing of its own to talk to the hardware with.
+#if !defined(MIOS32_USE_SRIO)
+# error "MIOS32_USE_SRIN needs the shift register engine: add #define MIOS32_USE_SRIO to your mios32_config.h."
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 //! Initializes SRIN driver
@@ -182,4 +190,4 @@ s32 MIOS32_SRIN_Handler(void *_callback)
 
 //! \}
 
-#endif /* MIOS32_DONT_USE_SRIN */
+#endif /* MIOS32_USE_SRIN */

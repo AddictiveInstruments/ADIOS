@@ -19,8 +19,18 @@
 
 #include <mios32.h>
 
-// this module can be optionally disabled in a local mios32_config.h file (included from mios32.h)
-#if !defined(MIOS32_DONT_USE_ENC)
+// Opt-in since 2026-08-13: declare MIOS32_USE_ENC in your project's
+// mios32_config.h. It used to arrive on its own and had to be refused with
+// MIOS32_DONT_USE_ENC, which every project in the tree did.
+#if defined(MIOS32_USE_ENC)
+
+// Rotary encoders are read from the input shift registers: this module calls
+// MIOS32_SRIN_SRChangedGetAndClear() and reads SRIO's own din arrays
+// directly. Two links up the chain, so both are named here - SRIN in turn
+// requires SRIO, which is where the SPI port is checked.
+#if !defined(MIOS32_USE_SRIN)
+# error "MIOS32_USE_ENC needs the input shift registers: add #define MIOS32_USE_SRIN to your mios32_config.h."
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // Local types
@@ -401,4 +411,4 @@ s32 MIOS32_ENC_Handler(void *_callback)
 
 //! \}
 
-#endif /* MIOS32_DONT_USE_ENC */
+#endif /* MIOS32_USE_ENC */
