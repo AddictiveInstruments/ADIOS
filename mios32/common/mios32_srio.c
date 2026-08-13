@@ -18,8 +18,27 @@
 
 #include <mios32.h>
 
-// this module can be optionally disabled in a local mios32_config.h file (included from mios32.h)
-#if !defined(MIOS32_DONT_USE_SRIO)
+// Opt-in since 2026-08-13: declare MIOS32_USE_SRIO in your project's
+// mios32_config.h. It used to arrive on its own and had to be refused with
+// MIOS32_DONT_USE_SRIO, which every project in the tree did.
+#if defined(MIOS32_USE_SRIO)
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This module clocks a chain of shift registers over SPI, so it needs that
+// bus to exist. Saying so here turns five "undefined reference to
+// MIOS32_SPI_..." at link time into one sentence at compile time.
+/////////////////////////////////////////////////////////////////////////////
+
+#if MIOS32_SRIO_SPI == 0 && !defined(MIOS32_USE_SPI0)
+# error "MIOS32_USE_SRIO needs its SPI port: add #define MIOS32_USE_SPI0 to your mios32_config.h, or point MIOS32_SRIO_SPI at another port."
+#elif MIOS32_SRIO_SPI == 1 && !defined(MIOS32_USE_SPI1)
+# error "MIOS32_USE_SRIO needs its SPI port: add #define MIOS32_USE_SPI1 to your mios32_config.h, or point MIOS32_SRIO_SPI at another port."
+#elif MIOS32_SRIO_SPI == 2 && !defined(MIOS32_USE_SPI2)
+# error "MIOS32_USE_SRIO needs its SPI port: add #define MIOS32_USE_SPI2 to your mios32_config.h, or point MIOS32_SRIO_SPI at another port."
+#elif MIOS32_SRIO_SPI > 2
+# error "MIOS32_SRIO_SPI points at a port that does not exist."
+#endif
 
 
 // special callback which will be called for DIN pin emulation
@@ -367,5 +386,5 @@ static void MIOS32_SRIO_DMA_Callback(void)
 
 //! \}
 
-#endif /* MIOS32_DONT_USE_SRIO */
+#endif /* MIOS32_USE_SRIO */
 

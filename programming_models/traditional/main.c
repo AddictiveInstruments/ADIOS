@@ -158,16 +158,16 @@ int main(void)
   // MIOS32_USE_FMPI2C0 the project declared
   MIOS32_I2C_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_SRIO
+#ifdef MIOS32_USE_SRIO
   MIOS32_SRIO_Init(0);
 #endif
-#if !defined(MIOS32_DONT_USE_SRIN) && !defined(MIOS32_DONT_USE_SRIO)
+#if !defined(MIOS32_DONT_USE_SRIN) && defined(MIOS32_USE_SRIO)
   MIOS32_SRIN_Init(0);
 #endif
-#if !defined(MIOS32_DONT_USE_SROUT) && !defined(MIOS32_DONT_USE_SRIO)
+#if !defined(MIOS32_DONT_USE_SROUT) && defined(MIOS32_USE_SRIO)
   MIOS32_SROUT_Init(0);
 #endif
-#if !defined(MIOS32_DONT_USE_ENC) && !defined(MIOS32_DONT_USE_SRIO)
+#if !defined(MIOS32_DONT_USE_ENC) && defined(MIOS32_USE_SRIO)
   MIOS32_ENC_Init(0);
 #endif
 #if !defined(MIOS32_DONT_USE_MF)
@@ -246,7 +246,7 @@ int main(void)
 /////////////////////////////////////////////////////////////////////////////
 void SRIO_ServiceFinish(void)
 {
-#ifndef MIOS32_DONT_USE_SRIO
+#ifdef MIOS32_USE_SRIO
 
 # ifndef MIOS32_DONT_USE_ENC
   // update encoder states
@@ -265,7 +265,7 @@ void vApplicationTickHook(void)
   MIOS32_TIMESTAMP_Inc();
 #endif
 
-#if !defined(MIOS32_DONT_USE_SRIO) && !defined(MIOS32_DONT_SERVICE_SRIO_SCAN)
+#if defined(MIOS32_USE_SRIO) && !defined(MIOS32_DONT_SERVICE_SRIO_SCAN)
   // notify application about SRIO scan start
   APP_SRIO_ServicePrepare();
 
@@ -315,7 +315,7 @@ static void MIOS32_CORE_NonMIDI_Tick(void)
 #endif
 #endif
 
-#if !defined(MIOS32_DONT_USE_SRIN) && !defined(MIOS32_DONT_USE_SRIO)
+#if !defined(MIOS32_DONT_USE_SRIN) && defined(MIOS32_USE_SRIO)
   // check for input shift register pin changes, call APP_DIN_NotifyToggle on
   // each toggled pin. The application-facing hook keeps its DIN name on
   // purpose: what an app sees is still a digital input pin, whatever the
@@ -476,7 +476,7 @@ static void MIOS32_CORE_BareLoop_Run(void)
 #if !defined(MIOS32_DONT_USE_TIMESTAMP)
       MIOS32_TIMESTAMP_Inc();
 #endif
-#if !defined(MIOS32_DONT_USE_SRIO) && !defined(MIOS32_DONT_SERVICE_SRIO_SCAN)
+#if defined(MIOS32_USE_SRIO) && !defined(MIOS32_DONT_SERVICE_SRIO_SCAN)
       APP_SRIO_ServicePrepare();
       MIOS32_SRIO_ScanStart(SRIO_ServiceFinish);
 #endif

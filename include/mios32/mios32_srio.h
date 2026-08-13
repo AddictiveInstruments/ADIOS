@@ -31,35 +31,32 @@
 #define MIOS32_SRIO_NUM_DOUT_PAGES 1
 #endif
 
-// Which SPI peripheral should be used
-// allowed values: 0 and 1
-// (note: SPI0 will allocate DMA channel 2 and 3, SPI1 will allocate DMA channel 4 and 5)
+// Which SPI port carries the shift register chain. The port itself must be
+// declared too (MIOS32_USE_SPI0 / _SPI1 / _SPI2) - see the #error in
+// mios32_srio.c, which says so at compile time rather than letting the link
+// fail on five missing MIOS32_SPI_* symbols.
+//
+// (The default used to be chosen by board: 0 on an STM32_PRIMER, "since RCLK
+// conflicts with USB detach pin @B12", 1 everywhere else. That board is not
+// defined anywhere in this tree, so the branch always took its #else -
+// removed 2026-08-13 along with the two below. Nothing changes for anyone;
+// a project that needs another port says so here.)
 #ifndef MIOS32_SRIO_SPI
-#ifdef MIOS32_BOARD_STM32_PRIMER
-# define MIOS32_SRIO_SPI 0 // since RCLK conflicts with USB detach pin @B12
-#else
-# define MIOS32_SRIO_SPI 1
-#endif
+#define MIOS32_SRIO_SPI 1
 #endif
 
-// Which RC pin of the SPI port should be used
-// allowed values: 0 or 1 for SPI0 (J16:RC1, J16:RC2), 0 for SPI1 (J8/9:RC)
-#ifndef MIOS32_SRIO_SPI_RC_PIN
-#define MIOS32_SRIO_SPI_RC_PIN 0
-#endif
-
-// optional second pin (currently only used on J8/9:RC2 of LPC17 module
-#if !defined(MIOS32_BOARD_MBHP_CORE_STM32)
-# define MIOS32_SRIO_SPI_RC_PIN2 1
-#endif
+// (MIOS32_SRIO_SPI_RC_PIN and MIOS32_SRIO_SPI_RC_PIN2 were defined here and
+// used NOWHERE - leftovers from the MBHP boards, where one SPI port exposed
+// two chip select lines, J16:RC1 and J16:RC2. A port now has a single CS
+// under manual GPIO control, named by MIOS32_SPIn_CS_PORT/_PIN in the family
+// driver, and this module drives it through MIOS32_SPI_CS_PinSet(port,
+// level). Removed 2026-08-13, same as MIOS32_SDCARD_SPI_RC_PIN.)
 
 // should output pins be used in Open Drain mode? (perfect for 3.3V->5V levelshifting)
+// (default was 1 on MBHP_CORE_STM32, 0 elsewhere - that board is not defined
+// in this tree either, so 0 is what every build already got)
 #ifndef MIOS32_SRIO_OUTPUTS_OD
-#if defined(MIOS32_BOARD_MBHP_CORE_STM32)
-#define MIOS32_SRIO_OUTPUTS_OD 1
-#else
 #define MIOS32_SRIO_OUTPUTS_OD 0
-#endif
 #endif
 
 

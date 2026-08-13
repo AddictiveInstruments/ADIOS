@@ -18,7 +18,6 @@
 // So: no shift registers, no encoders, no analog, no motorfaders, no display,
 // no OSC/COM, no SD card, no I2C - the same opt-outs 5x6_505 makes, for the
 // same reason, plus the display it genuinely has and this does not.
-#define MIOS32_DONT_USE_SRIO
 #define MIOS32_DONT_USE_SRIN
 #define MIOS32_DONT_USE_SROUT
 #define MIOS32_DONT_USE_ENC
