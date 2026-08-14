@@ -229,15 +229,41 @@ int vsprintf(char *out, const char *format, va_list args)
 }
 
 
-int snprintf( char *buf, size_t count, const char *format, ... )
-{
-        va_list args;
-        
-        ( void ) count;
-        
-        va_start( args, format );
-        return print( &buf, format, args );
-}
+/* snprintf() WAS DEFINED HERE AND HAS BEEN REMOVED (2026-08-13).
+ *
+ * Do not "restore" it. What stood here was:
+ *
+ *     int snprintf( char *buf, size_t count, const char *format, ... )
+ *     {
+ *             va_list args;
+ *             ( void ) count;                          // <-- the bound, discarded
+ *             va_start( args, format );
+ *             return print( &buf, format, args );
+ *     }
+ *
+ * i.e. exactly sprintf() under a name that promises a bound it never
+ * honoured. Nothing in the tree called it, so nothing was protected - but
+ * the day someone reached for it precisely BECAUSE the name says "safe",
+ * they would have got a silent overrun instead of a diagnostic.
+ *
+ * This is not an oversight of ours: the file comes from the FreeRTOS demo
+ * directories, and FreeRTOS itself says so in Source/tasks.c - "note
+ * printf-stdarg.c does not provide a full snprintf() implementation!". The
+ * warning simply did not travel with the file.
+ *
+ * Removing the symbol turns any future use into a link error at the exact
+ * moment the mistake is made, which is the whole point. Bounding it for
+ * real is possible but not free: print() writes through a char** and
+ * printchar() knows no limit, so an end pointer would have to be threaded
+ * through printchar/prints/printi/print - four signatures and a dozen call
+ * sites in the very code that every sprintf() in the tree depends on. A
+ * static counter instead would be six lines and NOT reentrant, which in an
+ * OS that formats from interrupt context trades one trap for a worse one.
+ *
+ * If a bounded formatter is ever needed, write it under its own name -
+ * something like MIOS32_SPRINTF_Bounded() - rather than borrowing a
+ * standard one.
+ */
 
 
 #ifdef TEST_PRINTF
