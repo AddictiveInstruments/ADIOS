@@ -342,11 +342,13 @@ s32 MIOS32_MIDI_RS_OptimisationSet(mios32_midi_port_t port, u8 enable)
 #endif
 
 	case SPIM0://..15
-#if defined(MIOS32_USE_SPI_MIDI)
-		return MIOS32_SPI_MIDI_RS_OptimisationSet(port & 0xf, enable);
-#else
-		return -1; // SPI_MIDI not enabled
-#endif
+		// The SPI-MIDI transport does not implement running status
+		// optimisation - the board at the far end does. This used to call
+		// MIOS32_SPI_MIDI_RS_OptimisationSet(), whose entire body was an M16
+		// command carrying a port mask; it moved to modules/m16 on
+		// 2026-08-14 as MIOS32_SPIM_M16_RS_OptimisationSet(). Same answer as
+		// CAN gives below.
+		return -1; // not implemented by this transport
 
 	case MCAN0://..15
 		return -1; // not required for CAN
@@ -385,11 +387,9 @@ s32 MIOS32_MIDI_RS_OptimisationGet(mios32_midi_port_t port)
 #endif
 
 	case SPIM0://..15
-#if defined(MIOS32_USE_SPI_MIDI)
-		return MIOS32_SPI_MIDI_RS_OptimisationGet(port & 0xf);
-#else
-		return -1; // SPI_MIDI not enabled
-#endif
+		// see the Set() counterpart: moved to modules/m16 as
+		// MIOS32_SPIM_M16_RS_OptimisationGet()
+		return -1; // not implemented by this transport
 
 	case MCAN0://..15
 		return -1; // not required for CAN

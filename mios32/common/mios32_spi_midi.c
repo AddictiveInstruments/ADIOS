@@ -22,8 +22,25 @@
 
 #include <mios32.h>
 
-// this module can be optionally disabled in a local mios32_config.h file (included from mios32.h)
-#if !defined(MIOS32_DONT_USE_SPI_MIDI)
+// Opt-in since 2026-08-14: declare MIOS32_USE_SPI_MIDI in your project's
+// mios32_config.h. It used to arrive on its own and had to be refused with
+// MIOS32_DONT_USE_SPI_MIDI - which mios32_midi.c had ALREADY anticipated, its
+// dispatcher guarding the SPIM branches with #if defined(MIOS32_USE_SPI_MIDI).
+#if defined(MIOS32_USE_SPI_MIDI)
+
+// The link needs its bus. Same guard as sdcard and srio: one sentence at
+// compile time instead of four "undefined reference to MIOS32_SPI_..." later.
+#if MIOS32_SPI_MIDI_NUM_PORTS > 0
+# if MIOS32_SPI_MIDI_SPI == 0 && !defined(MIOS32_USE_SPI0)
+#  error "MIOS32_USE_SPI_MIDI needs its SPI port: add #define MIOS32_USE_SPI0 to your mios32_config.h, or point MIOS32_SPI_MIDI_SPI at another port."
+# elif MIOS32_SPI_MIDI_SPI == 1 && !defined(MIOS32_USE_SPI1)
+#  error "MIOS32_USE_SPI_MIDI needs its SPI port: add #define MIOS32_USE_SPI1 to your mios32_config.h, or point MIOS32_SPI_MIDI_SPI at another port."
+# elif MIOS32_SPI_MIDI_SPI == 2 && !defined(MIOS32_USE_SPI2)
+#  error "MIOS32_USE_SPI_MIDI needs its SPI port: add #define MIOS32_USE_SPI2 to your mios32_config.h, or point MIOS32_SPI_MIDI_SPI at another port."
+# elif MIOS32_SPI_MIDI_SPI > 2
+#  error "MIOS32_SPI_MIDI_SPI points at a port that does not exist."
+# endif
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -66,15 +83,8 @@ static u8 rx_ringbuffer_size;
 // indicates ongoing scan
 static volatile u8 transfer_done;
 
-#if defined MIOS32_SPI_MIDI_USE_M16
-static u16 m16_rx_act;
-static u16 m16_tx_act;
-static u16 m16_ovl_act;
-static mios32_spim_m16_gpio_mode_t  m16_gpio_mode[3];
-static u16 m16_gpio_inv[3];
-static u16 m16_gpio_val[3];
-static u16 rs_optimisation;
-#endif
+// optional hook: a board driver can claim raw words before MIDI parsing
+static s32 (*raw_word_callback_func)(u32 word);
 #endif
 
 
@@ -85,10 +95,6 @@ static u16 rs_optimisation;
 #if MIOS32_SPI_MIDI_NUM_PORTS > 0
 static s32 MIOS32_SPI_MIDI_InitScanBuffer(u32 *buffer);
 static void MIOS32_SPI_MIDI_DMA_Callback(void);
-#if defined MIOS32_SPI_MIDI_USE_M16
-static s32 MIOS32_SPI_MIDI_M16_StatReceive(u32 word);
-static s32 (*m16_stat_callback_func)(mios32_spim_m16_cmd_t stat_cmd, u16 stat_val);
-#endif
 #endif
 
 
@@ -128,20 +134,12 @@ s32 MIOS32_SPI_MIDI_Init(u32 mode)
   MIOS32_SPI_MIDI_InitScanBuffer((u32 *)&tx_upstream_buffer[0]);
   MIOS32_SPI_MIDI_InitScanBuffer((u32 *)&tx_upstream_buffer[1]);
 
-#if defined MIOS32_SPI_MIDI_USE_M16
-  m16_stat_callback_func = NULL;
-  int i;
-  MIOS32_SPIM_M16_RxStatEnable(1); 	// Set RX status On
-  MIOS32_SPIM_M16_TxStatEnable(1);	// Set TX status On
-  MIOS32_SPIM_M16_OvlStatEnable(1);	// Set TX buffer Overload status Off
-  for(i=0;i<3; i++){
-	  // All GPIO Groups set to OUT and not inverted by default
-	  MIOS32_SPIM_M16_GPIO_Grp_ModeSet(i, M16_GPIO_MODE_OUT);
-	  MIOS32_SPIM_M16_GPIO_Grp_InvSet(i, 0x0000);
-	  MIOS32_SPIM_M16_GPIO_Grp_Set(i, 0x0000);
-  }
-  MIOS32_SPIM_M16_SofEnable(0);
-#endif
+  // no board driver has claimed the raw words yet - one registers itself
+  // with MIOS32_SPI_MIDI_RawWordCallback_Init(), typically from its own
+  // Init(), which the application calls after this one. (The M16's start-up
+  // sequence used to sit right here behind an #ifdef; it is now
+  // MIOS32_SPIM_M16_Init() in modules/m16.)
+  raw_word_callback_func = NULL;
 
   return status;
 #endif
@@ -184,68 +182,29 @@ s32 MIOS32_SPI_MIDI_CheckAvailable(u8 spi_midi_port)
 }
 
 /////////////////////////////////////////////////////////////////////////////
-//! Available for m16 interface only
-//! This function enables/disables running status optimisation for a given
-//! MIDI OUT port to improve bandwidth if MIDI events with the same
-//! status byte are sent back-to-back.<BR>
-//! Note that the optimisation is enabled by default.
-//! \param[in] uart_port UART number (0..15)
-//! \param[in] enable 0=optimisation disabled, 1=optimisation enabled
-//! \return -1 if port not available
-//! \return 0 on success
-//! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
+//! Installs an optional callback which is given every received word BEFORE
+//! it is read as a MIDI package.
+//!
+//! This is how a board at the far end of the link gets its own protocol
+//! through without the transport knowing anything about it. The M16 uses it
+//! for its status channel; until 2026-08-14 that test sat hard-wired inside
+//! MIOS32_SPI_MIDI_Periodic_mS() behind an #ifdef.
+//!
+//! \param[in] callback_raw_word the callback, or NULL to remove it. It must
+//!            return 1 if it consumed the word, 0 to let it through.
+//! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPI_MIDI_RS_OptimisationSet(u8 spim_port, u8 enable)
+s32 MIOS32_SPI_MIDI_RawWordCallback_Init(s32 (*callback_raw_word)(u32 word))
 {
 #if MIOS32_SPI_MIDI_NUM_PORTS == 0
-  return -1; // all SPIMs explicitely disabled
+  return -1; // SPI MIDI not activated
 #else
-#if defined MIOS32_SPI_MIDI_USE_M16
-  if( spim_port >= MIOS32_SPI_MIDI_NUM_PORTS )
-    return -1; // port not available
-
-  u16 mask = 1 << spim_port;
-  rs_optimisation &= ~mask;
-  if( enable )rs_optimisation |= mask;
-  mios32_midi_package_t p;
-  p.cin_cable = 0x01;
-  p.evnt0 = 0x10;
-  p.evnt1 = (u8)(rs_optimisation>>8);
-  p.evnt2 = (u8)(rs_optimisation&0xff);
-  MIOS32_SPI_MIDI_PackageSend(p);
+  raw_word_callback_func = callback_raw_word;
 
   return 0; // no error
-#else
-  return -1; // feature not available
-#endif
 #endif
 }
 
-/////////////////////////////////////////////////////////////////////////////
-//! Available for m16 interface only
-//! This function returns the running status optimisation enable/disable flag
-//! for the given MIDI OUT port.
-//! \param[in] uart_port UART number (0..2)
-//! \return -1 if port not available
-//! \return 0 if optimisation disabled
-//! \return 1 if optimisation enabled
-//! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPI_MIDI_RS_OptimisationGet(u8 spim_port)
-{
-#if MIOS32_SPI_MIDI_NUM_PORTS == 0
-  return -1; // all SPIMs explicitely disabled
-#else
-#if defined MIOS32_SPI_MIDI_USE_M16
-  if( spim_port >= MIOS32_SPI_MIDI_NUM_PORTS )
-    return -1; // port not available
-
-  return (rs_optimisation & (1 << spim_port)) ? 1 : 0;
-#else
-  return -1; // feature not available
-#endif
-#endif
-}
 
 /////////////////////////////////////////////////////////////////////////////
 //! This function should be called periodically each mS to initiate a new
@@ -345,12 +304,11 @@ static void MIOS32_SPI_MIDI_DMA_Callback(void)
 
       if( word != 0xffffffff && word != 0x00000000 ) {
 
-#if defined MIOS32_SPI_MIDI_USE_M16
-		if((word &0x0f000000) == 0x01000000){
-			// parser
-			MIOS32_SPI_MIDI_M16_StatReceive(word);
-		}else{
-#endif
+		// give a board driver the chance to claim this word before we
+		// read it as MIDI - see MIOS32_SPI_MIDI_RawWordCallback_Init().
+		// The M16 uses it for its status channel (CIN 0x01); that test
+		// used to be hard-wired right here.
+		if( raw_word_callback_func == NULL || raw_word_callback_func(word) == 0 ){
 	    	mios32_midi_package_t p;
 			p.cin_cable = word >> 24;
 			p.evnt0 = word >> 16;
@@ -365,9 +323,7 @@ static void MIOS32_SPI_MIDI_DMA_Callback(void)
 			  break; // ringbuffer full :-( - TODO: add rx error counter
 		      }
 		    }
-#if defined MIOS32_SPI_MIDI_USE_M16
 		}
-#endif
 
     MIOS32_IRQ_Enable();
   }
@@ -509,244 +465,6 @@ static s32 MIOS32_SPI_MIDI_InitScanBuffer(u32 *buffer)
 }
 #endif
 
-#if defined MIOS32_SPI_MIDI_USE_M16
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-//! Installs an optional SysEx callback which is called by
-//! MIOS32_SPI_MIDI_M16_StatReceive() to simplify the parsing of m16 statuses.
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_StatCallback_Init(s32 (*callback_m16_stat)(mios32_spim_m16_cmd_t stat_cmd, u16 stat_val))
-{
-	m16_stat_callback_func = callback_m16_stat;
-
-  return 0; // no error
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_RxStatEnable(u8 enable){
-	mios32_midi_package_t p;
-	p.cin_cable = 0x01;
-	p.evnt0 = M16_CMD_RX_STAT;
-	p.evnt1 = 0x00;
-	p.evnt2 = enable;
-	return MIOS32_SPI_MIDI_PackageSend(p);
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_TxStatEnable(u8 enable){
-	mios32_midi_package_t p;
-	p.cin_cable = 0x01;
-	p.evnt0 = M16_CMD_TX_STAT;
-	p.evnt1 = 0x00;
-	p.evnt2 = enable;
-	return MIOS32_SPI_MIDI_PackageSend(p);
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_OvlStatEnable(u8 enable){
-	mios32_midi_package_t p;
-	p.cin_cable = 0x01;
-	p.evnt0 = M16_CMD_OVL_STAT;
-	p.evnt1 = 0x00;
-	p.evnt2 = enable;
-	return MIOS32_SPI_MIDI_PackageSend(p);
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPI_MIDI_M16_StatReceive(u32 word){
-	u8 cmd = (u8)(word>>16);
-	switch(cmd){
-	case M16_CMD_RX_STAT:
-		if((word & 0x0000ffff) != m16_rx_act){
-		  m16_rx_act = (u16)(word & 0x0000ffff);
-		  if( m16_stat_callback_func != NULL ) {
-			m16_stat_callback_func(cmd, m16_rx_act);
-		  }
-		}
-		break;
-	case M16_CMD_TX_STAT:
-		if((word & 0x0000ffff) != m16_tx_act){
-		  m16_tx_act = (u16)(word & 0x0000ffff);
-		  if( m16_stat_callback_func != NULL ) {
-			m16_stat_callback_func(cmd, m16_tx_act);
-		  }
-		}
-		break;
-	case M16_CMD_OVL_STAT:
-		if((word & 0x0000ffff) != m16_ovl_act){
-		  m16_ovl_act = (u16)(word & 0x0000ffff);
-		  if( m16_stat_callback_func != NULL ) {
-			m16_stat_callback_func(cmd, m16_ovl_act);
-		  }
-		}
-		break;
-	case M16_CMD_GPIO_BASE:
-		if((word & 0x0000ffff) != m16_gpio_val[0]){
-		  m16_gpio_val[0] = (u16)(word & 0x0000ffff);
-		  if( m16_stat_callback_func != NULL ) {
-			m16_stat_callback_func(cmd, m16_gpio_val[0]);
-		  }
-		}
-		break;
-	case (M16_CMD_GPIO_BASE+0x10):
-		if((word & 0x0000ffff) != m16_gpio_val[1]){
-		  m16_gpio_val[1] = (u16)(word & 0x0000ffff);
-		  if( m16_stat_callback_func != NULL ) {
-			m16_stat_callback_func(cmd, m16_gpio_val[1]);
-		  }
-		}
-		break;
-	case (M16_CMD_GPIO_BASE+0x20):
-		if((word & 0x0000ffff) != m16_gpio_val[2]){
-		  m16_gpio_val[2] = (u16)(word & 0x0000ffff);
-		  if( m16_stat_callback_func != NULL ) {
-			m16_stat_callback_func(cmd, m16_gpio_val[2]);
-		  }
-		}
-		break;
-	default:
-		break;
-	}
-	return 0; // no error
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_GPIO_Grp_ModeSet(u8 gpio_grp, mios32_spim_m16_gpio_mode_t mode){
-	if(gpio_grp>2)return -1; //GPIO Group not available
-	//set value
-	m16_gpio_mode[gpio_grp]=mode;
-	//send command
-	mios32_midi_package_t p;
-	p.cin_cable = 0x01;
-	p.evnt0 = (gpio_grp<<4)+ M16_CMD_GPIO_BASE + 0x02;
-	p.evnt1 = 0x00;
-	p.evnt2 = (u8)m16_gpio_mode[gpio_grp];
-	MIOS32_SPI_MIDI_PackageSend(p);
-	return 0; // no error
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-mios32_spim_m16_gpio_mode_t MIOS32_SPIM_M16_GPIO_Grp_ModeGet(u8 gpio_grp){
-	if(gpio_grp>2)return -1; //GPIO Group not available
-	return 	m16_gpio_mode[gpio_grp]; // no error
-}
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_GPIO_Grp_InvSet(u8 gpio_grp,u16 value){
-	if(gpio_grp>2)return -1; //GPIO Group not available
-	//set value
-	m16_gpio_inv[gpio_grp]=value;
-	//send command
-	mios32_midi_package_t p;
-	p.cin_cable = 0x01;
-	p.evnt0 = (gpio_grp<<4)+ M16_CMD_GPIO_BASE + 0x01;
-	p.evnt1 = (u8)(m16_gpio_inv[gpio_grp]>>8);
-	p.evnt2 = (u8)(m16_gpio_inv[gpio_grp]&0xff);
-	MIOS32_SPI_MIDI_PackageSend(p);
-	return 0; // no error
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_GPIO_Grp_InvGet(u8 gpio_grp){
-	if(gpio_grp>2)return -1; //GPIO Group not available
-	return 	m16_gpio_inv[gpio_grp]; // no error
-}
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-//! \param[in] GPIO Group (0...2) A to C
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_GPIO_Grp_Set(u8 gpio_grp,u16 value){
-	if(gpio_grp>2)return -1; //GPIO Group not available
-	//set value
-	m16_gpio_val[gpio_grp]=value;
-	//send command
-	mios32_midi_package_t p;
-	p.cin_cable = 0x01;
-	p.evnt0 = (gpio_grp<<4)+M16_CMD_GPIO_BASE;
-	p.evnt1 = (u8)(m16_gpio_val[gpio_grp]>>8);
-	p.evnt2 = (u8)(m16_gpio_val[gpio_grp]&0xff);
-	MIOS32_SPI_MIDI_PackageSend(p);
-	return 0; // no error
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_GPIO_Grp_Get(u8 gpio_grp){
-	if(gpio_grp>2)return -1; //GPIO Group not available
-	return 	m16_gpio_val[gpio_grp]; // no error
-}
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_GPIO_InvSet(u8 gpio,u8 value){
-	if(gpio>48)return -1; //GPIO Pin not available
-	u8 gpio_grp = gpio>>4;
-	u16 mask = 1 << (gpio &0x0f);
-	m16_gpio_inv[gpio_grp] &= ~mask;
-	if( value )m16_gpio_inv[gpio_grp] |= mask;
-	return MIOS32_SPIM_M16_GPIO_Grp_InvSet(gpio_grp, m16_gpio_inv[gpio_grp]); // no error
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_GPIO_InvGet(u8 gpio){
-	if(gpio>48)return -1; //GPIO Pin not available
-	u8 gpio_grp = gpio>>4;
-	u16 mask = 1 << (gpio &0x0f);
-	return ((m16_gpio_inv[gpio_grp] & mask)? 1 : 0);
-}
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_GPIO_Set(u8 gpio,u8 value){
-	if(gpio>48)return -1; //GPIO Pin not available
-	u8 gpio_grp = gpio>>4;
-	u16 mask = 1 << (gpio &0x0f);
-	m16_gpio_val[gpio_grp] &= ~mask;
-	if( value )m16_gpio_val[gpio_grp] |= mask;
-	return MIOS32_SPIM_M16_GPIO_Grp_InvSet(gpio_grp, m16_gpio_val[gpio_grp]); // no error
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_GPIO_Get(u8 gpio){
-	if(gpio>48)return -1; //GPIO Pin not available
-	u8 gpio_grp = gpio>>4;
-	u16 mask = 1 << (gpio &0x0f);
-	return ((m16_gpio_val[gpio_grp] & mask)? 1 : 0);
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//! m16 specific function
-/////////////////////////////////////////////////////////////////////////////
-s32 MIOS32_SPIM_M16_SofEnable(u8 enable){
-	mios32_midi_package_t p;
-	p.cin_cable = 0x01;
-	p.evnt0 = M16_CMD_SOF_ENA;
-	p.evnt1 = 0;
-	p.evnt2 = enable;
-	return MIOS32_SPI_MIDI_PackageSend(p);
-}
-
-#endif
 //! \}
 
-#endif /* MIOS32_DONT_USE_SPI_MIDI */
+#endif /* MIOS32_USE_SPI_MIDI */
