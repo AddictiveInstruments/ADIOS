@@ -73,7 +73,6 @@ extern "C" {
 #include <mios32_lcd.h>
 #include <mios32_midi.h>
 #include <mios32_osc.h>
-#include <mios32_com.h>
 #include <mios32_usb.h>
 #include <mios32_usb_midi.h>
 #include <mios32_usb_hid.h>

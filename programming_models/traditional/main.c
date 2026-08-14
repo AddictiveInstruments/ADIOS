@@ -182,9 +182,6 @@ int main(void)
 #ifndef MIOS32_DONT_USE_OSC
   MIOS32_OSC_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_COM
-  MIOS32_COM_Init(0);
-#endif
 #ifndef MIOS32_DONT_USE_LCD
   MIOS32_LCD_Init(0);
 
@@ -328,11 +325,6 @@ static void MIOS32_CORE_NonMIDI_Tick(void)
 #if !defined(MIOS32_DONT_USE_AIN) && !defined(MIOS32_DONT_SERVICE_AIN)
   // check for AIN pin changes, call APP_AIN_NotifyChange on each pin change
   MIOS32_AIN_Handler(APP_AIN_NotifyChange);
-#endif
-
-#if !defined(MIOS32_DONT_USE_COM)
-  // check for incoming COM messages
-  MIOS32_COM_Receive_Handler();
 #endif
 
   // optional APP_Tick() hook

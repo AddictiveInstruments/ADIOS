@@ -169,7 +169,6 @@
 // (the MIDI core itself is always compiled - not optional, see mios32_midi.c;
 // only the transports are opt-in: MIOS32_USE_DIN_MIDI etc, further below)
 #define MIOS32_DONT_USE_OSC
-#define MIOS32_DONT_USE_COM
 //#define MIOS32_DONT_USE_USB
 #define MIOS32_DONT_USE_USB_HOST
 #define MIOS32_DONT_USE_USB_HS_HOST

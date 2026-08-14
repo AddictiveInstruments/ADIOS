@@ -26,23 +26,35 @@
 
 #define putchar(c) outbyte(c)
 */
-//#define putchar(c) MIOS32_COM_SendChar(c)
 
 
 #include <stdarg.h>
 #include <mios32.h>
 
+/* THIS FAMILY NOW ONLY FORMATS INTO BUFFERS.
+ *
+ * printchar() used to have a second exit: when no buffer was given, it sent
+ * the character to the serial console with MIOS32_COM_SendChar(1, c). That
+ * transport - mios32_com.c - was removed on 2026-08-13, so the console exit
+ * went with it and printf()/vprintf() are now silent: they still parse the
+ * format and still return the character count, they simply have nowhere to
+ * put the result.
+ *
+ * sprintf() and vsprintf() are UNAFFECTED and are what everything actually
+ * uses: MIOS32_MIDI's answers to MIOS Studio's queries, MIOS32_LCD's screen
+ * printf, and the applications (8 calls in 5x6_505, 2 in 5x6_626). Not one
+ * printf() to console existed anywhere in the tree when com was removed -
+ * which is why removing it cost nothing.
+ *
+ * To get console output back, give printchar() an exit again here: one line
+ * calling whatever transport that project actually has.
+ */
 static void printchar(char **str, int c)
 {
-  //	extern int putchar(int c);
-	
 	if (str) {
 		**str = c;
 		++(*str);
 	}
-#ifndef MIOS32_DONT_USE_COM
-	else MIOS32_COM_SendChar(1, c); // (void)putchar(c);
-#endif
 }
 
 #define PAD_RIGHT 1
