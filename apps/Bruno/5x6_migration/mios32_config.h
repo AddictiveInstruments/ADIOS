@@ -20,7 +20,6 @@
 // same reason, plus the display it genuinely has and this does not.
 #define MIOS32_DONT_USE_AIN
 #define MIOS32_DONT_USE_LCD
-#define MIOS32_DONT_USE_OSC
 #define MIOS32_DONT_USE_USB_HOST
 #define MIOS32_DONT_USE_USB_HS_HOST
 

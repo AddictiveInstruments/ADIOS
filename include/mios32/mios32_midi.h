@@ -130,14 +130,14 @@ typedef enum {
   // was a MIDIbox extension-module concept. Range kept reserved so the
   // remaining port numbers stay MIOS Studio-compatible.
 
-  OSC0 = 0x40,
-  OSC1 = 0x41,
-  OSC2 = 0x42,
-  OSC3 = 0x43,
-  OSC4 = 0x44,
-  OSC5 = 0x45,
-  OSC6 = 0x46,
-  OSC7 = 0x47,
+  // 0x40 range was OSC0..OSC7 - Open Sound Control, removed entirely
+  // (2026-08-13). It was a pure codec: it serialised and parsed OSC packets
+  // in a buffer without ever knowing how they travelled, which is why it did
+  // NOT fall with the network stack the day before - it never referenced it.
+  // But a codec with no transport encodes packets nothing can send: OSC rides
+  // on UDP, and there has been no UDP in this tree since uIP left. Range kept
+  // reserved, same treatment as 0x30 above, so the remaining port numbers
+  // stay MIOS Studio-compatible.
 
   SPIM0 = 0x50,
   SPIM1 = 0x51,

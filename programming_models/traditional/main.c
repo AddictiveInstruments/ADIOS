@@ -179,9 +179,6 @@ int main(void)
 #ifndef MIOS32_DONT_USE_USB
   MIOS32_USB_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_OSC
-  MIOS32_OSC_Init(0);
-#endif
 #ifndef MIOS32_DONT_USE_LCD
   MIOS32_LCD_Init(0);
 

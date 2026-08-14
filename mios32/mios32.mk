@@ -66,7 +66,6 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/common/mios32_enc.c \
 	$(MIOS32_PATH)/mios32/common/mios32_lcd.c \
 	$(MIOS32_PATH)/mios32/common/mios32_midi.c \
-	$(MIOS32_PATH)/mios32/common/mios32_osc.c \
 	$(MIOS32_PATH)/mios32/common/mios32_din_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_spi_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_can_midi.c \
