@@ -61,7 +61,6 @@ extern "C" {
 // include mios32_*.h files of all MIOS modules
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32_sol.h>
 #include <mios32_irq.h>
 #include <mios32_sys.h>
 #include <mios32_spi.h>
@@ -81,10 +80,8 @@ extern "C" {
 #include <mios32_spi_midi.h>
 #include <mios32_i2c.h>
 #include <mios32_i2s.h>
-#include <mios32_timer.h>
-#include <mios32_stopwatch.h>
 #include <mios32_timestamp.h>
-#include <mios32_delay.h>
+#include <mios32_utils.h>
 #include <mios32_sdcard.h>
 #include <mios32_can.h>
 #include <mios32_can_midi.h>
