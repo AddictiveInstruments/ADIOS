@@ -63,6 +63,7 @@
 // STOPWATCH + SOF are enabled by default here so the template has a working
 // sign-of-life blink out of the box (see APP_Tick() in app.c) on any
 // supported family without modification.
+#define MIOS32_USE_TIMESTAMP
 #define MIOS32_USE_STOPWATCH
 // STOPWATCH uses TIM17 by default (mios32_utils.c) - confirmed present on
 // every STM32G0 tier, from the smallest 2-USART G030/G031 up to the

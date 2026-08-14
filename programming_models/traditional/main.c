@@ -141,7 +141,7 @@ int main(void)
 #ifndef MIOS32_DONT_USE_DELAY
   MIOS32_DELAY_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_TIMESTAMP
+#ifdef MIOS32_USE_TIMESTAMP
   MIOS32_TIMESTAMP_Init(0);
 #endif
 #ifdef MIOS32_USE_SOL
@@ -252,7 +252,7 @@ void SRIO_ServiceFinish(void)
 #if MIOS32_CORE_USE_FREERTOS
 void vApplicationTickHook(void)
 {
-#if !defined(MIOS32_DONT_USE_TIMESTAMP)
+#ifdef MIOS32_USE_TIMESTAMP
   MIOS32_TIMESTAMP_Inc();
 #endif
 
@@ -459,7 +459,7 @@ static void MIOS32_CORE_BareLoop_Run(void)
       // "skip delay gap" logic in TASK_Hooks/TASK_MIDI_Hooks above.
       last_tick = now;
 
-#if !defined(MIOS32_DONT_USE_TIMESTAMP)
+#ifdef MIOS32_USE_TIMESTAMP
       MIOS32_TIMESTAMP_Inc();
 #endif
 #if defined(MIOS32_USE_SRIO) && !defined(MIOS32_DONT_SERVICE_SRIO_SCAN)

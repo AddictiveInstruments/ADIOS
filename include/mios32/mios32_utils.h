@@ -13,6 +13,11 @@
  * They are grouped here rather than merely stacked: all four are built on
  * the chip's timers, which is why they share an implementation file.
  *
+ * (MIOS32_TIMESTAMP was considered for inclusion here and deliberately left
+ * out: it is pure software - a u32 incremented by main.c's 1 mS tick - so
+ * it has no business in a file whose reason to exist is the chip's timers,
+ * and it keeps its own header and its own mios32/common/mios32_timestamp.c.)
+ *
  * ==========================================================================
  *
  *  Copyright (C) 2008 Thorsten Klose (tk@midibox.org)
