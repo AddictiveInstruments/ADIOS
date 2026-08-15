@@ -90,15 +90,17 @@
 // Tier check - which ADC instances this family actually has
 /////////////////////////////////////////////////////////////////////////////
 
+// The #else after these closes only at the end of the file: #error does not
+// stop GCC, it records a message and carries on, so without it the real
+// diagnostic would be buried under the secondary errors of a body that
+// cannot compile anyway.
 #if defined(MIOS32_USE_ADC1)
 # error "MIOS32_USE_ADC1 (ADC2) requested, but no STM32G0 has a second ADC. Only MIOS32_USE_ADC0 (ADC1) exists on this family."
-#endif
-#if defined(MIOS32_USE_ADC2)
+#elif defined(MIOS32_USE_ADC2)
 # error "MIOS32_USE_ADC2 (ADC3) requested, but no STM32G0 has a third ADC. Only MIOS32_USE_ADC0 (ADC1) exists on this family."
-#endif
-#if !defined(MIOS32_USE_ADC0)
+#elif !defined(MIOS32_USE_ADC0)
 # error "MIOS32_USE_ADC is set, but no ADC port was selected. Define MIOS32_USE_ADC0 for ADC1."
-#endif
+#else
 
 #if !MIOS32_ADC0_CHANNEL_MASK
 # warning "MIOS32_USE_ADC0 is set but MIOS32_ADC0_CHANNEL_MASK is 0: the ADC will be initialised and convert nothing."
@@ -698,5 +700,7 @@ MIOS32_ADC_DMA_IRQHANDLER_FUNC
 #endif
 
 //! \}
+
+#endif /* ADC port selection valid */
 
 #endif /* MIOS32_USE_ADC */

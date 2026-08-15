@@ -69,6 +69,7 @@ extern "C" {
 #include <mios32_srout.h>
 #include <mios32_enc.h>
 #include <mios32_adc.h>
+#include <mios32_dac.h>
 #include <mios32_lcd.h>
 #include <mios32_midi.h>
 #include <mios32_usb.h>

@@ -78,6 +78,7 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_i2s.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_utils.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_adc.c \
+	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_dac.c \
 	$(MIOS32_PATH)/mios32/common/printf-stdarg.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_uart.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_i2c.c \

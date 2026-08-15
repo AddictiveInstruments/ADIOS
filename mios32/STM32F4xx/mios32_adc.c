@@ -92,16 +92,17 @@
 // Tier check - which ADC instances this chip actually has
 /////////////////////////////////////////////////////////////////////////////
 
+// The #else after these closes only at the end of the file: #error does not
+// stop GCC, it records a message and carries on, so without it the real
+// diagnostic would be buried under the secondary errors of a body that
+// cannot compile anyway.
 #if !defined(MIOS32_USE_ADC0) && !defined(MIOS32_USE_ADC1) && !defined(MIOS32_USE_ADC2)
 # error "MIOS32_USE_ADC is set, but no ADC port was selected. Define MIOS32_USE_ADC0 for ADC1, MIOS32_USE_ADC1 for ADC2, MIOS32_USE_ADC2 for ADC3."
-#endif
-
-#if defined(MIOS32_USE_ADC1) && !defined(ADC2)
+#elif defined(MIOS32_USE_ADC1) && !defined(ADC2)
 # error "MIOS32_USE_ADC1 (ADC2) requested, but this STM32F4 has only ADC1. A second ADC exists on F405/F407/F415/F417/F427/F429/F437/F439/F446/F469/F479 only."
-#endif
-#if defined(MIOS32_USE_ADC2) && !defined(ADC3)
+#elif defined(MIOS32_USE_ADC2) && !defined(ADC3)
 # error "MIOS32_USE_ADC2 (ADC3) requested, but this STM32F4 has only ADC1. A third ADC exists on F405/F407/F415/F417/F427/F429/F437/F439/F446/F469/F479 only."
-#endif
+#else
 
 // Channels 16, 17 and 18 are internal on this family too, and are reached
 // through their own LL constants rather than through a pin mask.
@@ -739,5 +740,7 @@ MIOS32_ADC2_DMA_IRQ_FUNC
 #endif
 
 //! \}
+
+#endif /* ADC port selection valid */
 
 #endif /* MIOS32_USE_ADC */

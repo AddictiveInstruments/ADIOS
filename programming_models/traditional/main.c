@@ -173,6 +173,9 @@ int main(void)
 #ifdef MIOS32_USE_ADC
   MIOS32_ADC_Init(0);
 #endif
+#ifdef MIOS32_USE_DAC
+  MIOS32_DAC_Init(0);
+#endif
   // the MIDI core is always initialized - it is not optional (2026-08-09,
   // see mios32_midi.c): only the transports underneath are opt-in
   MIOS32_MIDI_Init(0);
