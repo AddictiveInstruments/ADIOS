@@ -86,7 +86,7 @@ s32 AINSER_Init(u32 mode)
     AINSER_EnabledSet(module, 1);
     AINSER_MuxedSet(module, 1);
     AINSER_NumPinsSet(module, AINSER_NUM_PINS);
-    AINSER_DeadbandSet(module, MIOS32_AIN_DEADBAND);
+    AINSER_DeadbandSet(module, MIOS32_ADC_DEADBAND);
 
     // clear all values
     for(pin=0; pin<AINSER_NUM_PINS; ++pin) {

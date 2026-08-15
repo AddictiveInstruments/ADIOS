@@ -79,6 +79,7 @@
 #include <stm32g0xx_ll_i2c.h>
 #include <stm32g0xx_ll_dma.h>
 #include <stm32g0xx_ll_dmamux.h>
+#include <stm32g0xx_ll_adc.h>
 
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/

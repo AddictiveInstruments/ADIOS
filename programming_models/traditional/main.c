@@ -170,8 +170,8 @@ int main(void)
 #ifdef MIOS32_USE_ENC
   MIOS32_ENC_Init(0);
 #endif
-#if !defined(MIOS32_DONT_USE_AIN)
-  MIOS32_AIN_Init(0);
+#ifdef MIOS32_USE_ADC
+  MIOS32_ADC_Init(0);
 #endif
   // the MIDI core is always initialized - it is not optional (2026-08-09,
   // see mios32_midi.c): only the transports underneath are opt-in
@@ -307,11 +307,11 @@ static void MIOS32_CORE_NonMIDI_Tick(void)
 #endif
 
 #ifdef MIOS32_USE_SRIN
-  // check for input shift register pin changes, call APP_DIN_NotifyToggle on
+  // check for input shift register pin changes, call APP_SRIN_NotifyToggle on
   // each toggled pin. The application-facing hook keeps its DIN name on
   // purpose: what an app sees is still a digital input pin, whatever the
   // driver that scans the chain is called.
-  MIOS32_SRIN_Handler(APP_DIN_NotifyToggle);
+  MIOS32_SRIN_Handler(APP_SRIN_NotifyToggle);
 
   // check for encoder changes, call APP_ENC_NotifyChanged on each change
 # ifdef MIOS32_USE_ENC
@@ -319,9 +319,9 @@ static void MIOS32_CORE_NonMIDI_Tick(void)
 # endif
 #endif
 
-#if !defined(MIOS32_DONT_USE_AIN) && !defined(MIOS32_DONT_SERVICE_AIN)
-  // check for AIN pin changes, call APP_AIN_NotifyChange on each pin change
-  MIOS32_AIN_Handler(APP_AIN_NotifyChange);
+#if defined(MIOS32_USE_ADC) && !defined(MIOS32_DONT_SERVICE_ADC)
+  // check for ADC channel changes, call APP_ADC_NotifyChange on each change
+  MIOS32_ADC_Handler(APP_ADC_NotifyChange);
 #endif
 
   // optional APP_Tick() hook

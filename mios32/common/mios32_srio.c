@@ -229,7 +229,7 @@ u32 MIOS32_SRIO_DebounceGet(void)
 //! the debounce preload value will be loaded into the debounce counter 
 //! register. The counter will be decremented on every SRIO update cycle (usually 1 mS)
 //! As long as this counter isn't zero, button changes will still be recorded, 
-//! but they won't trigger the APP_DIN_NotifyToggle hook.
+//! but they won't trigger the APP_SRIN_NotifyToggle hook.
 //!
 //! No (intended) button movement will get lost, but the latency will be 
 //! increased. Example: if the update frequency is set to 1 mS, and the 

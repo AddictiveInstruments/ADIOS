@@ -618,7 +618,7 @@ void APP_SRIO_ServiceFinish(void)
 // This hook is called when a button has been toggled
 // pin_value is 1 when button released, and 0 when button pressed
 /////////////////////////////////////////////////////////////////////////////
-void APP_DIN_NotifyToggle(u32 pin, u32 pin_value)
+void APP_SRIN_NotifyToggle(u32 pin, u32 pin_value)
 {
 }
 
@@ -636,7 +636,7 @@ void APP_ENC_NotifyChange(u32 encoder, s32 incrementer)
 /////////////////////////////////////////////////////////////////////////////
 // This hook is called when a pot has been moved
 /////////////////////////////////////////////////////////////////////////////
-void APP_AIN_NotifyChange(u32 pin, u32 pin_value)
+void APP_ADC_NotifyChange(u32 port, u32 chn, u32 value)
 {
 }
 

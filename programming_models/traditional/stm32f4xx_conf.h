@@ -80,6 +80,7 @@
 // FMPI2C1 is a v2 block bolted onto the late F4 (F410/F412/F413/F423/F446);
 // its header is guarded by FMPI2C_CR1_PE, so this include is a no-op elsewhere
 #include <stm32f4xx_ll_fmpi2c.h>
+#include <stm32f4xx_ll_adc.h>
 
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
