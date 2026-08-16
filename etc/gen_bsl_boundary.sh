@@ -429,10 +429,10 @@ write_header () {
         echo "#ifndef _MIOS32_BSL_BOUNDARY_H"
         echo "#define _MIOS32_BSL_BOUNDARY_H"
         echo "#define MIOS32_APP_FLASH_START_ADDR $BOUNDARY_HEX"
-        # names the exact embedded-bootloader .inc file for this project's own
-        # chip - lets mios32_bsl.c include it directly instead of re-deriving
-        # it from a MIOS32_BOARD_xxx define (removed 2026-08-01)
-        echo "#define MIOS32_BSL_INC_FILE \"mios32_bsl_${CHIP}.inc\""
+        # names the embedded-bootloader image written beside this header by
+        # the same pass. A fixed name: there is only ever one, and it is
+        # rewritten whenever this project is built.
+        echo "#define MIOS32_BSL_INC_FILE \"mios32_bsl_image.inc\""
         # the persistent device-ID opt-in, relayed from the project's Makefile:
         # WITHOUT it the bootloader looks for no ID at all and answers on the
         # compile-time default. It has to arrive this way rather than through
@@ -540,8 +540,15 @@ if [ "$BSL_SIZE_FINAL" -gt "$BOUNDARY" ]; then
 fi
 
 # --- regenerate the embedded bootloader blob (mios32_bsl.c includes this via
-#     MIOS32_BSL_INC_FILE) - lives under the chip's own mios32/<FAMILY> dir ---
-INC_FILE="$MIOS32_PATH/mios32/$FAMILY_DIR/mios32_bsl_${CHIP}.inc"
+#     MIOS32_BSL_INC_FILE) ---
+#
+# It lands in the PROJECT's own directory, beside the mios32_bsl_boundary.h
+# written by the same pass, and carries a FIXED name. The bootloader is built
+# per project - it takes that project's board wiring, and its boundary is
+# measured from the result - so this image belongs to the project, not to the
+# chip, and it is rewritten at every build of that project. A name keyed on
+# the chip preserved nothing and scattered copies through the OS sources.
+INC_FILE="$PROJECT_DIR/mios32_bsl_image.inc"
 perl "$BSL_DIR/gen_inc_file.pl" "$BIN_FILE" "$INC_FILE" mios32_bsl_image mios32_bsl -size="$BOUNDARY"
 echo "Regenerated $INC_FILE ($BOUNDARY bytes, matches final boundary)"
 
