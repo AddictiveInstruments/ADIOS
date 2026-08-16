@@ -15,9 +15,6 @@
 #define MIOS32_APP_NAME2 "Waveshare bring-up"
 #define MIOS32_APP_VERSION "v1.000"
 
-// this board wires the high-speed USB core
-#define MIOS32_USE_USB_HS 1
-
 // ---------------------------------------------------------------------------
 // mios32_sys.c - core system init (clock, vector table, timebase). Always
 // compiled, no on/off toggle - the CPU can't run without it.

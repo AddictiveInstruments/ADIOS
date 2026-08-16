@@ -25,8 +25,18 @@
 //
 //   #define MIOS32_USE_USB_HS 1
 //
-// Host mode follows the same switch: the HS core is what makes USB host
-// usable at all here, so declaring one declares the other.
+// It costs around 400 bytes of extra core code, so ask for it only if the
+// board really carries the HS pins.
+//
+// Host mode rides on the same core: MIOS32_DONT_USE_USB_HS_HOST is what a
+// project sets to refuse it. Asking for the core and refusing its host mode
+// in the same project is a contradiction, and a silent one - the two used to
+// be resolved by whichever the preprocessor met first - so it is refused
+// here instead.
+#if defined(MIOS32_USE_USB_HS) && defined(MIOS32_DONT_USE_USB_HS_HOST)
+# error "MIOS32_USE_USB_HS and MIOS32_DONT_USE_USB_HS_HOST are both defined: decide whether this board drives the high-speed core or not, and keep only one."
+#endif
+
 #ifdef MIOS32_USE_USB_HS
 # define USE_USB_OTG_HS
 #else
