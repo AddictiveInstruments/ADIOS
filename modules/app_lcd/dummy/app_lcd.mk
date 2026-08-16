@@ -2,6 +2,7 @@
 # defines additional rules for the null display driver
 
 # enhance include path
+C_INCLUDE +=	-I $(MIOS32_PATH)/modules/app_lcd
 C_INCLUDE +=	-I $(MIOS32_PATH)/modules/app_lcd/dummy
 
 # add modules to thumb sources

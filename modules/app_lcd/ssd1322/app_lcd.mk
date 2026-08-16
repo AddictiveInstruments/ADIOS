@@ -2,6 +2,7 @@
 # defines additional rules for application specific LCD driver
 
 # enhance include path
+C_INCLUDE +=	-I $(MIOS32_PATH)/modules/app_lcd
 C_INCLUDE +=	-I $(MIOS32_PATH)/modules/app_lcd/ssd1322
 
 # add modules to thumb sources

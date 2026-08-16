@@ -10,7 +10,6 @@ CFLAGS    +=    -DMIOS32_PROCESSOR_$(PROCESSOR) \
 		-DMIOS32_FAMILY_$(FAMILY) \
 		-DMIOS32_FAMILY_STR=\"$(FAMILY)\" \
 		-DMIOS32_LCD_$(LCD) \
-		-DMIOS32_LCD_STR=\"$(LCD)\"
 
 
 # CMSIS device macro (STM32G070xx, STM32F407xx, ...) - the thing that tells
@@ -62,7 +61,6 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/common/mios32_srin.c \
 	$(MIOS32_PATH)/mios32/common/mios32_srout.c \
 	$(MIOS32_PATH)/mios32/common/mios32_enc.c \
-	$(MIOS32_PATH)/mios32/common/mios32_lcd.c \
 	$(MIOS32_PATH)/mios32/common/mios32_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_din_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_spi_midi.c \

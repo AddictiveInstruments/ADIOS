@@ -35,6 +35,7 @@
  */
 
 #include <mios32.h>
+#include <app_lcd.h>
 #include "app.h"
 
 
@@ -143,6 +144,11 @@ static s32 ROM_Migrate(void)
 /////////////////////////////////////////////////////////////////////////////
 void APP_Init(void)
 {
+  // The display is yours to start, and yours to place: put this call where
+  // it belongs in your own init sequence. Uncomment to activate it - the
+  // driver itself is chosen by LCD= in this project's Makefile.
+  //APP_LCD_Init(0);
+
   // FIRST of all, take the instrument's identity. MIOS32 has just read the
   // persistent record, which on a machine that has not been migrated yet does
   // not exist - so it settled on the compile-time default, 0. But the answer is

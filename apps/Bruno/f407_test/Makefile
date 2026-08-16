@@ -15,7 +15,7 @@
 PROCESSOR =	STM32F407VE
 FAMILY    =	STM32F4xx
 BOARD	  =	MBHP_DIPCOREF4
-LCD       =	universal
+LCD       =	dummy
 
 # self-locating repo root: apps live at a fixed depth inside the repo, so a
 # plain `make` works with no environment setup at all (any exported

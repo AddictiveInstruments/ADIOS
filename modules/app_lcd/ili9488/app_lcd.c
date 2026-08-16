@@ -139,6 +139,12 @@ void APP_LCD_DummyFunc(void);
 // Local variables
 /////////////////////////////////////////////////////////////////////////////
 
+// Cursor position, in pixels. Owned by this driver: it is the one that
+// knows where it last drew. (It used to live in a layer above, which meant
+// two modules writing the same variable.)
+static u16 app_lcd_x = 0;
+static u16 app_lcd_y = 0;
+
 static u32 display_available = 0;
 
 // default color for legacy 1Bit bitmap
@@ -214,13 +220,11 @@ s32 APP_LCD_Init(u32 mode)
 	if( mode != 0 )
 		return -1; // unsupported mode
 
-	// set LCD type
-	mios32_lcd_parameters.lcd_type = MIOS32_LCD_TYPE_GLCD_CUSTOM;
-	mios32_lcd_parameters.num_x = APP_LCD_NUM_X;
-	mios32_lcd_parameters.width = APP_LCD_WIDTH;
-	mios32_lcd_parameters.num_x = APP_LCD_NUM_Y;
-	mios32_lcd_parameters.height = APP_LCD_HEIGHT;
-	mios32_lcd_parameters.colour_depth = APP_LCD_COLOUR_DEPTH;
+	// (this driver used to publish its geometry into a shared structure, for
+	// a layer above to read back. It knows its own geometry - APP_LCD_WIDTH,
+	// APP_LCD_HEIGHT and the rest are in its own header - so there is nobody
+	// to announce it to. One of those six lines assigned num_x twice, the
+	// second time from APP_LCD_NUM_Y, and nothing ever noticed.)
 
 	// configure GPIO
 	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -405,7 +409,7 @@ s32 APP_LCD_Data(u8 data)
 #if 0  // TODO
   // select LCD depending on current cursor position
   // THIS PART COULD BE CHANGED TO ARRANGE THE 8 DISPLAYS ON ANOTHER WAY
-  u8 cs = mios32_lcd_y / APP_LCD_HEIGHT;
+  u8 cs = app_lcd_y / APP_LCD_HEIGHT;
   
   if( cs >= 8 )
     return -1; // invalid CS line
@@ -903,8 +907,8 @@ s32 APP_LCD_Digits_draw(int n, unsigned int xLoc, unsigned int yLoc, char cS, un
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_CursorSet(u16 column, u16 line)
 {
-  // mios32_lcd_x/y set by MIOS32_LCD_CursorSet() function
-  return APP_LCD_GCursorSet(mios32_lcd_x, mios32_lcd_y);
+  // app_lcd_x/y set by MIOS32_LCD_CursorSet() function
+  return APP_LCD_GCursorSet(app_lcd_x, app_lcd_y);
 }
 
 
@@ -918,8 +922,8 @@ s32 APP_LCD_GCursorSet(u16 x, u16 y)
   s32 error = 0;
 #if 0
   
-  mios32_lcd_x = x;
-  mios32_lcd_y = y;
+  app_lcd_x = x;
+  app_lcd_y = y;
   
   error |= APP_LCD_Cmd(0x2A);
   error |= APP_LCD_Data(0x00);
@@ -944,10 +948,10 @@ s32 APP_LCD_GCursorSet(u16 x, u16 y)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_FontInit(u8 *font, app_lcd_color_depth_t colour_depth)
 {
-  font_bmp.memory = (u8 *)&font[MIOS32_LCD_FONT_BITMAP_IX] + (size_t)font[MIOS32_LCD_FONT_X0_IX];
-  font_bmp.width = font[MIOS32_LCD_FONT_WIDTH_IX];
-  font_bmp.height = font[MIOS32_LCD_FONT_HEIGHT_IX];
-  font_bmp.line_offset = font[MIOS32_LCD_FONT_OFFSET_IX];
+  font_bmp.memory = (u8 *)&font[GLCD_FONT_BITMAP_IX] + (size_t)font[GLCD_FONT_X0_IX];
+  font_bmp.width = font[GLCD_FONT_WIDTH_IX];
+  font_bmp.height = font[GLCD_FONT_HEIGHT_IX];
+  font_bmp.line_offset = font[GLCD_FONT_OFFSET_IX];
   font_bmp.colour_depth = colour_depth;
   
   return 0; // no error
@@ -1486,7 +1490,7 @@ s32 APP_LCD_BitmapPrintChar(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y
 	u16 buf_size = bitmap.width*height*3;
 	u8 frm_buf[buf_size];
 
-	//u16 initial_y = mios32_lcd_y;
+	//u16 initial_y = app_lcd_y;
 	for(int line=0; line<y_lines; line++) {
 	//int line=0;
 		// address command
@@ -1865,7 +1869,7 @@ s32 APP_LCD_SendBitmap(mios32_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
 	//return -1; // no GLCD
 
 	// abort if max. app_lcd_width reached
-	//if( mios32_lcd_x >= mios32_lcd_parameters.app_lcd_width )
+	//if( app_lcd_x >= mios32_lcd_parameters.app_lcd_width )
 	//return -2;
 
 	/* native 16bit depth. r(15:11), g(10:5), b(4:0)   */
@@ -1901,7 +1905,7 @@ s32 APP_LCD_SendBitmap(mios32_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
 		u16 buf_size = bitmap.width*height*3;
 		u8 frm_buf[buf_size];
 
-		//u16 initial_y = mios32_lcd_y;
+		//u16 initial_y = app_lcd_y;
 		for(int line=0; line<y_lines; line++) {
 		//int line=0;
 			// address command
@@ -1967,7 +1971,7 @@ s32 APP_LCD_BitmapHBoundaryPrint(mios32_lcd_bitmap_t bitmap, u16 b_x, u16 b_widt
   //return -1; // no GLCD
   
   // abort if max. app_lcd_width reached
-  //if( mios32_lcd_x >= mios32_lcd_parameters.app_lcd_width )
+  //if( app_lcd_x >= mios32_lcd_parameters.app_lcd_width )
   //return -2;
   
   /* native 16bit depth. r(15:11), g(10:5), b(4:0)   */
@@ -1988,7 +1992,7 @@ s32 APP_LCD_BitmapHBoundaryPrint(mios32_lcd_bitmap_t bitmap, u16 b_x, u16 b_widt
     int line;
     int y_lines = (bitmap.height >> 3);
 
-    u16 initial_y = mios32_lcd_y;
+    u16 initial_y = app_lcd_y;
     for(line=0; line<y_lines; ++line) {
       
       // calculate pointer to bitmap line
@@ -1996,9 +2000,9 @@ s32 APP_LCD_BitmapHBoundaryPrint(mios32_lcd_bitmap_t bitmap, u16 b_x, u16 b_widt
       
       // set graphical cursor after second line has reached
       //    if( line > 0 ) {
-      //      mios32_lcd_x = initial_x;
-      //      mios32_lcd_y += 1;
-      //      APP_LCD_GCursorSet(mios32_lcd_x, mios32_lcd_y);
+      //      app_lcd_x = initial_x;
+      //      app_lcd_y += 1;
+      //      APP_LCD_GCursorSet(app_lcd_x, app_lcd_y);
       //    }
       
       // transfer bitmap
@@ -2017,15 +2021,15 @@ s32 APP_LCD_BitmapHBoundaryPrint(mios32_lcd_bitmap_t bitmap, u16 b_x, u16 b_widt
           memory_ptr++;
         }
         memory_ptr = bitmap.memory + line * bitmap.line_offset + b_x;
-        mios32_lcd_y += 1;
-        APP_LCD_GCursorSet(mios32_lcd_x, mios32_lcd_y);
+        app_lcd_y += 1;
+        APP_LCD_GCursorSet(app_lcd_x, app_lcd_y);
       }
     }
     // fix graphical cursor if more than one line has been print
-    mios32_lcd_x += bitmap.width;
+    app_lcd_x += bitmap.width;
     if( y_lines >= 1 ) {
-      mios32_lcd_y = initial_y;
-      APP_LCD_GCursorSet(mios32_lcd_x, mios32_lcd_y);
+      app_lcd_y = initial_y;
+      APP_LCD_GCursorSet(app_lcd_x, app_lcd_y);
     }
   }else return -1;  // not supported
   
@@ -2049,18 +2053,18 @@ s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap)
   //return -1; // no GLCD
   
   // abort if max. app_lcd_width reached
-  //if( mios32_lcd_x >= mios32_lcd_parameters.app_lcd_width )
+  //if( app_lcd_x >= mios32_lcd_parameters.app_lcd_width )
   //return -2;
   
   /* native 16bit depth. r(15:11), g(10:5), b(4:0)   */
   if(bitmap.colour_depth == APP_LCD_COLOUR_DEPTH){
     
     u8 *memory_ptr = bitmap.memory;
-    u16 initial_x = mios32_lcd_x;
-    u16 initial_y = mios32_lcd_y;
+    u16 initial_x = app_lcd_x;
+    u16 initial_y = app_lcd_y;
     // transfer bitmap
     int x, y;
-    APP_LCD_GCursorSet(mios32_lcd_x, mios32_lcd_y);
+    APP_LCD_GCursorSet(app_lcd_x, app_lcd_y);
     
     for(y=0; y<(((initial_y + bitmap.height)<=APP_LCD_HEIGHT)? bitmap.height : (APP_LCD_HEIGHT-initial_y)); ++y){
       for(x=0; x<(((initial_x + bitmap.width)<=APP_LCD_WIDTH)? bitmap.width : (APP_LCD_WIDTH-initial_x)); ++x){
@@ -2068,9 +2072,9 @@ s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap)
         APP_LCD_Data(*memory_ptr++);
         //DEBUG_MSG("%d %d %d", x, y, memory_ptr);
       }
-      if((mios32_lcd_x + bitmap.width)>APP_LCD_WIDTH)memory_ptr +=(mios32_lcd_x + bitmap.width -APP_LCD_WIDTH)*2;
-      mios32_lcd_y += 1;
-      APP_LCD_GCursorSet(mios32_lcd_x, mios32_lcd_y);
+      if((app_lcd_x + bitmap.width)>APP_LCD_WIDTH)memory_ptr +=(app_lcd_x + bitmap.width -APP_LCD_WIDTH)*2;
+      app_lcd_y += 1;
+      APP_LCD_GCursorSet(app_lcd_x, app_lcd_y);
     }
     
     /* legacy 1bit pixel print */
@@ -2080,7 +2084,7 @@ s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap)
     int line;
     int y_lines = (bitmap.height >> 3);
 
-    u16 initial_y = mios32_lcd_y;
+    u16 initial_y = app_lcd_y;
     for(line=0; line<y_lines; ++line) {
       
       // calculate pointer to bitmap line
@@ -2101,15 +2105,15 @@ s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap)
           memory_ptr++;
         }
         memory_ptr = bitmap.memory + line * bitmap.line_offset;
-        mios32_lcd_y += 1;
-        APP_LCD_GCursorSet(mios32_lcd_x, mios32_lcd_y);
+        app_lcd_y += 1;
+        APP_LCD_GCursorSet(app_lcd_x, app_lcd_y);
       }
     }
     // fix graphical cursor if more than one line has been print
-    mios32_lcd_x += bitmap.width;
+    app_lcd_x += bitmap.width;
     if( y_lines >= 1 ) {
-      mios32_lcd_y = initial_y;
-      APP_LCD_GCursorSet(mios32_lcd_x, mios32_lcd_y);
+      app_lcd_y = initial_y;
+      APP_LCD_GCursorSet(app_lcd_x, app_lcd_y);
     }
   }else return -1;  // not supported
 #endif

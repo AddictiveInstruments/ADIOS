@@ -7,7 +7,7 @@
 PROCESSOR =	$(MIOS32_PROCESSOR)
 FAMILY    = 	$(MIOS32_FAMILY)
 BOARD	  = 	$(MIOS32_BOARD)
-LCD       =     $(MIOS32_LCD)
+LCD       =	dummy
 
 # self-locating repo root: apps live at a fixed depth inside the repo, so a
 # plain `make` works with no environment setup at all (any exported

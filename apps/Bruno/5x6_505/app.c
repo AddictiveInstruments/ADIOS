@@ -139,7 +139,11 @@ void APP_Init(void)
 	// initialize LCD Bus Decoder.
 	TR5X6_DECOD_Init();
 
-	// TFT init
+	// TFT init - the driver is started HERE, after the bus decoder it talks
+	// through and before anything is drawn. Nothing starts a display behind
+	// your back any more: this call is the application's, and its place in
+	// this sequence is a decision, not a default.
+	APP_LCD_Init(0);
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 	APP_LCD_FColourSet(APP_LCD_WHITE);
 	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
@@ -204,6 +208,16 @@ void APP_Init(void)
 		// periodic ROM task
 		xTaskCreate(TASK_ROM_Periodic, "ROM_Handler", (ROM_TASK_STACK_SIZE)/4, NULL, PRIORITY_TASK_ROM_HANDLER, &xROMCheck);
 		first_start=1;
+	}
+
+	// Hold the splash screen before the periodic tasks above start painting
+	// over it. This wait belongs to the application: it decides what it shows
+	// at startup, so it decides how long that stays up. Set APP_SPLASH_MS to
+	// 0 to go straight to the running screen.
+	{
+		int ms;
+		for(ms=0; ms<APP_SPLASH_MS; ++ms)
+			MIOS32_DELAY_Wait_uS(1000);
 	}
 }
 

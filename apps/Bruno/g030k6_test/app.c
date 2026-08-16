@@ -24,6 +24,11 @@ u32 count = 0;
 /////////////////////////////////////////////////////////////////////////////
 void APP_Init(void)
 {
+  // NO display driver is compiled into this project - see the note in its
+  // Makefile, the flash budget on this chip does not allow one. To add a
+  // screen: set LCD= in the Makefile, include <app_lcd.h> above, and call
+  // APP_LCD_Init(0) here.
+
   // initialize all LEDs
   MIOS32_SOL_Init();
 

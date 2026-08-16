@@ -18,9 +18,6 @@
 
 #include <mios32.h>
 #include <app.h>
-#ifndef MIOS32_DONT_USE_LCD
-#include <app_lcd.h>
-#endif
 
 // ===========================================================================
 // MIOS32_CORE_USE_FREERTOS (see mios32_sys.h for the auto-derived default,
@@ -181,16 +178,9 @@ int main(void)
 #ifndef MIOS32_DONT_USE_USB
   MIOS32_USB_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_LCD
-  MIOS32_LCD_Init(0);
-
-# if MIOS32_LCD_NUM_DEVICES > 1
-  // a second display device, initialised the same way as the first
-  MIOS32_LCD_DeviceSet(1);
-  APP_LCD_Init(0);
-  MIOS32_LCD_DeviceSet(0);
-# endif
-#endif
+  // NO DISPLAY IS INITIALISED HERE. A screen is the application's business:
+  // call APP_LCD_Init(0) from APP_Init(), at the point in your own sequence
+  // where it belongs - see the commented line in the template's app.c.
 #ifdef MIOS32_USE_I2S
   MIOS32_I2S_Init(0);
 #endif
@@ -201,19 +191,10 @@ int main(void)
   // initialize application
   APP_Init();
 
-#if MIOS32_LCD_BOOT_MSG_DELAY
-  // print boot message
-# ifndef MIOS32_DONT_USE_LCD
-  MIOS32_LCD_PrintBootMessage();
-# endif
-
-  // wait for given delay (usually 2 seconds)
-# ifndef MIOS32_DONT_USE_DELAY
-  int delay = 0;
-  for(delay=0; delay<MIOS32_LCD_BOOT_MSG_DELAY; ++delay)
-    MIOS32_DELAY_Wait_uS(1000);
-# endif
-#endif
+  // (no boot screen and no startup delay: an application that wants to
+  // greet the user does it from APP_Init(), where it also decides how long
+  // to wait. Its name and version are reported over MIDI regardless - see
+  // MIOS32_APP_NAME1/2 in mios32_midi.h.)
 
 #if MIOS32_CORE_USE_FREERTOS
   // start the task which calls the application hooks
@@ -522,19 +503,6 @@ void _abort(void)
 /////////////////////////////////////////////////////////////////////////////
 void vApplicationMallocFailedHook(void)
 {
-#ifndef MIOS32_DONT_USE_LCD
-  // TODO: here we should select the normal font - but only if available!
-  // MIOS32_LCD_FontInit((u8 *)GLCD_FONT_NORMAL);
-  MIOS32_LCD_BColourSet(0xffffff);
-  MIOS32_LCD_FColourSet(0x000000);
-
-  MIOS32_LCD_DeviceSet(0);
-  MIOS32_LCD_Clear();
-  MIOS32_LCD_CursorSet(0, 0);
-  MIOS32_LCD_PrintString("FATAL: FreeRTOS "); // 16 chars
-  MIOS32_LCD_CursorSet(0, 1);
-  MIOS32_LCD_PrintString("Malloc Error!!! "); // 16 chars
-#endif
 
   // Note: message won't be sent if MIDI task cannot be created!
   MIOS32_MIDI_SendDebugMessage("FATAL: FreeRTOS Malloc Error!!!\n");
@@ -594,17 +562,6 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer, StackT
 /////////////////////////////////////////////////////////////////////////////
 void exit(int par)
 {
-#ifndef MIOS32_DONT_USE_LCD
-  // TODO: here we should select the normal font - but only if available!
-  // MIOS32_LCD_FontInit((u8 *)GLCD_FONT_NORMAL);
-  MIOS32_LCD_BColourSet(0xffffff);
-  MIOS32_LCD_FColourSet(0x000000);
-
-  MIOS32_LCD_DeviceSet(0);
-  MIOS32_LCD_Clear();
-  MIOS32_LCD_CursorSet(0, 0);
-  MIOS32_LCD_PrintString("Goodbye!");
-#endif
 
   // Note: message won't be sent if MIDI task cannot be created!
   MIOS32_MIDI_SendDebugMessage("Goodbye!\n");
@@ -660,19 +617,6 @@ void HardFault_Handler_c(unsigned int * hardfault_args)
   MIOS32_MIDI_SendDebugMessage("HFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED2C))));
   MIOS32_MIDI_SendDebugMessage("DFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED30))));
   MIOS32_MIDI_SendDebugMessage("AFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED3C))));
-#ifndef MIOS32_DONT_USE_LCD
-  // TODO: here we should select the normal font - but only if available!
-  // MIOS32_LCD_FontInit((u8 *)GLCD_FONT_NORMAL);
-  MIOS32_LCD_BColourSet(0xffffff);
-  MIOS32_LCD_FColourSet(0x000000);
-
-  MIOS32_LCD_DeviceSet(0);
-  MIOS32_LCD_Clear();
-  MIOS32_LCD_CursorSet(0, 0);
-  MIOS32_LCD_PrintString("!! HARD FAULT !!");
-  MIOS32_LCD_CursorSet(0, 1);
-  MIOS32_LCD_PrintFormattedString("at PC=0x%08x", stacked_pc);
-#endif
 
   _abort();
 }
@@ -696,19 +640,6 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
   MIOS32_MIDI_SendDebugMessage("!!! STACK OVERFLOW !!!\n");
   MIOS32_MIDI_SendDebugMessage("======================\n");
   MIOS32_MIDI_SendDebugMessage("Function: %s\n", pcTaskName);
-#ifndef MIOS32_DONT_USE_LCD
-  // TODO: here we should select the normal font - but only if available!
-  // MIOS32_LCD_FontInit((u8 *)GLCD_FONT_NORMAL);
-  MIOS32_LCD_BColourSet(0xffffff);
-  MIOS32_LCD_FColourSet(0x000000);
-
-  MIOS32_LCD_DeviceSet(0);
-  MIOS32_LCD_Clear();
-  MIOS32_LCD_CursorSet(0, 0);
-  MIOS32_LCD_PrintString("!! STACK OVERFLOW !!");
-  MIOS32_LCD_CursorSet(0, 1);
-  MIOS32_LCD_PrintFormattedString("in Task %s", pcTaskName);
-#endif
 
   _abort();
 }

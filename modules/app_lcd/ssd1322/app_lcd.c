@@ -50,6 +50,11 @@
 // Local variables
 /////////////////////////////////////////////////////////////////////////////
 
+// Cursor position, in pixels - owned by this driver, see the note in the
+// ili9488 driver for why it is not shared.
+static u16 app_lcd_x = 0;
+static u16 app_lcd_y = 0;
+
 static u32 display_available = 0;
 
 // default color for legacy 1Bit bitmap
@@ -292,8 +297,8 @@ s32 APP_LCD_GCursorSet(u16 x, u16 y)
 {
   s32 error = 0;
 
-  mios32_lcd_x = x;
-  mios32_lcd_y = y;
+  app_lcd_x = x;
+  app_lcd_y = y;
 
   error |= APP_LCD_Cmd(0x15); // Column
   error |= APP_LCD_Data((u8)((x/4) + 0x1c));
@@ -314,7 +319,7 @@ s32 APP_LCD_GCursorSet(u16 x, u16 y)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_CursorSet(u16 column, u16 line)
 {
-  // mios32_lcd_x/y set by MIOS32_LCD_CursorSet() function
+  // app_lcd_x/y set by MIOS32_LCD_CursorSet() function
   return APP_LCD_GCursorSet(column, line*8);
 }
 
@@ -327,10 +332,10 @@ s32 APP_LCD_CursorSet(u16 column, u16 line)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_FontInit(u8 *font, app_lcd_color_depth_t colour_depth)
 {
-  font_bmp.memory = (u8 *)&font[MIOS32_LCD_FONT_BITMAP_IX] + (size_t)font[MIOS32_LCD_FONT_X0_IX];
-  font_bmp.width = font[MIOS32_LCD_FONT_WIDTH_IX];
-  font_bmp.height = font[MIOS32_LCD_FONT_HEIGHT_IX];
-  font_bmp.line_offset = font[MIOS32_LCD_FONT_OFFSET_IX];
+  font_bmp.memory = (u8 *)&font[GLCD_FONT_BITMAP_IX] + (size_t)font[GLCD_FONT_X0_IX];
+  font_bmp.width = font[GLCD_FONT_WIDTH_IX];
+  font_bmp.height = font[GLCD_FONT_HEIGHT_IX];
+  font_bmp.line_offset = font[GLCD_FONT_OFFSET_IX];
   font_bmp.colour_depth = colour_depth;
   
   return 0; // no error
@@ -865,8 +870,8 @@ s32 APP_LCD_BitmapFusion(mios32_lcd_bitmap_t src_bmp, float src_luma, mios32_lcd
 s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap)
 {
   int x, y;
-  u16 initial_x = mios32_lcd_x;
-  u16 initial_y = mios32_lcd_y;
+  u16 initial_x = app_lcd_x;
+  u16 initial_y = app_lcd_y;
   u16 x_max = (((bitmap.width+initial_x)>APP_LCD_WIDTH)? APP_LCD_WIDTH : (bitmap.width+initial_x));
   for(y=initial_y; y<(((bitmap.height+initial_y)>APP_LCD_HEIGHT)? APP_LCD_HEIGHT : (bitmap.height+initial_y)); y++){
     APP_LCD_GCursorSet(initial_x, y);
@@ -926,10 +931,10 @@ s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap)
       
     }else return -1;  // not supported
     // reset y to initial position
-    //mios32_lcd_y = initial_y;
+    //app_lcd_y = initial_y;
   }
   // reset x to next position
-  //mios32_lcd_x = x_max;
+  //app_lcd_x = x_max;
   APP_LCD_GCursorSet(x_max, initial_y);
   return 0; // no error
 }
@@ -976,10 +981,10 @@ s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap)
 
     }else return -1;  // not supported
     // reset y to initial position
-    //mios32_lcd_y = initial_y;
+    //app_lcd_y = initial_y;
   }
   // reset x to next position
-  //mios32_lcd_x = x_max;
+  //app_lcd_x = x_max;
   APP_LCD_GCursorSet(x_max, initial_y);
 #endif
   return 0; // no error

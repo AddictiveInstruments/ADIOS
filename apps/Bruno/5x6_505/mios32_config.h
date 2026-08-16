@@ -15,6 +15,10 @@
 #define MIOS32_APP_NAME2 "(C) 2024 B.Dupeyron"
 #define MIOS32_APP_VERSION "v1.000"
 
+// How long the startup screen stays up before the running display takes
+// over, in milliseconds. 0 = no hold.
+#define APP_SPLASH_MS 2000
+
 // temporary 5x6 define
 // 505 config
 #define TR5X6_UNIT_SELECT 505

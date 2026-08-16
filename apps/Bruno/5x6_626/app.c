@@ -97,6 +97,11 @@ static s32 upload_progress_old=0;
 /////////////////////////////////////////////////////////////////////////////
 void APP_Init(void)
 {
+  // The display is yours to start, and yours to place: put this call where
+  // it belongs in your own init sequence. Uncomment to activate it - the
+  // driver itself is chosen by LCD= in this project's Makefile.
+  //APP_LCD_Init(0);
+
 
 	// ROM R/W init
 	TR5X6_ROM_Init();
