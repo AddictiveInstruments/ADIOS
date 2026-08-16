@@ -196,7 +196,7 @@ typedef enum {
 // A project that already keeps data at the top of flash moves its own fields
 // down rather than relocating this record. Anchoring system fields at the END
 // of the last page keeps them independent of whatever layout the project uses
-// below - which is exactly how the 5x6 holds its magic number and current bank.
+// below, so both can grow towards each other without either being renumbered.
 /////////////////////////////////////////////////////////////////////////////
 #ifndef MIOS32_DEVICE_ID_PERSIST
 # define MIOS32_DEVICE_ID_PERSIST 0
