@@ -19,21 +19,25 @@
 // Global definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// number of CAN interfaces (0..2)
-#if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4) || defined(MIOS32_BOARD_MBHP_DIPCOREF4)
+// How many CAN interfaces the driver drives, 0 or 1.
+//
+// Keyed off the peripheral being present, not off a board: the chip's CMSIS
+// header defines CAN1 only where the silicon carries it. A second interface
+// is deliberately not supported - the MIDI-over-CAN identifier arbitration
+// and filtering assume a single one.
 #ifndef MIOS32_CAN_NUM
-#define MIOS32_CAN_NUM 1
-#else
-#if MIOS32_CAN_NUM >1
-#define MIOS32_CAN_NUM 1
+# if defined(CAN1)
+#  define MIOS32_CAN_NUM 1
+# else
+#  define MIOS32_CAN_NUM 0
+# endif
 #endif
+
+#if MIOS32_CAN_NUM > 1
+# error "MIOS32_CAN_NUM must be 0 or 1: the identifier arbitration assumes a single interface."
 #endif
-#elif defined(MIOS32_FAMILY_STM32G0xx)
-#define MIOS32_CAN_NUM 0
-#else
-#define MIOS32_CAN_NUM 0
-# warning "Unsupported MIOS32_BOARD selected! "
-// because of MIDI Area Network Id arbitration and filtering, only STM32F4 is supported.
+#if MIOS32_CAN_NUM && !defined(CAN1)
+# error "MIOS32_CAN_NUM is 1, but this chip has no CAN peripheral."
 #endif
 
 // Tx buffer size (1..256)

@@ -341,7 +341,7 @@ s32 MIOS32_LCD_PrintFormattedString(const char *format, ...)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Used during startup to print the boot message, which consists of two lines
-//! specified with MIOS32_LCD_BOOT_MSG_LINE1 and MIOS32_LCD_BOOT_MSG_LINE2.<BR>
+//! specified with MIOS32_APP_NAME1 and MIOS32_APP_NAME2.<BR>
 //! Both lines should be adapted in the mios32_config.h file of an application.<BR>
 //! The message is automatically print by the programming model after each reset.<BR>
 //! It will also be returned on a SysEx query.
@@ -353,9 +353,9 @@ s32 MIOS32_LCD_PrintBootMessage(void)
 
   status |= MIOS32_LCD_DeviceSet(0);
   status |= MIOS32_LCD_CursorSet(0, 0);
-  status |= MIOS32_LCD_PrintString(MIOS32_LCD_BOOT_MSG_LINE1);
+  status |= MIOS32_LCD_PrintString(MIOS32_APP_NAME1);
   status |= MIOS32_LCD_CursorSet(0, 1);
-  status |= MIOS32_LCD_PrintString(MIOS32_LCD_BOOT_MSG_LINE2);
+  status |= MIOS32_LCD_PrintString(MIOS32_APP_NAME2);
 
   return status;
 }

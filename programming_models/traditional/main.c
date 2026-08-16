@@ -184,8 +184,8 @@ int main(void)
 #ifndef MIOS32_DONT_USE_LCD
   MIOS32_LCD_Init(0);
 
-# if defined(MIOS32_BOARD_MBHP_CORE_STM32) || defined(MIOS32_BOARD_MBHP_CORE_LPC17) || defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
-  // init second LCD as well (if available)
+# if MIOS32_LCD_NUM_DEVICES > 1
+  // a second display device, initialised the same way as the first
   MIOS32_LCD_DeviceSet(1);
   APP_LCD_Init(0);
   MIOS32_LCD_DeviceSet(0);

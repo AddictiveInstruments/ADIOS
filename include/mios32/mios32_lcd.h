@@ -23,14 +23,15 @@
 #define MIOS32_LCD_MAX_MAP_LINES 4
 #endif
 
-// The boot message which is print during startup and returned on a SysEx query
-#ifndef MIOS32_LCD_BOOT_MSG_LINE1
-#define MIOS32_LCD_BOOT_MSG_LINE1 "Unnamed App."
+// How many display devices the board carries. Above 1, each extra device is
+// initialised in turn at startup and selected with MIOS32_LCD_DeviceSet().
+#ifndef MIOS32_LCD_NUM_DEVICES
+#define MIOS32_LCD_NUM_DEVICES 1
 #endif
 
-#ifndef MIOS32_LCD_BOOT_MSG_LINE2
-#define MIOS32_LCD_BOOT_MSG_LINE2 "www.midibox.org"
-#endif
+// The startup screen prints MIOS32_APP_NAME1 and MIOS32_APP_NAME2, which are
+// declared in mios32_midi.h: naming the program is not a display matter, and
+// the identification queries report those names whether or not a screen exists.
 
 // the startup delay in mS
 // if 0, no message will be print

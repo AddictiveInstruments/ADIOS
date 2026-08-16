@@ -468,7 +468,7 @@ void APP_Background(void)
   MIOS32_LCD_DeviceSet(0);
   DEBUG_MSG("\n");
   DEBUG_MSG("====================\n");
-  DEBUG_MSG1("%s\n", MIOS32_LCD_BOOT_MSG_LINE1);
+  DEBUG_MSG1("%s\n", MIOS32_APP_NAME1);
   DEBUG_MSG("====================\n");
   DEBUG_MSG("\n");
 
@@ -831,7 +831,7 @@ static s32 TERMINAL_ParseLine(char *input, void *_output_function)
 
   if( (parameter = strtok_r(input, separators, &brkt)) ) {
     if( strcmp(parameter, "help") == 0 ) {
-      out("Welcome to " MIOS32_LCD_BOOT_MSG_LINE1 "!");
+      out("Welcome to " MIOS32_APP_NAME1 "!");
       out("Following commands are available:");
       out("  set fastboot <1 or 0>:   if 1, the initial bootloader wait phase will be skipped (current: %d)\n", BSL_fastboot);
       out("  set single_usb <1 or 0>: if 1, USB will only be initialized for a single port (current: %d)\n", BSL_single_usb);

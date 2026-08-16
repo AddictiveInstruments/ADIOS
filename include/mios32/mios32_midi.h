@@ -58,6 +58,28 @@
 #define MIOS32_MIDI_CORE_TYPE_STR "APP"
 #endif
 
+// How this program identifies itself when a host asks. Declare all three in
+// your mios32_config.h; they are reported by the identification queries and
+// are the only way a host can tell one machine from another on a MIDI port.
+//
+//   #define MIOS32_APP_NAME1   "My Machine"
+//   #define MIOS32_APP_NAME2   "(C) 2026 Me"
+//   #define MIOS32_APP_VERSION "v1.000"
+//
+// The bootloader and the BSL-update tool carry their own three, so the host
+// can read which bootloader is installed and not only which application.
+#ifndef MIOS32_APP_NAME1
+#define MIOS32_APP_NAME1 "Unnamed App."
+#endif
+
+#ifndef MIOS32_APP_NAME2
+#define MIOS32_APP_NAME2 ""
+#endif
+
+#ifndef MIOS32_APP_VERSION
+#define MIOS32_APP_VERSION "v0.000"
+#endif
+
 // disacknowledge arguments
 #define MIOS32_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP  0x01
 #define MIOS32_MIDI_SYSEX_DISACK_MORE_BYTES_THAN_EXP  0x02

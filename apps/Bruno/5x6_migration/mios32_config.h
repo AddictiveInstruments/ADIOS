@@ -11,8 +11,9 @@
 // The names MIOS Studio shows in its query answer. Unambiguous on purpose:
 // this thing is loaded on top of the instrument's firmware for exactly one
 // boot, and you want to be able to tell at a glance that it is what is running.
-#define MIOS32_LCD_BOOT_MSG_LINE1 "5x6 ROM migration"
-#define MIOS32_LCD_BOOT_MSG_LINE2 "(c) 2026 B.Dupeyron"
+#define MIOS32_APP_NAME1 "5x6 ROM migration"
+#define MIOS32_APP_NAME2 "(c) 2026 B.Dupeyron"
+#define MIOS32_APP_VERSION "v1.000"
 
 // Everything this tool does is read flash, write flash, and say so over MIDI.
 // So: no shift registers, no encoders, no analog, no motorfaders, no display,

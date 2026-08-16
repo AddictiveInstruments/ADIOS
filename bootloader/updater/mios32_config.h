@@ -10,9 +10,10 @@
 #ifndef _MIOS32_CONFIG_H
 #define _MIOS32_CONFIG_H
 
-// The boot message which is on a SysEx query (LCD not enabled, therefore not print on startup)
-#define MIOS32_LCD_BOOT_MSG_LINE1 "ADIOS BSL Updater"
-#define MIOS32_LCD_BOOT_MSG_LINE2 "(c) 2026 B.Dupeyron"
+// How this program identifies itself to a host (see mios32_midi.h)
+#define MIOS32_APP_NAME1 "ADIOS BSL Updater"
+#define MIOS32_APP_NAME2 "(c) 2026 B.Dupeyron"
+#define MIOS32_APP_VERSION "v1.000"
 
 // disable code modules
 // mios32_sys.c/mios32_irq.c: indispensable, always compiled, no toggle.
@@ -107,7 +108,6 @@
 #endif
 
 #if defined(MIOS32_FAMILY_STM32F4xx)
-#define MIOS32_BOARD_J15_LED_NUM 1
 
 // reserved flash size for the bootloader itself.
 // auto-computed by etc/gen_bsl_boundary.sh from the bootloader's own compiled
@@ -138,7 +138,6 @@
 // Studio (errors travel as DISACK codes), and its 10K window on 32K parts
 // has no room for the vsprintf machinery
 # define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-#define MIOS32_BOARD_J15_LED_NUM 1
 
 // reserved flash size for the bootloader itself.
 // auto-computed by etc/gen_bsl_boundary.sh from the bootloader's own compiled

@@ -85,68 +85,10 @@ typedef struct {
 } srio_pin_t;
 #endif
 
-#if defined(MIOS32_BOARD_MBHP_CORE_STM32)
-#define SRIO_RESET_SUPPORTED 0
-
-#define SRIO_GPIO_MODE GPIO_Mode_Out_OD
-
-#define SRIO_NUM_SCLK_PINS 3
-static const srio_pin_t srio_sclk_pin[SRIO_NUM_SCLK_PINS] = {
-  { GPIOA, LL_GPIO_PIN_5  }, // SPI0
-  { GPIOB, LL_GPIO_PIN_13 }, // SPI1
-  { GPIOB, LL_GPIO_PIN_6  }, // SPI2
-};
-
-#define SRIO_NUM_RCLK_PINS 5
-static const srio_pin_t srio_rclk_pin[SRIO_NUM_RCLK_PINS] = {
-  { GPIOA, LL_GPIO_PIN_4  }, // SPI0, RCLK1
-  { GPIOC, LL_GPIO_PIN_15 }, // SPI0, RCLK2
-  { GPIOB, LL_GPIO_PIN_12 }, // SPI1, RCLK1
-  { GPIOC, LL_GPIO_PIN_13 }, // SPI2, RCLK1
-  { GPIOC, LL_GPIO_PIN_14 }, // SPI2, RCLK2
-};
-
-#define SRIO_NUM_MOSI_PINS 3
-static const srio_pin_t srio_mosi_pin[SRIO_NUM_MOSI_PINS] = {
-  { GPIOA, LL_GPIO_PIN_7  }, // SPI0
-  { GPIOB, LL_GPIO_PIN_15 }, // SPI1
-  { GPIOB, LL_GPIO_PIN_5  }, // SPI2
-};
-
-
-#elif defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
-#define SRIO_RESET_SUPPORTED 0
-
-#define SRIO_GPIO_MODE  GPIO_Mode_OUT
-#define SRIO_GPIO_OTYPE GPIO_OType_PP
-
-#define SRIO_NUM_SCLK_PINS 3
-static const srio_pin_t srio_sclk_pin[SRIO_NUM_SCLK_PINS] = {
-  { GPIOA, LL_GPIO_PIN_5  }, // SPI0
-  { GPIOB, LL_GPIO_PIN_13 }, // SPI1
-  { GPIOB, LL_GPIO_PIN_3  }, // SPI2
-};
-
-#define SRIO_NUM_RCLK_PINS 6
-static const srio_pin_t srio_rclk_pin[SRIO_NUM_RCLK_PINS] = {
-  { GPIOB, LL_GPIO_PIN_2  }, // SPI0, RCLK1
-  { GPIOD, LL_GPIO_PIN_11 }, // SPI0, RCLK2
-  { GPIOB, LL_GPIO_PIN_12 }, // SPI1, RCLK1
-  { GPIOD, LL_GPIO_PIN_10 }, // SPI1, RCLK2
-  { GPIOA, LL_GPIO_PIN_15 }, // SPI2, RCLK1
-  { GPIOB, LL_GPIO_PIN_8  }, // SPI2, RCLK2
-};
-
-#define SRIO_NUM_MOSI_PINS 3
-static const srio_pin_t srio_mosi_pin[SRIO_NUM_MOSI_PINS] = {
-  { GPIOA, LL_GPIO_PIN_7  }, // SPI0
-  { GPIOB, LL_GPIO_PIN_15 }, // SPI1
-  { GPIOB, LL_GPIO_PIN_5  }, // SPI2
-};
-
-
-
-#elif defined(MIOS32_BOARD_MBHP_DIPCOREF4)
+// The shift-register pins the bootloader strobes before handing over. This
+// is board wiring, not silicon: a project that wires them elsewhere says so
+// through its BSL_RELAY block (see the projects that carry one).
+#if defined(MIOS32_FAMILY_STM32F4xx)
 #define SRIO_RESET_SUPPORTED 0
 
 #define SRIO_GPIO_MODE  LL_GPIO_MODE_OUTPUT
@@ -600,16 +542,9 @@ static s32 ResetSRIOChains(void)
     LL_GPIO_Init(srio_mosi_pin[i].port, &GPIO_InitStructure);
   }
 
-#if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
-	// set RE3=1 to ensure that the on-board MEMs is disabled
-	GPIO_InitStructure.GPIO_Pin = LL_GPIO_PIN_3;
-	GPIO_Init(GPIOE, &GPIO_InitStructure);	
-	MIOS32_SYS_STM_PINSET_1(GPIOE, LL_GPIO_PIN_3);
-#elif defined(MIOS32_BOARD_MBHP_DIPCOREF4)
- // nothing to do.
-#else
-# warning "Please doublecheck if RE3 has to be set to 1 to disable MEMs"
-#endif
+	// (a board with a MEMS microphone sharing an SPI line has to silence it
+	// here before the 128 priming clocks below; none of the boards in this
+	// tree does, so nothing to do.)
 
   // send 128 clocks to all SPI ports
   int cycle;

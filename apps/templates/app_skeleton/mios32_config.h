@@ -10,9 +10,10 @@
 #ifndef _MIOS32_CONFIG_H
 #define _MIOS32_CONFIG_H
 
-// The boot message which is print during startup and returned on a SysEx query
-#define MIOS32_LCD_BOOT_MSG_LINE1 "App. Template"
-#define MIOS32_LCD_BOOT_MSG_LINE2 "(C) 2009 <your name>"
+// How this program identifies itself to a host (see mios32_midi.h)
+#define MIOS32_APP_NAME1 "App. Template"
+#define MIOS32_APP_NAME2 "(C) 2009 <your name>"
+#define MIOS32_APP_VERSION "v1.000"
 
 // ---------------------------------------------------------------------------
 // mios32_sys.c - core system init (clock, vector table, timebase). Always
@@ -270,7 +271,6 @@
 #if defined(MIOS32_FAMILY_STM32F4xx)
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-#define MIOS32_BOARD_J15_LED_NUM 1
 
 #define MIOS32_USE_UART0
 #define MIOS32_USE_UART1
@@ -280,7 +280,6 @@
 #define MIOS32_DONT_USE_USB_MIDI
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-#define MIOS32_BOARD_J15_LED_NUM 1
 
 #define MIOS32_USE_UART0
 #define MIOS32_USE_DIN_MIDI

@@ -1817,39 +1817,43 @@ static s32 MIOS32_MIDI_SYSEX_Cmd_Query(mios32_midi_port_t port, mios32_midi_syse
 			// accepts both spellings (UploadHandler.cpp).
 			MIOS32_MIDI_SYSEX_SendAckStr(port, "ADIOS");
 			break;
-		case 0x02: // Board
-			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_BOARD_STR);
-			break;
-		case 0x03: // Processor
+		case 0x02: // Processor
 			// the exact part (STM32G070CB...), not its family: the family is
 			// implied by it, while the part number is what actually tells you
 			// what you are talking to - flash and RAM size, peripherals.
-			// Both come from the project's own PROCESSOR, see mios32/mios32.mk
+			// Comes from the project's own PROCESSOR, see mios32/mios32.mk
 			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_PROCESSOR_STR);
 			break;
-		case 0x04: // Chip ID
+		case 0x03: // Chip ID
 			sprintf(str_buffer, "%08x", MIOS32_SYS_ChipIDGet());
 			MIOS32_MIDI_SYSEX_SendAckStr(port, (char *)str_buffer);
 			break;
-		case 0x05: // Serial Number
+		case 0x04: // Serial Number
 			if( MIOS32_SYS_SerialNumberGet((char *)str_buffer) >= 0 )
 				MIOS32_MIDI_SYSEX_SendAckStr(port, str_buffer);
 			else
 				MIOS32_MIDI_SYSEX_SendAckStr(port, "?");
 			break;
-		case 0x06: // Flash Memory Size
+		case 0x05: // Flash Memory Size
 			sprintf(str_buffer, "%d", MIOS32_SYS_FlashSizeGet());
 			MIOS32_MIDI_SYSEX_SendAckStr(port, str_buffer);
 			break;
-		case 0x07: // RAM Memory Size
+		case 0x06: // RAM Memory Size
 			sprintf(str_buffer, "%d", MIOS32_SYS_RAMSizeGet());
 			MIOS32_MIDI_SYSEX_SendAckStr(port, str_buffer);
 			break;
-		case 0x08: // Application Name Line #1
-			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_LCD_BOOT_MSG_LINE1);
+		case 0x07: // Application Name Line #1
+			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_APP_NAME1);
 			break;
-		case 0x09: // Application Name Line #2
-			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_LCD_BOOT_MSG_LINE2);
+		case 0x08: // Application Name Line #2
+			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_APP_NAME2);
+			break;
+		case 0x09: // Application Version
+			// the program's own version, declared next to its two name lines.
+			// The bootloader and the BSL-update tool answer their own, so a
+			// host can read which bootloader is installed, not only which
+			// application is running.
+			MIOS32_MIDI_SYSEX_SendAckStr(port, MIOS32_APP_VERSION);
 			break;
 #ifdef MIOS32_APP_FLASH_START_ADDR
 		case 0x0a: // Application Flash Start Address (bootloader/app boundary, absolute address)

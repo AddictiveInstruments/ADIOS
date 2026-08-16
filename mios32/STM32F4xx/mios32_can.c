@@ -1,4 +1,17 @@
-// $Id$
+// CAN1 pins. PB8/PB9 is the pairing this driver defaults to; PD0/PD1 is the
+// other common one. Override any of these from mios32_config.h.
+#define MIOS32_CAN1             CAN1
+#ifndef MIOS32_CAN1_RX_PORT
+#define MIOS32_CAN1_RX_PORT     GPIOB
+#define MIOS32_CAN1_RX_PIN      LL_GPIO_PIN_8
+#endif
+#ifndef MIOS32_CAN1_TX_PORT
+#define MIOS32_CAN1_TX_PORT     GPIOB
+#define MIOS32_CAN1_TX_PIN      LL_GPIO_PIN_9
+#endif
+#ifndef MIOS32_CAN1_REMAP_FUNC
+#define MIOS32_CAN1_REMAP_FUNC  { GPIO_PinAFConfig(GPIOB, GPIO_PIN_8, GPIO_AF_CAN1); GPIO_PinAFConfig(GPIOB, GPIO_PIN_9, GPIO_AF_CAN1); }
+#endif// $Id$
 //! \defgroup MIOS32_CAN
 //!
 //! U(S)ART functions for MIOS32
@@ -39,19 +52,18 @@
 // All filters banks for CAN1
 #define MIOS32_CAN2_STARTBANK 27 // no bank for CAN2
 #endif
-# if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
+// CAN1 pins. PB8/PB9 is what this driver defaults to; PD0/PD1 is the other
+// pairing the silicon offers. Override any of them from mios32_config.h.
 #define MIOS32_CAN1             CAN1
-#define MIOS32_CAN1_RX_PORT     GPIOD
-#define MIOS32_CAN1_RX_PIN      LL_GPIO_PIN_0
-#define MIOS32_CAN1_TX_PORT     GPIOD
-#define MIOS32_CAN1_TX_PIN      LL_GPIO_PIN_1
-#define MIOS32_CAN1_REMAP_FUNC  { GPIO_PinAFConfig(GPIOD, GPIO_PIN_0, GPIO_AF_CAN1); GPIO_PinAFConfig(GPIOD, GPIO_PIN_1, GPIO_AF_CAN1); }
-#elif defined(MIOS32_BOARD_MBHP_DIPCOREF4)
-#define MIOS32_CAN1             CAN1
+#ifndef MIOS32_CAN1_RX_PORT
 #define MIOS32_CAN1_RX_PORT     GPIOB
 #define MIOS32_CAN1_RX_PIN      LL_GPIO_PIN_8
+#endif
+#ifndef MIOS32_CAN1_TX_PORT
 #define MIOS32_CAN1_TX_PORT     GPIOB
 #define MIOS32_CAN1_TX_PIN      LL_GPIO_PIN_9
+#endif
+#ifndef MIOS32_CAN1_REMAP_FUNC
 #define MIOS32_CAN1_REMAP_FUNC  { GPIO_PinAFConfig(GPIOB, GPIO_PIN_8, GPIO_AF_CAN1); GPIO_PinAFConfig(GPIOB, GPIO_PIN_9, GPIO_AF_CAN1); }
 #endif
 #define MIOS32_CAN1_RX0_IRQn    CAN1_RX0_IRQn

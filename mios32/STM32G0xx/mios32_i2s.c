@@ -81,7 +81,10 @@
 
 
 
-#if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
+// The blocks guarded by MIOS32_I2S_CODEC_CS43L22 drive a Cirrus CS43L22
+// audio codec over I2C - a chip that sits on the board, not in the MCU.
+// Declare that define only if your board carries one.
+#ifdef MIOS32_I2S_CODEC_CS43L22
 // I2C configuration
 // Thanks to http://www.mind-dump.net/configuring-the-stm32f4-discovery-for-audio for this info!
 
@@ -186,7 +189,7 @@ s32 MIOS32_I2S_Init(u32 mode)
   GPIO_PinAFConfig(MIOS32_I2S_MCLK_PORT, MIOS32_I2S_MCLK_PINSRC, GPIO_AF_SPI3);
 #endif
 
-#if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
+#ifdef MIOS32_I2S_CODEC_CS43L22
   // configure I2C pins to access the CS43L22 configuration registers
   // Thanks to http://www.mind-dump.net/configuring-the-stm32f4-discovery-for-audio for this info!
   GPIO_InitStructure.Mode = GPIO_Mode_AF;
@@ -257,7 +260,7 @@ s32 MIOS32_I2S_Init(u32 mode)
   // Configure and enable DMA interrupt
   MIOS32_IRQ_Install(DMA1_Stream5_IRQn, MIOS32_IRQ_I2S_DMA_PRIORITY);
 
-#if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
+#ifdef MIOS32_I2S_CODEC_CS43L22
   // configure I2C
   // Thanks to http://www.mind-dump.net/configuring-the-stm32f4-discovery-for-audio for this info!
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
@@ -351,7 +354,7 @@ void DMA1_Stream5_IRQHandler(void)
 
 
 
-#if defined(MIOS32_BOARD_STM32F4DISCOVERY) || defined(MIOS32_BOARD_MBHP_CORE_STM32F4)
+#ifdef MIOS32_I2S_CODEC_CS43L22
 // I2C configuration
 // Thanks to http://www.mind-dump.net/configuring-the-stm32f4-discovery-for-audio for this code!
 static void codec_init()

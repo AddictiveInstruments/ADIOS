@@ -10,9 +10,10 @@
 #ifndef _MIOS32_CONFIG_H
 #define _MIOS32_CONFIG_H
 
-// The boot message which is print during startup and returned on a SysEx query
-#define MIOS32_LCD_BOOT_MSG_LINE1 "G030K6 bare test"
-#define MIOS32_LCD_BOOT_MSG_LINE2 "MIOS32_CORE_USE_FREERTOS"
+// How this program identifies itself to a host (see mios32_midi.h)
+#define MIOS32_APP_NAME1 "G030K6 bare test"
+#define MIOS32_APP_NAME2 "MIOS32_CORE_USE_FREERTOS"
+#define MIOS32_APP_VERSION "v1.000"
 
 // Nucleo-G030K6 onboard user LED is on PC6 (not the STM32G0xx family
 // default of GPIOA/LL_GPIO_PIN_12 - see mios32_utils.c) - overridden here
@@ -262,7 +263,6 @@
 #if defined(MIOS32_FAMILY_STM32F4xx)
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-#define MIOS32_BOARD_J15_LED_NUM 1
 
 #define MIOS32_USE_UART0
 #define MIOS32_USE_UART1
@@ -272,7 +272,6 @@
 #define MIOS32_DONT_USE_USB_MIDI
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-#define MIOS32_BOARD_J15_LED_NUM 1
 
 // BSL_RELAY_BEGIN - copied verbatim into the bootloader and updater builds
 // by etc/gen_bsl_boundary.sh, so all three talk on the same connector.

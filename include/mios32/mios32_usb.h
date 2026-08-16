@@ -19,14 +19,20 @@
 /////////////////////////////////////////////////////////////////////////////
 
 
-#ifndef MIOS32_BOARD_MBHP_DIPCOREF4
-#ifndef MIOS32_DONT_USE_USB_HS_HOST
-#define MIOS32_DONT_USE_USB_HS_HOST
-#endif
+// Which USB core to drive. The full-speed core is the default because every
+// chip that has USB at all has it; the high-speed core exists only on the
+// larger STM32F4 and needs its own pins, so a board that wires it says so:
+//
+//   #define MIOS32_USE_USB_HS 1
+//
+// Host mode follows the same switch: the HS core is what makes USB host
+// usable at all here, so declaring one declares the other.
+#ifdef MIOS32_USE_USB_HS
+# define USE_USB_OTG_HS
 #else
-#ifndef MIOS32_DONT_USE_USB_HS_HOST
-#define USE_USB_OTG_HS
-#endif
+# ifndef MIOS32_DONT_USE_USB_HS_HOST
+#  define MIOS32_DONT_USE_USB_HS_HOST
+# endif
 #endif
 
 // Following settings allow to customize the USB device descriptor

@@ -10,9 +10,10 @@
 #ifndef _MIOS32_CONFIG_H
 #define _MIOS32_CONFIG_H
 
-// The boot message which is print during startup and returned on a SysEx query
-#define MIOS32_LCD_BOOT_MSG_LINE1 "5x6 Display/ROM"
-#define MIOS32_LCD_BOOT_MSG_LINE2 "(C) 2024 B.Dupeyron"
+// How this program identifies itself to a host (see mios32_midi.h)
+#define MIOS32_APP_NAME1 "5x6 Display/ROM"
+#define MIOS32_APP_NAME2 "(C) 2024 B.Dupeyron"
+#define MIOS32_APP_VERSION "v1.000"
 
 // temporary 5x6 define
 // 505 config
@@ -100,7 +101,6 @@
 #if defined(MIOS32_FAMILY_STM32F4xx)
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-#define MIOS32_BOARD_J15_LED_NUM 1
 
 #define MIOS32_USE_UART0
 #define MIOS32_USE_UART1
@@ -110,7 +110,6 @@
 #define MIOS32_DONT_USE_USB_MIDI
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-#define MIOS32_BOARD_J15_LED_NUM 1
 
 // This board's two MIDI links (MIOS32_UARTn is USART(n+1) on G0xx):
 //   UART0 = USART1, PB7 in  - the TR-505 host's MIDI output (RX only; its
