@@ -3,8 +3,8 @@
 //!
 //! ADC driver for MIOS32 - STM32F4xx
 //!
-//! Replaces the AIN driver on 2026-08-14. See include/mios32/mios32_adc.h for
-//! what changed for an application; this file is about the silicon.
+//! See include/mios32/mios32_adc.h for the API and its settings; this file
+//! is about the silicon.
 //!
 //!
 //! ONE OR THREE ADCs, DEPENDING ON THE LINE
@@ -22,12 +22,11 @@
 //! written by hand is a list that goes stale.
 //!
 //! Each instance runs INDEPENDENTLY here - its own channel mask, its own DMA
-//! stream, its own scan. The F4's dual and triple SIMULTANEOUS modes are not
-//! implemented: they sample several ADCs on the same trigger for motor
-//! control, and they are what the old AIN driver used ADC1+ADC2 for, purely
-//! to halve its scan time. That trick also forced an even channel count and
-//! a pin-numbering fixup that never worked out (its "app_pin" computation
-//! divided the pin number by two only when the channel count was odd).
+//! stream, its own scan. The dual and triple SIMULTANEOUS modes are NOT
+//! implemented: they sample several ADCs on one trigger, which serves motor
+//! control and costs the freedom to give each instance its own channel
+//! count. Halving a scan time that way also ties the instances together in
+//! the result buffer, where one DMA stream then carries interleaved pairs.
 //!
 //!
 //! CHANNEL MAP
@@ -48,10 +47,9 @@
 //!     10..13 PC0..PC3
 //!     14, 15 PF4, PF5
 //!
-//! PORTF only exists from LQFP144 up. On an LQFP100 - an F407VE, the board
-//! on this bench - ADC3 is real but only channels 0..3 and 10..13 can be
-//! reached. Nothing here prevents selecting the others; the pins simply are
-//! not bonded.
+//! PORTF only exists from LQFP144 up. On an LQFP100 or smaller, ADC3 is
+//! real but only channels 0..3 and 10..13 can be reached. Nothing here
+//! prevents selecting the others; the pins simply are not bonded.
 //!
 //! (*) The temperature sensor is channel 16 on F401, F405, F407, F410, F415
 //! and F417, but channel 18 SHARED WITH VBAT on every other F4 - and the
@@ -63,10 +61,10 @@
 //! NO HARDWARE OVERSAMPLING ON THIS FAMILY
 //! =======================================
 //!
-//! The G0 has an oversampler in the peripheral; the F4 has none - searching
-//! the whole F4 LL for the pattern returns nothing. MIOS32_ADC_OVERSAMPLING_RATE
-//! is therefore honoured by accumulating in the DMA interrupt, the way the old
-//! AIN driver did on every family. Same knob, same number, more CPU.
+//! The STM32G0 has an oversampler in the peripheral; this family has none -
+//! searching the whole F4 LL for the pattern returns nothing.
+//! MIOS32_ADC_OVERSAMPLING_RATE is therefore honoured by accumulating in the
+//! DMA interrupt. Same knob, same number, more CPU.
 //!
 //! \{
 /* ==========================================================================
@@ -353,9 +351,8 @@ static void MIOS32_ADC_ScanComplete(u8 port)
     // cannot wake up a knob nobody is touching
     u16 deadband = adc_channel_idle_ctr[slot] ? adc_deadband : MIOS32_ADC_DEADBAND_IDLE;
 #else
-    // note: the runtime deadband, not the compile-time constant. The old AIN
-    // driver used MIOS32_AIN_DEADBAND here, so MIOS32_AIN_DeadbandSet() did
-    // nothing at all once the idle feature was switched off.
+    // the runtime deadband, not the compile-time constant: this branch must
+    // still honour MIOS32_ADC_DeadbandSet()
     u16 deadband = adc_deadband;
 #endif
 

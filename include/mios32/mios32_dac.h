@@ -2,9 +2,45 @@
 /*
  * Header file for the DAC driver
  *
- * New on 2026-08-14. There was no DAC driver before: mios32_board carried a
- * MIOS32_BOARD_DAC_PinInit()/PinSet() pair, which went with the rest of the
- * frozen-connector API on 2026-08-11 and had no living caller.
+ * Drives the on-chip digital-to-analog converter: you write a 12-bit number,
+ * the pin holds the matching voltage between VSSA and VREF+.
+ *
+ *
+ * HOW TO USE IT
+ * =============
+ *
+ * 1. In your mios32_config.h, ask for the DAC and say which of its channels
+ *    you want. Bit n of the mask is MIOS32_DAC_CHANNELn:
+ *
+ *      #define MIOS32_USE_DAC          1
+ *      #define MIOS32_DAC_CHANNEL_MASK 0x3   // both channels
+ *
+ *    The pins are configured, the channels enabled and set to zero for you;
+ *    nothing has to be called to start.
+ *
+ *    Not every chip has a DAC, and not every one that does has two channels.
+ *    Asking for one that does not exist is refused at compile time with a
+ *    message naming what the chip really has - see the family driver,
+ *    mios32/<FAMILY>/mios32_dac.c, which also lists the output pins.
+ *
+ * 2. Write a voltage:
+ *
+ *      MIOS32_DAC_ChannelSet(MIOS32_DAC_CHANNEL0, 2048);   // half scale
+ *
+ *    The value is 12-bit right aligned, 0..4095, and it is converted
+ *    immediately - there is no trigger to arm and no buffer to flush. Full
+ *    scale is VREF+, so 2048 is about VREF+/2.
+ *
+ * 3. Read back what a channel is driving, or switch one off without losing
+ *    its value:
+ *
+ *      s32 v = MIOS32_DAC_ChannelGet(MIOS32_DAC_CHANNEL0);
+ *      MIOS32_DAC_ChannelEnable(MIOS32_DAC_CHANNEL1, 0);
+ *
+ * BEFORE YOU WIRE IT: decide about the output buffer, below. It is enabled
+ * by default, which lets the pin drive a real load but costs you both ends
+ * of the range - the output can reach neither 0 V nor VREF+. If the extremes
+ * matter, disable it and put an op-amp behind the pin.
  *
  * ==========================================================================
  *

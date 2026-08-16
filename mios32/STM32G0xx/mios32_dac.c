@@ -13,11 +13,10 @@
 //!     DAC1, 2 channels ... G051, G061, G071, G081, G0B1, G0C1
 //!     NO DAC ............. G030, G031, G041, G050, G070, G0B0
 //!
-//! The G070CB of the 5x6 is in the second list: that board has no analog
-//! output whatsoever, and any voltage it needs must come from filtered PWM
-//! or from an external part. The guard below is #if defined(DAC1), so a
-//! project that asks for the DAC on such a chip is told at compile time
-//! instead of failing to link.
+//! On a chip from the second list there is no analog output at all, and a
+//! voltage has to come from filtered PWM or from an external part instead.
+//! The guard below is #if defined(DAC1), so asking for the DAC on such a
+//! chip is answered at compile time rather than by a link failure.
 //!
 //! Every G0 that has a DAC has BOTH channels - the single-channel case is an
 //! F4 peculiarity (the F410).
@@ -70,7 +69,7 @@
 // the #else, the real diagnostic would be buried under a page of "undeclared
 // LL_DAC_CHANNEL_1" noise from a body that cannot compile anyway.
 #if !defined(DAC1)
-# error "MIOS32_USE_DAC requested, but this STM32G0 has no DAC. It exists on G051/G061/G071/G081/G0B1/G0C1 only - not on G030, G031, G041, G050, G070 or G0B0 (the G070CB of the 5x6 is one of these)."
+# error "MIOS32_USE_DAC requested, but this STM32G0 has no DAC. It exists on G051/G061/G071/G081/G0B1/G0C1 only - not on G030, G031, G041, G050, G070 or G0B0."
 #else
 
 #if !MIOS32_DAC_CHANNEL_MASK

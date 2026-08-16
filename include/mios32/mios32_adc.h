@@ -2,33 +2,66 @@
 /*
  * Header file for the ADC driver
  *
- * Replaces MIOS32_AIN on 2026-08-14. "ADC" is what every ST reference manual
- * calls this peripheral; "AIN" meant "the analog inputs of a MIDIbox core
- * module", and that is precisely why the old driver carried a board pinout
- * hard-coded in its channel table (J5A.A0 -> PC1, J5A.A1 -> PC2, ...) - the
- * last surviving piece of the frozen-connector API deleted with mios32_board
- * on 2026-08-11. Renaming it to what the silicon calls it removes the place
- * where a board could hide.
+ * Scans a set of analog inputs by DMA, applies a deadband so that only real
+ * movement is reported, and calls the application back with what moved.
  *
- * What a port of old code has to know:
  *
- *   - THE CHANNEL MASK MEANS SOMETHING ELSE NOW. MIOS32_AIN_CHANNEL_MASK
- *     selected among 8 fixed J5 pins. MIOS32_ADCn_CHANNEL_MASK selects
- *     HARDWARE CHANNELS: bit c enables channel c of that ADC. Nothing is
- *     remapped, and nothing is compacted - MIOS32_ADC_ChannelGet() and the
- *     notification callback both speak in hardware channel numbers. On G0
- *     that means the valid bits are 0..11 and 15..18, because channels 12,
- *     13 and 14 are the temperature sensor, VREFINT and VBAT (see the
- *     channel map at the head of mios32/STM32G0xx/mios32_adc.c).
+ * HOW TO USE IT
+ * =============
  *
- *   - THE AINX4 MULTIPLEXER SUPPORT IS GONE. MIOS32_AIN_MUX_PINS, the three
- *     select lines on J5C and the mux_selection_order[] table were the
- *     MBHP_AINX4 module: an external board, driven from inside a peripheral
- *     driver. External analog expanders belong in modules/, next to ainser.
+ * 1. In your mios32_config.h, name the ADC you want and the channels it must
+ *    convert. MIOS32_ADCn is ADC(n+1), and the bits of the mask are HARDWARE
+ *    channel numbers:
  *
- *   - THE APPLICATION HOOK GAINED THE PORT. APP_AIN_NotifyChange(pin, value)
- *     became APP_ADC_NotifyChange(port, chn, value), because an F4 can scan
- *     three ADCs at once and "pin 3" would otherwise be ambiguous.
+ *      #define MIOS32_USE_ADC0          1        // ADC1
+ *      #define MIOS32_ADC0_CHANNEL_MASK 0x000f   // its channels 0,1,2,3
+ *
+ *    That is the whole declaration - MIOS32_USE_ADC derives itself, and the
+ *    scan starts on its own. Nothing else has to be called to get going: the
+ *    driver is initialised for you and rescanned every millisecond.
+ *
+ *    WHICH channel numbers are legal depends on the chip, and it is not the
+ *    same on both families - the STM32G0 in particular does not number its
+ *    inputs 0..15. Read the channel map at the head of the family driver,
+ *    mios32/<FAMILY>/mios32_adc.c, before choosing a mask; an impossible
+ *    choice is refused there at compile time with a message that says why.
+ *
+ * 2. Receive movement in your application:
+ *
+ *      void APP_ADC_NotifyChange(u32 port, u32 chn, u32 value)
+ *      {
+ *        // chn is the hardware channel number, exactly as in the mask above
+ *        // value is 0..4095, or 0..(4095 * oversampling rate)
+ *      }
+ *
+ *    This is called once per channel that moved by more than the deadband,
+ *    and never for a channel that merely trembles.
+ *
+ * 3. Or read a channel whenever you like, instead of waiting to be told:
+ *
+ *      s32 v = MIOS32_ADC_ChannelGet(MIOS32_ADC_PORT_ADC0, 2);
+ *
+ *    It returns the last published value, or < 0 if that channel was not in
+ *    the mask.
+ *
+ * The deadband can be widened or narrowed while running with
+ * MIOS32_ADC_DeadbandSet(); everything else is a compile-time setting, and
+ * every one of them can be overridden from mios32_config.h - see the list
+ * below and the per-family list in the driver.
+ *
+ *
+ * TWO THINGS WORTH KNOWING BEFORE YOU WIRE ANYTHING
+ * =================================================
+ *
+ * Channel numbers are the silicon's. Nothing is remapped and nothing is
+ * compacted: the mask, MIOS32_ADC_ChannelGet() and the callback all speak
+ * the numbering of the reference manual. If you enable channels 3 and 9 you
+ * are called back with 3 and 9, not with 0 and 1.
+ *
+ * Driving an external analog multiplexer is not this driver's job. If you
+ * need one, switch it from the callback installed by
+ * MIOS32_ADC_ServicePrepareCallback_Init(): it runs before each scan and can
+ * postpone that scan while the multiplexer settles.
  *
  * ==========================================================================
  *
@@ -95,11 +128,10 @@
 // 1 disables it. The result keeps the sum, so the reported value spans
 // 12 bits * rate - with rate 4 the range is 0..16383, not 0..4095.
 //
-// HOW it is done differs, and deliberately so: the G0 has a hardware
+// HOW it is done differs, and deliberately so: the STM32G0 has a hardware
 // oversampler (ratio 2..256, with its own right-shift) and uses it, costing
-// nothing; the F4 has none at all and accumulates in the DMA interrupt, the
-// way the old AIN driver did on every family. Same knob, same result, one
-// of the two families simply gets it for free.
+// nothing; the STM32F4 has none at all and accumulates in the DMA interrupt.
+// Same knob, same result, one of the two families simply gets it for free.
 #ifndef MIOS32_ADC_OVERSAMPLING_RATE
 #define MIOS32_ADC_OVERSAMPLING_RATE 1
 #endif
@@ -107,9 +139,8 @@
 // The accumulator is 16 bits wide on both families - it is the ADC data
 // register itself on G0, and a u16 array on F4 - so a sum of 12-bit samples
 // stops fitting above 16 conversions (16 * 4095 = 65520, 32 would wrap).
-// The old AIN driver had exactly the same u16 limit and never checked it:
-// MIOS32_AIN_OVERSAMPLING_RATE above 16 silently overflowed and produced
-// garbage that looked like noise. It is checked here instead.
+// Checked here rather than left to overflow into something that looks like
+// noise on an oscilloscope.
 #if MIOS32_ADC_OVERSAMPLING_RATE > 16
 # error "MIOS32_ADC_OVERSAMPLING_RATE > 16 overflows the 16-bit accumulator (rate * 4095 must stay below 65536). Use 16 at most, or divide in the application."
 #endif

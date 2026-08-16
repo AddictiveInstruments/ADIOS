@@ -3,8 +3,8 @@
 //!
 //! ADC driver for MIOS32 - STM32G0xx
 //!
-//! Replaces the AIN driver on 2026-08-14. See include/mios32/mios32_adc.h for
-//! what changed for an application; this file is about the silicon.
+//! See include/mios32/mios32_adc.h for the API and its settings; this file
+//! is about the silicon.
 //!
 //!
 //! THE G0 HAS EXACTLY ONE ADC, ON EVERY LINE
@@ -677,9 +677,8 @@ MIOS32_ADC_DMA_IRQHANDLER_FUNC
     // cannot wake up a knob nobody is touching
     u16 deadband = adc_channel_idle_ctr[i] ? adc_deadband : MIOS32_ADC_DEADBAND_IDLE;
 #else
-    // note: the runtime deadband, not the compile-time constant. The old AIN
-    // driver used MIOS32_AIN_DEADBAND here, so MIOS32_AIN_DeadbandSet() did
-    // nothing at all once the idle feature was switched off.
+    // the runtime deadband, not the compile-time constant: this branch must
+    // still honour MIOS32_ADC_DeadbandSet()
     u16 deadband = adc_deadband;
 #endif
 
