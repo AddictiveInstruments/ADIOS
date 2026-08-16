@@ -22,10 +22,9 @@
 
 #include <mios32.h>
 
-// Opt-in since 2026-08-14: declare MIOS32_USE_SPI_MIDI in your project's
-// mios32_config.h. It used to arrive on its own and had to be refused with
-// MIOS32_DONT_USE_SPI_MIDI - which mios32_midi.c had ALREADY anticipated, its
-// dispatcher guarding the SPIM branches with #if defined(MIOS32_USE_SPI_MIDI).
+// To use it, declare MIOS32_USE_SPI_MIDI in your project's
+// mios32_config.h. The MIDI dispatcher guards its SPIM branches with the
+// same symbol, so the ports appear and disappear together with this file.
 #if defined(MIOS32_USE_SPI_MIDI)
 
 // The link needs its bus. Same guard as sdcard and srio: one sentence at
@@ -306,8 +305,8 @@ static void MIOS32_SPI_MIDI_DMA_Callback(void)
 
 		// give a board driver the chance to claim this word before we
 		// read it as MIDI - see MIOS32_SPI_MIDI_RawWordCallback_Init().
-		// The M16 uses it for its status channel (CIN 0x01); that test
-		// used to be hard-wired right here.
+		// A board that carries its own protocol alongside MIDI claims the
+		// words it recognises here, typically by their CIN.
 		if( raw_word_callback_func == NULL || raw_word_callback_func(word) == 0 ){
 	    	mios32_midi_package_t p;
 			p.cin_cable = word >> 24;

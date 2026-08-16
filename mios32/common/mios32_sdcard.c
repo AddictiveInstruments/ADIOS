@@ -44,16 +44,15 @@
 
 #include <mios32.h>
 
-// Opt-in since 2026-08-13: declare MIOS32_USE_SDCARD in your project's
-// mios32_config.h. It used to arrive on its own and had to be refused with
-// MIOS32_DONT_USE_SDCARD, which every project in the tree did.
+// To use it, declare MIOS32_USE_SDCARD in your project's
+// mios32_config.h.
 #if defined(MIOS32_USE_SDCARD)
 
 
 /////////////////////////////////////////////////////////////////////////////
 // This driver is a block device, nothing more: sectors in, sectors out, over
 // an SPI bus. It therefore needs that bus to exist. Saying so here turns what
-// used to be four "undefined reference to MIOS32_SPI_..." at link time into
+// turns four "undefined reference to MIOS32_SPI_..." at link time into
 // one sentence at compile time.
 /////////////////////////////////////////////////////////////////////////////
 

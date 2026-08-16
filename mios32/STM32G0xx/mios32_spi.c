@@ -12,7 +12,7 @@
 //!
 //! If SPI low-level functions are used to talk to something else on the same
 //! port, make sure no MIOS32_* driver is claiming it at the same time. Those
-//! drivers are opt-in since 2026-08-13, so this is a matter of NOT declaring
+//! drivers are opt-in, so this is a matter of NOT declaring
 //! them (MIOS32_USE_SDCARD and the like) rather than of refusing them.
 //!
 //! Note that additional chip select lines can be easily added by using

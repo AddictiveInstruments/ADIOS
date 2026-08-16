@@ -12,8 +12,7 @@
 //! Due to pin conflicts with default setting of MIOS32_SRIO, MIOS_I2S is 
 //! disabled by default, and has to be enabled via MIOS32_USE_I2S in
 //! mios32_config.h<BR>
-//! MIOS32_SRIO should either be left undeclared (it is opt-in since
-//! 2026-08-13: MIOS32_USE_SRIO), or 
+//! MIOS32_SRIO should either be left undeclared, or 
 //! mapped to another port via MIOS32_SRIO_SPI
 //!
 //! I2S is configured for standard Philips format with 2x16 bits for L/R

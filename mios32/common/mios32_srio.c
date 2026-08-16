@@ -18,9 +18,8 @@
 
 #include <mios32.h>
 
-// Opt-in since 2026-08-13: declare MIOS32_USE_SRIO in your project's
-// mios32_config.h. It used to arrive on its own and had to be refused with
-// MIOS32_DONT_USE_SRIO, which every project in the tree did.
+// To use it, declare MIOS32_USE_SRIO in your project's
+// mios32_config.h.
 #if defined(MIOS32_USE_SRIO)
 
 

@@ -594,7 +594,7 @@
 // Marking a byte as activity, from the RX/TX interrupts. MIDI clock (0xf8)
 // is deliberately excluded: a synced setup sends it 24 times per beat and
 // would hold the indicator permanently lit, showing nothing. The rule lives
-// here, once - it used to be an inline "if(b!=0xf8)" repeated at all 18
+// here, once, rather than as an inline "if(b!=0xf8)" repeated at all 18
 // capture sites, where it read as an unexplained magic value.
 #define UART_ACT_MARK_RX(n, b)  { if( (b) != 0xf8 ) uart_midi_act |= UART_ACT_RX(n); }
 #define UART_ACT_MARK_TX(n, b)  { if( (b) != 0xf8 ) uart_midi_act |= UART_ACT_TX(n); }
