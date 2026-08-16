@@ -145,9 +145,8 @@ int main(void)
   MIOS32_TIMESTAMP_Init(0);
 #endif
 #ifdef MIOS32_USE_SOL
-  // was MIOS32_BOARD_Init(): the board module carried the MBHP boards' frozen
-  // connector definitions (J5/J10/J15/J28/LED/DAC) and is gone. All that
-  // survived of it here is the status LED, which is the sign-of-life pin.
+  // sign-of-life LED: opt in with MIOS32_USE_SOL and name the pin with
+  // MIOS32_SOL_PORT / MIOS32_SOL_PIN, see mios32_utils.h
   MIOS32_SOL_Init();
 #endif
 #ifdef MIOS32_USE_SPI

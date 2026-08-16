@@ -1,7 +1,7 @@
 // $Id$
 //! \defgroup MIOS32_SPI
 //!
-//! Hardware Abstraction Layer for SPI ports of STM32F4 (MBHP_DIPCOREF4)
+//! Hardware Abstraction Layer for the SPI ports of the STM32F4
 //!
 //! Three ports are provided: SPI0 (SPI1 peripheral), SPI1 (SPI2 peripheral)
 //! and SPI2 (SPI3 peripheral). Each port has a single CS line under manual

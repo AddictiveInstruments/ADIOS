@@ -32,7 +32,7 @@
 // how many CANs are supported?
 #define NUM_SUPPORTED_CANS MIOS32_CAN_NUM
 #if MIOS32_CAN_NUM >1
-// Note:If CAN2 is used, J19:SO(PB5) and J4B:SC(PB6))  OR  J8/9:SC(PB13) and J8/9:RC1(PB12) are no more available! :-/
+// Note: enabling CAN2 takes PB5/PB6 or PB12/PB13, which other peripherals may want
 // Defines the start filter bank for the CAN2 interface (Slave) in the range 0 to 27.
 #define MIOS32_CAN2_STARTBANK 14
 #else

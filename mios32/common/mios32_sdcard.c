@@ -1,8 +1,7 @@
 // $Id$
 //! \defgroup MIOS32_SDCARD
 //!
-//! SD Card is accessed via SPI1 (J16) or alternatively via SPI2 (J8/9)
-//! A bitbanging solution (for using alternative ports) will be provided later.
+//! The card is reached over an SPI port, named by MIOS32_SDCARD_SPI.
 //!
 //! The card has to be supplied with 3.3V!
 //!

@@ -591,7 +591,7 @@ s32 MIOS32_DIN_MIDI_PackageReceive(u8 din_port, mios32_midi_package_t *package)
 	  if( (midix->running_status & 0xf0) != 0xf0 ) {
 	    midix->package.cin = midix->running_status >> 4; // common MIDI message
 	  } else {
-	    switch( midix->expected_bytes ) { // MEMO: == 0 comparison was a bug in original MBHP_USB code
+	    switch( midix->expected_bytes ) {
   	      case 0:
 		midix->package.cin = 5; // 5: SysEx common with one byte
 		break;

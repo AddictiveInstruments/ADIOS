@@ -51,7 +51,7 @@ const uint8_t APBPrescTable[8]  = {0, 0, 0, 0, 1, 2, 3, 4};
 //     crystal (~1%, more over temperature) - fine for UART MIDI, but a
 //     project relying on tight USB timing may want the crystal instead.
 //   - define MIOS32_SYS_CLOCK_SOURCE_HSE in mios32_config.h to switch to the
-//     external 8 MHz crystal (MBHP_CORE_STM32F4) instead.
+//     an external 8 MHz crystal instead.
 // PLL_M and PLL_P stay at /8 and /2 for both sources here (only PLL_N and the
 // source differ) - if you need different values, note that LL_RCC_PLL_
 // ConfigDomain_SYS() takes named enums (LL_RCC_PLLM_DIV_x / LL_RCC_PLLP_DIV_x

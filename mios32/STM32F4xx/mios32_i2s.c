@@ -3,17 +3,18 @@
 //!
 //! I2S Functions
 //!
-//! Approach: I2S pins are connected to J8 of the MBHP_CORE_STM32 module
-//! Optionally a master clock is available for 8x oversampling, which has
-//! to be explicitely enabled via MIOS32_I2S_ENABLE_MCLK, and has to be
-//! connected to J15b:E (pinning see below)
+//! Streams audio samples out over I2S by DMA, calling back for each buffer
+//! that needs filling. The pins are listed below.
+//!
+//! A master clock for 8x oversampling is optional: enable it with
+//! MIOS32_I2S_ENABLE_MCLK and take it from the MCLK pin listed below.
 //!
 //! Due to pin conflicts with default setting of MIOS32_SRIO, MIOS_I2S is 
 //! disabled by default, and has to be enabled via MIOS32_USE_I2S in
 //! mios32_config.h<BR>
 //! MIOS32_SRIO should either be left undeclared (it is opt-in since
 //! 2026-08-13: MIOS32_USE_SRIO), or 
-//! mapped to SPI0 (-> J16 of MBHP_CORE_STM32 module) via MIOS32_SRIO_SPI 0
+//! mapped to another port via MIOS32_SRIO_SPI
 //!
 //! I2S is configured for standard Philips format with 2x16 bits for L/R
 //! channel at 48 kHz by default. Other protocols/sample rates can be selected

@@ -20,7 +20,7 @@
 
 // This switch is only for expert usage - it frees 16k, but can lead to
 // big trouble if a user downloads the binary with the MIOS32 BSL, and
-// doesn't have access to a JTAG interface or COM port + MBHP_LTC module
+// does not have a way to reflash it over SWD
 // to recover the BSL
 #ifndef MIOS32_DONT_INCLUDE_BSL
 // MIOS32_BSL_INC_FILE is defined by the generated mios32_bsl_boundary.h
@@ -30,6 +30,6 @@
 # ifdef MIOS32_BSL_INC_FILE
 #  include MIOS32_BSL_INC_FILE
 # else
-#  error "MIOS32_BSL_INC_FILE not defined - run etc/gen_bsl_boundary.sh for this project first (see apps/Bruno/5x6_505/Makefile for an example), or define MIOS32_DONT_INCLUDE_BSL if this project doesn't need an embedded bootloader image."
+#  error "MIOS32_BSL_INC_FILE not defined - run etc/gen_bsl_boundary.sh for this project first (see any project Makefile for how it is invoked)"
 # endif
 #endif /* MIOS32_DONT_INCLUDE_BSL */

@@ -42,7 +42,7 @@
 
 
 // special callback which will be called for DIN pin emulation
-// currently only used by MIDIbox NG, could change to a more generic method
+// lets a project synthesise input pin states before they are compared
 #ifdef MIOS32_SRIO_CALLBACK_BEFORE_DIN_COMPARE
 extern void MIOS32_SRIO_CALLBACK_BEFORE_DIN_COMPARE(void);
 #endif
@@ -346,7 +346,7 @@ static void MIOS32_SRIO_DMA_Callback(void)
   MIOS32_SPI_CS_PinSet(MIOS32_SRIO_SPI, 1);
 
   // special callback which will be called for DIN pin emulation
-  // currently only used by MIDIbox NG, could change to a more generic method
+  // lets a project synthesise input pin states before they are compared
 #ifdef MIOS32_SRIO_CALLBACK_BEFORE_DIN_COMPARE
   MIOS32_SRIO_CALLBACK_BEFORE_DIN_COMPARE();
 #endif

@@ -44,8 +44,8 @@ C_INCLUDE += 	-I $(MIOS32_PATH)/programming_models/traditional \
 # new one is added to etc/ld or etc/startup.
 #
 # .ld naming (etc/ld/$(FAMILY)/) is NOT uniform though: the handful of
-# chips actively used by a real project so far (5x6_505, the bootloader
-# targets) keep their exact PROCESSOR name (e.g. STM32G070CB.ld) - a .ld's
+# chips actively used by a real project so far keep their exact PROCESSOR
+# name (e.g. STM32G070CB.ld) - a .ld's
 # content never depends on package anyway, so the much larger reference
 # library added 2026-08-04 (etc/gen_bsl_boundary.sh's completion pass, ST's
 # own CubeIDE MCU database as source) uses a package-less name instead
@@ -170,8 +170,7 @@ endif
 # Storing something means owning the page it sits in, so asking for the
 # feature reserves a page when the project has reserved none. A project that
 # already keeps data up there declares the real count instead and the record
-# lands in its last page - the 5x6 holds 8K of sound banks and needs no extra
-# page at all.
+# lands in its last page, needing no extra page at all.
 #
 # NOTE: this block MUST come before the MIOS32_USERDATA_PAGES one below - the
 # ?= default has to be in place before that block tests whether the variable is
@@ -198,8 +197,8 @@ endif
 # whole point of it: the template shortens its FLASH region by exactly this
 # much, so an application growing into its own data fails to LINK instead of
 # overwriting it at the first write. Nothing prevented that until now - a
-# project's FLASH region ran to the very last byte of flash, the 5x6's sound
-# banks included.
+# project's FLASH region ran to the very last byte of flash, stored data
+# included.
 #
 # Pages, not bytes: uniform 2K erase granularity on G0. F4 sectors are unequal
 # and its last one is 128K, useless for a few bytes, so that family needs the

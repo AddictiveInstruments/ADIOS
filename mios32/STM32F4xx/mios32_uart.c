@@ -18,7 +18,7 @@
 //! Unlike STM32G0xx, every F4 UART/USART has its OWN independent NVIC vector
 //! - no shared-handler complexity here.
 //!
-//! Default pin/peripheral assignment (MBHP_DIPCOREF4) - override individually
+//! Default pin/peripheral assignment - override individually
 //! in a local mios32_config.h if your board uses different pins:
 //! \code
 //!   #define MIOS32_UART0_TX_PORT     GPIOA

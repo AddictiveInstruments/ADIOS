@@ -41,10 +41,8 @@
  * put the result.
  *
  * sprintf() and vsprintf() are UNAFFECTED and are what everything actually
- * uses: MIOS32_MIDI's answers to MIOS Studio's queries, MIOS32_LCD's screen
- * printf, and the applications (8 calls in 5x6_505, 2 in 5x6_626). Not one
- * printf() to console existed anywhere in the tree when com was removed -
- * which is why removing it cost nothing.
+ * uses: the MIDI layer's answers to host queries, the LCD layer's screen
+ * printf, and application code.
  *
  * To get console output back, give printchar() an exit again here: one line
  * calling whatever transport that project actually has.

@@ -15,11 +15,9 @@
 //!
 //! Port numbering follows ST's own peripheral numbering: MIOS32_UARTn is
 //! USART(n+1) - UART0=USART1, UART1=USART2, ... UART5=USART6 - then
-//! UART6/UART7 for LPUART1/LPUART2. Until 2026-08-10 the mapping was
-//! inherited from the MBHP core's connector wiring instead (UART0 was
-//! USART3), which made every project config read like a puzzle and silently
-//! dropped MIDI on the 2-USART chips, where USART3 doesn't exist. Projects
-//! written against the old numbering must renumber their MIOS32_USE_UARTx
+//! UART6/UART7 for LPUART1/LPUART2. Check the tier table below: the smaller
+//! chips do not carry every USART, and asking for one they lack is refused
+//! at compile time. Declare the ports you want with MIOS32_USE_UARTx
 //! and any pin/peripheral overrides.
 //!
 //! Coverage by chip tier:

@@ -5,8 +5,7 @@
 //!
 //! Every G0 carries two I2C, and G0B0/G0B1/G0C1 carry a third. Port
 //! numbering follows the peripheral: MIOS32_I2C0 is I2C1, MIOS32_I2C1 is
-//! I2C2, MIOS32_I2C2 is I2C3. (The pre-2026 driver mapped its port 0 onto
-//! I2C2, an MBHP board wiring artifact - that inversion is gone.)
+//! I2C2, MIOS32_I2C2 is I2C3 - see the port table below.
 //!
 //! The transfer engine itself is not here: it lives in
 //! mios32/common/mios32_i2c_v2.inc, shared with the FMPI2C1 port of the

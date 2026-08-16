@@ -128,7 +128,7 @@ s32 MIOS32_LCD_ParametersFetchFromBslInfoRange(void)
   // initial LCD parameters
   static const mios32_lcd_parameters_t default_parameters = {
     .lcd_type = MIOS32_LCD_TYPE_CLCD,
-    .num_x = 2, // since MBHP_CORE_STM32 and MBHP_CORE_LPC17 has two J15 ports
+    .num_x = 2, // two display devices side by side; override in mios32_config.h
     .num_y = 1,
     .width = 20, // since most people will (probably) build the SCS
     .height = 2,

@@ -1691,7 +1691,7 @@ static s32 MIOS32_MIDI_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
 	// this covers the scenario where other USB1..7 ports are used for MIDI Port forwarding, and a MIOS8 core
 	// is connected to one of these ports
 	// MIOS Studio reports "Detected MIOS8 and MIOS32 response - selection not supported yet!" in this case
-	// By ignoring >= USB1 <= USB7 we have at least a workaround which works (for example) for MIDIbox LC
+	// ignoring USB1..USB7 keeps multi-port hosts working
 	if( port >= USB1 && port <= USB15 )
 		return -1;
 
