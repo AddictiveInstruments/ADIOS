@@ -1,4 +1,4 @@
-// $Id: mios32_sdcard.h 964 2010-03-11 23:59:32Z philetaylor $
+// $Id$
 /*
  * Header file for MMC/SD Card Driver
  *
@@ -20,13 +20,35 @@
 
 // An SD card is not a peripheral of the chip: it is a device at the end of an
 // SPI bus, and this driver only knows how to move 512-byte sectors over it.
-// Everything file-shaped lives above, in modules/ - fatfs (ChaN's FatFs) and
-// dosfs bind to the four entry points SectorRead/SectorWrite/CheckAvailable/
-// CSDRead, modules/file adds the MIDIbox layer that MIOS Studio's file
-// browser talks to over SysEx.
+// Everything file-shaped lives above, in modules/ - a filesystem such as
+// FatFs binds to the four entry points SectorRead, SectorWrite,
+// CheckAvailable and CSDRead, and offers open/read/write on top of them.
 //
-// Opt-in since 2026-08-13: declare MIOS32_USE_SDCARD in your project's
-// mios32_config.h, together with the SPI port below.
+// HOW TO USE IT
+// -------------
+// 1. In your mios32_config.h, ask for the driver and name the SPI port the
+//    card is wired to. The SPI port has to be declared as well:
+//
+//      #define MIOS32_USE_SDCARD 1
+//      #define MIOS32_USE_SPI0   1
+//      #define MIOS32_SDCARD_SPI 0
+//
+// 2. Power the card up and see whether one is actually there. This is not
+//    done for you at startup, because a card can be inserted much later:
+//
+//      MIOS32_SDCARD_PowerOn();                  // < 0 if no card answers
+//      if( MIOS32_SDCARD_CheckAvailable(1) > 0 ) { ... }
+//
+//    Call CheckAvailable() periodically with 0 to notice a card being
+//    removed, and with 1 to re-detect one that has just been inserted.
+//
+// 3. Move sectors, 512 bytes at a time, addressed by sector number:
+//
+//      u8 sector[512];
+//      MIOS32_SDCARD_SectorRead(0, sector);
+//
+// If you want files rather than sectors, stop here and use a filesystem
+// module instead - it calls these functions for you.
 
 // Which SPI port carries the card. The port itself must be declared too
 // (MIOS32_USE_SPI0 / MIOS32_USE_SPI1) - see the #error in mios32_sdcard.c,
@@ -36,11 +58,9 @@
 #define MIOS32_SDCARD_SPI 0
 #endif
 
-// (MIOS32_SDCARD_SPI_RC_PIN was defined here and used NOWHERE - a leftover
-// from the MBHP boards, where one SPI port exposed two chip select lines,
-// J16:RC1 and J16:RC2. A port now has a single CS under manual GPIO control,
-// named by MIOS32_SPIn_CS_PORT/_PIN in the family driver, and this driver
-// drives it through MIOS32_SPI_CS_PinSet(port, level). Removed 2026-08-13.)
+// The chip select line is not named here: a port has one, declared as
+// MIOS32_SPIn_CS_PORT/_PIN in the family driver, and this driver drives it
+// through MIOS32_SPI_CS_PinSet(port, level).
 
 
 /////////////////////////////////////////////////////////////////////////////

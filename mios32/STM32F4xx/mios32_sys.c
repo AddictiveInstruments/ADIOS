@@ -1,4 +1,4 @@
-// $Id: mios32_sys.c 1965 2014-03-02 14:04:00Z tk $
+// $Id$
 //! \defgroup MIOS32_SYS
 //!
 //! System Initialisation for MIOS32

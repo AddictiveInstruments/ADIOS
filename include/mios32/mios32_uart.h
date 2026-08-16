@@ -1,4 +1,4 @@
-// $Id: mios32_uart.h 2403 2016-08-15 17:47:50Z tk $
+// $Id$
 /*
  * Header file for UART functions
  *

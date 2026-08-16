@@ -1,4 +1,4 @@
-// $Id: printf-stdarg.c 2394 2016-08-03 06:12:50Z Sauraen $
+// $Id$
 /*
 	Copyright 2001, 2002 Georges Menie (www.menie.org)
 	stdarg version contributed by Christian Ettinger

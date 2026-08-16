@@ -1,4 +1,4 @@
-// $Id: main.c 42 2008-09-30 21:49:43Z tk $
+// $Id$
 /*
  * Traditional Programming Model
  * Provides similar hooks like PIC based MIOS8 to the application

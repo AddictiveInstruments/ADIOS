@@ -1,4 +1,4 @@
-// $Id: mios32_enc.c 2018 2014-06-03 21:17:27Z tk $
+// $Id$
 //! \defgroup MIOS32_ENC
 //!
 //! Rotary Encoder functions for MIOS32

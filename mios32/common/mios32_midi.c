@@ -1,4 +1,4 @@
-// $Id: mios32_midi.c 2560 2018-01-15 22:08:29Z Antichambre $
+// $Id$
 //! \defgroup MIOS32_MIDI
 //!
 //! MIDI layer functions for MIOS32

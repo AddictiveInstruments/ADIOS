@@ -1,4 +1,4 @@
-// $Id: mios32_dout.c 1695 2013-02-16 22:16:55Z tk $
+// $Id$
 //! \defgroup MIOS32_SROUT
 //!
 //! SROUT functions for MIOS32

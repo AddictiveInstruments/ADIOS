@@ -1,4 +1,4 @@
-// $Id: mios32_usb_com.h 1156 2011-03-27 18:45:18Z tk $
+// $Id$
 /*
  * Header file for USB COM Driver
  *

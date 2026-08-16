@@ -2,16 +2,16 @@
 /*
  * Header file for MIOS32_UTILS - delay, timers, stopwatch, sign-of-life.
  *
- * ONE header for ONE implementation file. All four APIs below are realised
- * in mios32/<FAMILY>/mios32_utils.c, and always have been: what used to be
- * here was four separate headers - mios32_delay.h, mios32_timer.h,
- * mios32_stopwatch.h and mios32_sol.h - 139 lines carrying 13 prototypes
- * between four copyright blocks, four include guards and twelve empty
- * section banners. Merged 2026-08-13. Nothing included them directly;
- * mios32.h was their only reader.
+ * ONE header for ONE implementation file: the four APIs below are grouped
+ * rather than merely stacked, because all four are built on the chip's
+ * timers and share mios32/<FAMILY>/mios32_utils.c.
  *
- * They are grouped here rather than merely stacked: all four are built on
- * the chip's timers, which is why they share an implementation file.
+ *   DELAY     - busy-wait a number of microseconds.
+ *   TIMER     - call a function periodically from a hardware timer IRQ.
+ *   STOPWATCH - measure how long something takes, in microseconds.
+ *   SOL       - toggle a GPIO as a sign of life.
+ *
+ * Each section below says what to define to enable it and what to call.
  *
  * (MIOS32_TIMESTAMP was considered for inclusion here and deliberately left
  * out: it is pure software - a u32 incremented by main.c's 1 mS tick - so
@@ -65,11 +65,16 @@ extern u32 MIOS32_STOPWATCH_ValueGet(void);
 /////////////////////////////////////////////////////////////////////////////
 // SOL - sign of life
 //
-// A single GPIO toggled as a heartbeat/liveness indicator - the lightweight,
-// project-configurable replacement for the fixed on-board LED that
-// mios32_board.c used to own. Opt-in with MIOS32_USE_SOL; the pin comes from
-// MIOS32_SOL_PORT / MIOS32_SOL_PIN in the project's mios32_config.h, see
-// mios32_utils.c for the default.
+// A single GPIO toggled as a heartbeat, to show at a glance that the board
+// is still running.
+//
+//   #define MIOS32_USE_SOL 1
+//   #define MIOS32_SOL_PORT GPIOA          // see mios32_utils.c for the
+//   #define MIOS32_SOL_PIN  LL_GPIO_PIN_5  // per-family default
+//
+// The pin is configured for you; call MIOS32_SOL_Tog() from a periodic hook
+// and watch the LED. Set/Clr are there when the state should mean something
+// rather than just blink.
 /////////////////////////////////////////////////////////////////////////////
 
 extern s32 MIOS32_SOL_Init(void);

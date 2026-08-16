@@ -1,4 +1,4 @@
-// $Id: mios32_sdcard.c 2323 2016-03-17 07:54:35Z tk $
+// $Id$
 //! \defgroup MIOS32_SDCARD
 //!
 //! SD Card is accessed via SPI1 (J16) or alternatively via SPI2 (J8/9)

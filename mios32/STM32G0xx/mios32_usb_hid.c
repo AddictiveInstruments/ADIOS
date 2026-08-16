@@ -1,4 +1,4 @@
-// $Id: mios32_usb_hid.c 1938 2014-01-19 17:13:43Z tk $
+// $Id$
 //! \defgroup MIOS32_USB_HID
 //!
 //! USB HID (mouse/keyboard) layer for MIOS32 - STM32G0xx

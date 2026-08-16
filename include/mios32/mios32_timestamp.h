@@ -1,4 +1,4 @@
-// $Id: mios32_timestamp.h 1919 2014-01-08 19:13:48Z tk $
+// $Id$
 /*
  * Header file for Timestamp
  *

@@ -1,4 +1,4 @@
-// $Id: mios32_i2s.c 1934 2014-01-18 00:03:02Z tk $
+// $Id$
 //! \defgroup MIOS32_I2S
 //!
 //! I2S Functions

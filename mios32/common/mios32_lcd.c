@@ -1,4 +1,4 @@
-// $Id: mios32_lcd.c 2122 2015-01-15 19:41:04Z tk $
+// $Id$
 //! \defgroup MIOS32_LCD
 //!
 //! LCD functions for MIOS32

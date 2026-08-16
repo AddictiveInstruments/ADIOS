@@ -1,4 +1,4 @@
-// $Id: mios32_usb_midi.h 1800 2013-06-02 22:09:03Z tk $
+// $Id$
 /*
  * Header file for USB MIDI Driver
  *

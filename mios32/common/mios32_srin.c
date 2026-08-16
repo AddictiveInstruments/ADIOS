@@ -1,4 +1,4 @@
-// $Id: mios32_din.c 1423 2012-02-12 18:02:22Z tk $
+// $Id$
 //! \defgroup MIOS32_SRIN
 //!
 //! SRIN functions for MIOS32

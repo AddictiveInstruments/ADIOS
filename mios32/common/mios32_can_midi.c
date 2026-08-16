@@ -1,4 +1,4 @@
-// $Id: mios32_uart_midi.c 2312 2016-02-27 23:04:51Z tk $
+// $Id$
 //! \defgroup MIOS32_CAN_MIDI
 //!
 //! CAN MIDI layer for MIOS32

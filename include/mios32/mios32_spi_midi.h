@@ -1,4 +1,4 @@
-// $Id: mios32_spi_midi.h 2097 2014-12-05 22:05:12Z tk $
+// $Id$
 /*
  * Header file for SPI MIDI functions
  *
@@ -18,16 +18,36 @@
 // Global definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// THIS TRANSPORT IS TRANSPARENT. It moves MIDI packages over an SPI link and
-// knows nothing about what sits at the other end. Everything specific to one
-// particular board - the M16 FPGA interface: its command set, its GPIO
-// groups, its status reporting, its running-status control - left for
-// modules/m16 on 2026-08-14, where it belongs. What used to be a
-// "#if defined MIOS32_SPI_MIDI_USE_M16" branch inside each #ifndef below is
-// now simply a value that the board's project declares for itself.
+// Carries MIDI packages over an SPI link, to a board that offers one or
+// more MIDI ports at the far end.
 //
-// A board driver that needs to see the raw words before they are parsed as
-// MIDI registers itself with MIOS32_SPI_MIDI_RawWordCallback_Init().
+// THIS TRANSPORT IS TRANSPARENT: it moves packages and knows nothing about
+// what sits at the other end. Whatever is specific to one board - its
+// command set, its GPIOs, its status reporting - belongs in that board's
+// own driver under modules/, not here.
+//
+// HOW TO USE IT
+// -------------
+// 1. In your mios32_config.h, ask for it, name the SPI port, and say how
+//    many MIDI ports the board at the far end offers. The SPI port has to
+//    be declared as well:
+//
+//      #define MIOS32_USE_SPI_MIDI        1
+//      #define MIOS32_USE_SPI1            1
+//      #define MIOS32_SPI_MIDI_SPI        1
+//      #define MIOS32_SPI_MIDI_NUM_PORTS  4
+//
+// 2. Then use those ports like any other MIDI ports - send to SPIM0..SPIM15,
+//    and received packages arrive through the usual MIDI receive hook.
+//    Nothing specific to this transport has to be called.
+//
+// 3. Only if you are writing the driver for the board at the far end, and it
+//    speaks its own protocol alongside MIDI: register with
+//    MIOS32_SPI_MIDI_RawWordCallback_Init() to see each received word before
+//    it is parsed. See that prototype below.
+//
+// The settings that follow describe the link itself. A board driver normally
+// declares them on your behalf, so read its header before setting them here.
 
 // how many SPI MIDI ports are available?
 // if 0: interface disabled (default)
@@ -42,12 +62,9 @@
 #define MIOS32_SPI_MIDI_SPI 0
 #endif
 
-// (MIOS32_SPI_MIDI_SPI_RC_PIN was defined here and used NOWHERE - the fourth
-// dead RC_PIN macro found on 2026-08-13/14, after those of SDCARD and SRIO.
-// This one was funnier than the others: both branches of its #if defined
-// MIOS32_SPI_MIDI_USE_M16 returned 1. Leftover from the MBHP boards, where
-// one SPI port exposed two chip select lines - J16:RC1/RC2, J19:RC1/RC2. A
-// port now has a single CS, driven through MIOS32_SPI_CS_PinSet(port, level).)
+// The chip select line is not named here: a port has one, declared as
+// MIOS32_SPIn_CS_PORT/_PIN in the family driver, and this transport drives
+// it through MIOS32_SPI_CS_PinSet(port, level).
 
 // Which transfer rate should be used?
 // MIOS32_SPI_PRESCALER_16 typically results into ca. 5 MBit/s
@@ -96,19 +113,23 @@ extern s32 MIOS32_SPI_MIDI_PackageSend_NonBlocking(mios32_midi_package_t package
 extern s32 MIOS32_SPI_MIDI_PackageSend(mios32_midi_package_t package);
 extern s32 MIOS32_SPI_MIDI_PackageReceive(mios32_midi_package_t *package);
 
-// Lets a board driver see each received word BEFORE it is parsed as MIDI.
-// The callback returns 1 if it consumed the word, 0 to let it through. This
-// is what replaces the M16 interception that used to be hard-wired into
-// MIOS32_SPI_MIDI_Periodic_mS() - the transport now offers a hook instead of
-// knowing one particular board's status protocol.
+// Lets a board driver see each received word BEFORE it is parsed as MIDI,
+// so a board can carry its own protocol on the same link. Install it from
+// the board driver's own init:
+//
+//   static s32 MyBoard_RawWord(u32 word)
+//   {
+//     if( (word & 0x0f000000) == 0x01000000 ) { ...; return 1; } // mine
+//     return 0;                                                  // MIDI
+//   }
+//   MIOS32_SPI_MIDI_RawWordCallback_Init(MyBoard_RawWord);
+//
+// Return 1 to consume the word, 0 to let it through to the MIDI parser.
 extern s32 MIOS32_SPI_MIDI_RawWordCallback_Init(s32 (*callback_raw_word)(u32 word));
 
-// (MIOS32_SPI_MIDI_RS_OptimisationSet/Get were declared here. Their entire
-// body was an M16 command carrying a 16-bit port mask, so they went to
-// modules/m16 as MIOS32_SPIM_M16_RS_OptimisationSet/Get. The generic
-// MIOS32_MIDI_RS_OptimisationSet() now answers -1 for the SPIM range, just
-// as it already did for CAN: this transport does not implement running
-// status optimisation, the board at the far end does.)
+// Note that running status optimisation is not implemented by this
+// transport: MIOS32_MIDI_RS_OptimisationSet() answers -1 for the SPIM range.
+// If the board at the far end offers it, it does so through its own driver.
 
 /////////////////////////////////////////////////////////////////////////////
 // Export global variables

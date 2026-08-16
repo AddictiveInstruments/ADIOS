@@ -1,4 +1,4 @@
-// $Id: mios32.h 2312 2016-02-27 23:04:51Z tk $
+// $Id$
 /*
  * Header file for MIOS32
  *

@@ -1,6 +1,35 @@
-// $Id: mios32_srio.h 2400 2016-08-12 22:53:59Z tk $
+// $Id$
 /*
  * Header file for SRIO Driver
+ *
+ * Clocks a chain of shift registers over SPI: shifts input registers in and
+ * output registers out, in one transfer, repeated every millisecond.
+ *
+ * This is the engine only - it moves bytes to and from the chain and knows
+ * nothing about what they mean. Turning those bytes into button presses or
+ * LED states is the job of the modules above it: MIOS32_SRIN for inputs,
+ * MIOS32_SROUT for outputs, MIOS32_ENC for rotary encoders. Each of those
+ * needs this one, and says so at compile time if it is missing.
+ *
+ * HOW TO USE IT
+ * -------------
+ * 1. In your mios32_config.h, ask for it, name the SPI port the chain is
+ *    wired to, and say how many registers are in it. The SPI port has to be
+ *    declared as well:
+ *
+ *      #define MIOS32_USE_SRIO    1
+ *      #define MIOS32_USE_SPI1    1
+ *      #define MIOS32_SRIO_SPI    1
+ *      #define MIOS32_SRIO_NUM_SR 4    // 4 x 8 bits in, 4 x 8 bits out
+ *
+ * 2. Usually, do nothing else: add MIOS32_USE_SRIN or MIOS32_USE_SROUT and
+ *    work in pins rather than in registers. If you do want the raw bytes,
+ *    they are in mios32_srio_din[] and mios32_srio_dout[], one entry per
+ *    register, refreshed by the scan.
+ *
+ * 3. To act on the chain at a precise moment in the scan - driving a matrix
+ *    row before its columns are sampled, typically - install a callback
+ *    with MIOS32_SRIO_ScanStart(). It runs just before each transfer.
  *
  * ==========================================================================
  *
@@ -35,26 +64,15 @@
 // declared too (MIOS32_USE_SPI0 / _SPI1 / _SPI2) - see the #error in
 // mios32_srio.c, which says so at compile time rather than letting the link
 // fail on five missing MIOS32_SPI_* symbols.
-//
-// (The default used to be chosen by board: 0 on an STM32_PRIMER, "since RCLK
-// conflicts with USB detach pin @B12", 1 everywhere else. That board is not
-// defined anywhere in this tree, so the branch always took its #else -
-// removed 2026-08-13 along with the two below. Nothing changes for anyone;
-// a project that needs another port says so here.)
 #ifndef MIOS32_SRIO_SPI
 #define MIOS32_SRIO_SPI 1
 #endif
 
-// (MIOS32_SRIO_SPI_RC_PIN and MIOS32_SRIO_SPI_RC_PIN2 were defined here and
-// used NOWHERE - leftovers from the MBHP boards, where one SPI port exposed
-// two chip select lines, J16:RC1 and J16:RC2. A port now has a single CS
-// under manual GPIO control, named by MIOS32_SPIn_CS_PORT/_PIN in the family
-// driver, and this module drives it through MIOS32_SPI_CS_PinSet(port,
-// level). Removed 2026-08-13, same as MIOS32_SDCARD_SPI_RC_PIN.)
+// The latch line is not named here: a port has one chip select, declared as
+// MIOS32_SPIn_CS_PORT/_PIN in the family driver, and this module strobes it
+// through MIOS32_SPI_CS_PinSet(port, level) to load and latch the chain.
 
 // should output pins be used in Open Drain mode? (perfect for 3.3V->5V levelshifting)
-// (default was 1 on MBHP_CORE_STM32, 0 elsewhere - that board is not defined
-// in this tree either, so 0 is what every build already got)
 #ifndef MIOS32_SRIO_OUTPUTS_OD
 #define MIOS32_SRIO_OUTPUTS_OD 0
 #endif

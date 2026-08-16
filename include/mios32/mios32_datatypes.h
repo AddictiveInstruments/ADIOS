@@ -1,4 +1,4 @@
-// $Id: mios32_datatypes.h 1795 2013-06-01 22:13:42Z tk $
+// $Id$
 /*
  * Defines data types for 32bit processors
  * compatible with stm32f10x.h

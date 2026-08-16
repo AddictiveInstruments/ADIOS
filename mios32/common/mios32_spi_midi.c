@@ -1,4 +1,4 @@
-// $Id: mios32_spi_midi.c 2096 2014-12-05 22:04:15Z tk $
+// $Id$
 //! \defgroup MIOS32_SPI_MIDI
 //!
 //! SPI MIDI layer for MIOS32

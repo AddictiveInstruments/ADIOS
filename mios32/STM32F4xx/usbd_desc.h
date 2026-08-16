@@ -1,4 +1,4 @@
-// $Id: usbd_desc.h 1800 2013-06-02 22:09:03Z tk $
+// $Id$
 
 // Dummy file which only exists, since it's referenced in the STM32 device library (usbd_req.c)
 

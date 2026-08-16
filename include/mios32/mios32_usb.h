@@ -1,4 +1,4 @@
-// $Id: mios32_usb.h 2086 2014-10-22 18:07:02Z tk $
+// $Id$
 /*
  * Header file for USB Driver
  *

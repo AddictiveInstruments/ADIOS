@@ -1,4 +1,4 @@
-// $Id: mios32_usb.c 1938 2014-01-19 17:13:43Z tk $
+// $Id$
 //! \defgroup MIOS32_USB
 //!
 //! USB driver for MIOS32 - STM32G0xx

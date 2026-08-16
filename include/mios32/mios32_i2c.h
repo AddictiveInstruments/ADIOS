@@ -2,22 +2,46 @@
 /*
  * Header file for the I2C driver
  *
- * Renamed from MIOS32_IIC on 2026-08-13: "I2C" is what every ST reference
- * manual calls this peripheral, and this driver is now a plain peripheral
- * driver like SPI or UART - not the MIDIbox transport layer it used to
- * carry. The old MIOS32_IIC_* API is gone, along with mios32_iic_bs
- * (BankSticks) and mios32_iic_midi, which were concepts built ON TOP of
- * the peripheral rather than the peripheral itself.
+ * Master-mode transfers on the chip's I2C ports: address a slave, send it
+ * bytes, read bytes back, either blocking until done or driven by interrupt.
  *
- * Two things changed that a port of old code has to know about:
  *
- *   - PORT NUMBERING IS NO LONGER INVERTED. MIOS32_I2Cn is I2C(n+1) on
- *     every family: port 0 = I2C1, port 1 = I2C2, port 2 = I2C3. The old
- *     driver mapped its port 0 onto I2C2 (an MBHP board wiring artifact).
+ * HOW TO USE IT
+ * =============
  *
- *   - The IIC_Read_AbortIfFirstByteIs0 transfer type is NOT reimplemented.
- *     It existed to poll an MBHP_IIC_MIDI module: an application protocol
- *     wired into a peripheral driver.
+ * 1. In your mios32_config.h, name the port you want. MIOS32_I2Cn is
+ *    I2C(n+1), so port 0 is I2C1:
+ *
+ *      #define MIOS32_USE_I2C0 1
+ *
+ *    MIOS32_USE_I2C derives itself from that, and the port is initialised
+ *    for you. Which ports exist depends on the chip; asking for one it does
+ *    not have is answered at compile time by the family driver, which also
+ *    lists the pins each port can use.
+ *
+ * 2. Take the port, do the transfer, release it. The claim matters as soon
+ *    as two parts of your code share one bus:
+ *
+ *      u8 buf[2] = { 0x10, 0x42 };
+ *
+ *      MIOS32_I2C_TransferBegin(MIOS32_I2C_PORT_I2C0, I2C_Blocking);
+ *      MIOS32_I2C_Transfer(MIOS32_I2C_PORT_I2C0,
+ *                          MIOS32_I2C_WRITE, 0x50 << 1, buf, 2);
+ *      s32 err = MIOS32_I2C_TransferWait(MIOS32_I2C_PORT_I2C0);
+ *      MIOS32_I2C_TransferFinished(MIOS32_I2C_PORT_I2C0);
+ *
+ *    The slave address is passed SHIFTED LEFT BY ONE - it is the 8-bit
+ *    address as it appears on the wire, not the 7-bit number printed in a
+ *    datasheet table. The read/write bit comes from the transfer type.
+ *
+ * 3. Check what happened: every call returns < 0 on failure, and the error
+ *    codes below name the stage. MIOS32_I2C_ERROR_TIMEOUT means the bus is
+ *    stuck - a slave holding SCL, or missing pull-ups. SLAVE_NOT_CONNECTED
+ *    means nobody acknowledged that address.
+ *
+ * Pass I2C_Non_Blocking instead to have the transfer run on interrupt;
+ * MIOS32_I2C_TransferCheck() then says whether it is still going, and
+ * MIOS32_I2C_TransferWait() blocks until it is not.
  *
  * ==========================================================================
  *

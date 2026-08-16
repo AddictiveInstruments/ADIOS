@@ -1,4 +1,4 @@
-// $Id: mios32_srio.c 2456 2016-11-12 14:44:16Z tk $
+// $Id$
 //! \defgroup MIOS32_SRIO
 //!
 //! SRIO Driver for MIOS32

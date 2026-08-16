@@ -1,4 +1,4 @@
-// $Id: strtol.c 1743 2013-04-11 19:13:56Z tk $
+// $Id$
 
 // TK: this is a slightly modified version of "strtol" which is part of newlib:
 // I removed the access to "errno" to avoid that a _impure_ptr will be referenced.

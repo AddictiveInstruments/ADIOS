@@ -1,4 +1,4 @@
-// $Id: mios32_sys.h 2097 2014-12-05 22:05:12Z tk $
+// $Id$
 /*
  * Header file for MIOS32 System Initialisation
  *
@@ -47,8 +47,7 @@
 //! can override either one to 0 even on a chip that would otherwise default
 //! to 1 (a bare "#undef" can't express "explicitly off" as opposed to
 //! "undecided, let the tier default apply" - a numeric value can).
-//!   - MIOS32_APP_USE_FREERTOS (renamed from the old opt-out
-//!     MIOS32_DONT_USE_FREERTOS) - is the FreeRTOS kernel itself compiled
+//!   - MIOS32_APP_USE_FREERTOS - is the FreeRTOS kernel itself compiled
 //!     in at all? Consulted by mios32_sys.c (the only FreeRTOS touchpoint
 //!     in the whole mios32/common + family driver tree) and, at the Make
 //!     level, by programming_models/traditional/programming_model.mk
@@ -128,10 +127,9 @@
 # define MIOS32_SYS_STM_PINGET(port, pin_mask)    ((port->IDR & (pin_mask)) ? 1 : 0)
 #endif
 
-// How a pin is driven. Lived in mios32_board.h until that module was removed
-// (2026-08-11) - it never had anything to do with a particular board, and its
-// real user is MIOS32_UART_InitPort(), which needs to say whether a TX line is
-// push-pull or open drain. It lost the "board" in its name on the way out.
+// How a pin is driven. Used wherever a caller has to say what kind of output
+// it wants - MIOS32_UART_InitPort(), for one, needs to know whether a TX line
+// is push-pull or open drain.
 typedef enum {
   MIOS32_PIN_MODE_IGNORE = 0,
   MIOS32_PIN_MODE_ANALOG,
@@ -174,8 +172,8 @@ typedef enum {
 // The MIOS32_USE_BOOTLOADER guard matters: a project that HAS built with the
 // dynamic mechanism keeps that generated header in its directory forever, and
 // without this guard it would silently redefine MIOS32_APP_FLASH_START_ADDR
-// (0x2800...) over the 0 that programming_model.mk passes for a bootloader-less
-// build - reporting a boundary that no longer exists on the chip.
+// over the 0 that programming_model.mk passes for a bootloader-less build,
+// reporting a boundary that is not on the chip.
 #if MIOS32_USE_BOOTLOADER
 # if __has_include("mios32_bsl_boundary.h")
 #  include "mios32_bsl_boundary.h"

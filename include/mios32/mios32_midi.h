@@ -1,4 +1,4 @@
-// $Id: mios32_midi.h 1994 2014-05-18 18:43:33Z tk $
+// $Id$
 /*
  * Header file for MIDI layer
  *
@@ -125,19 +125,10 @@ typedef enum {
   DIN14 = 0x2e,
   DIN15 = 0x2f,
 
-  // 0x30 range was IIC0..IIC7 - the IIC-MIDI transport was removed entirely
-  // from the dispatcher (2026-08-09): MIDI here is UART(DIN) or USB, IIC-MIDI
-  // was a MIDIbox extension-module concept. Range kept reserved so the
-  // remaining port numbers stay MIOS Studio-compatible.
-
-  // 0x40 range was OSC0..OSC7 - Open Sound Control, removed entirely
-  // (2026-08-13). It was a pure codec: it serialised and parsed OSC packets
-  // in a buffer without ever knowing how they travelled, which is why it did
-  // NOT fall with the network stack the day before - it never referenced it.
-  // But a codec with no transport encodes packets nothing can send: OSC rides
-  // on UDP, and there has been no UDP in this tree since uIP left. Range kept
-  // reserved, same treatment as 0x30 above, so the remaining port numbers
-  // stay MIOS Studio-compatible.
+  // 0x30 and 0x40 are deliberately left empty, and a new transport must NOT
+  // fill them. These numbers travel: they appear in SysEx and in host-side
+  // tools, so reusing a free range would renumber nothing but would give an
+  // old number a new meaning. Add new transports after the last range in use.
 
   SPIM0 = 0x50,
   SPIM1 = 0x51,

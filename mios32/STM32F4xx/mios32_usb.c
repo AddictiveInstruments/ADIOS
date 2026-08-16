@@ -1,4 +1,4 @@
-// $Id: mios32_usb.c 2087 2014-11-02 22:10:13Z tk $
+// $Id$
 //! \defgroup MIOS32_USB
 //!
 //! USB driver for MIOS32

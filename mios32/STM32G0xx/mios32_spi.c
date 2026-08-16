@@ -1,4 +1,4 @@
-// $Id: mios32_spi.c 1938 2014-01-19 17:13:43Z tk $
+// $Id$
 //! \defgroup MIOS32_SPI
 //!
 //! Hardware Abstraction Layer for SPI ports of STM32G0xx

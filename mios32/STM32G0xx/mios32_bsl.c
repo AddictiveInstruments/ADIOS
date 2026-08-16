@@ -1,4 +1,4 @@
-// $Id: mios32_bsl.c 1934 2014-01-18 00:03:02Z tk $
+// $Id$
 //
 // Includes the bootloader code into the project
 // If no bootloader is provided for the board, reserve the BSL range instead

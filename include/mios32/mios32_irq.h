@@ -1,4 +1,4 @@
-// $Id: mios32_irq.h 1180 2011-04-19 23:24:32Z tk $
+// $Id$
 /*
  * This file collects all interrupt priorities and provides prototypes to
  * MIOS32_IRQ_* functions

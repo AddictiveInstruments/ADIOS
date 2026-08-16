@@ -1,4 +1,4 @@
-// $Id: mios32_enc.h 992 2010-04-15 13:42:19Z tk $
+// $Id$
 /*
  * Header file for Rotary Encoder Driver
  *

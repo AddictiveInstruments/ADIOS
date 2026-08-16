@@ -1,4 +1,4 @@
-// $Id: mios32_lcd.h 2122 2015-01-15 19:41:04Z tk $
+// $Id$
 /*
  * Header file for LCD Driver
  *

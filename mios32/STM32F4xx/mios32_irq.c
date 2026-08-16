@@ -1,4 +1,4 @@
-// $Id: mios32_irq.c 1795 2013-06-01 22:13:42Z tk $
+// $Id$
 //! \defgroup MIOS32_IRQ
 //!
 //! System Specific IRQ Enable/Disable routines

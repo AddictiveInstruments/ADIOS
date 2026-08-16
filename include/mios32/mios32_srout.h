@@ -1,4 +1,4 @@
-// $Id: mios32_dout.h 1695 2013-02-16 22:16:55Z tk $
+// $Id$
 /*
  * Header file for SROUT Driver
  *

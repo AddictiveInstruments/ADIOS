@@ -1,4 +1,4 @@
-// $Id: mios32_i2s.h 144 2008-12-02 00:07:05Z tk $
+// $Id$
 /*
  * Header file for I2S functions
  *

@@ -1,4 +1,4 @@
-// $Id: mios32_spi.h 1411 2012-01-28 12:51:01Z tk $
+// $Id$
 /*
  * Header file for SPI Driver
  *

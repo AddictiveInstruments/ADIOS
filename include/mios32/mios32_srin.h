@@ -1,4 +1,4 @@
-// $Id: mios32_din.h 528 2009-05-17 16:45:51Z tk $
+// $Id$
 /*
  * Header file for SRIN Driver
  *

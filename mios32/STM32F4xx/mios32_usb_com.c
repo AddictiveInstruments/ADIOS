@@ -1,4 +1,4 @@
-// $Id: mios32_usb_com.c 1800 2013-06-02 22:09:03Z tk $
+// $Id$
 //! \defgroup MIOS32_USB_COM
 //!
 //! USB COM layer for MIOS32

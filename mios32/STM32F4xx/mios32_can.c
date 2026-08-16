@@ -1,4 +1,4 @@
-// $Id: mios32_can.c 2312 2016-02-27 23:04:51Z tk $
+// $Id$
 //! \defgroup MIOS32_CAN
 //!
 //! U(S)ART functions for MIOS32

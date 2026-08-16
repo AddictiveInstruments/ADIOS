@@ -1,4 +1,4 @@
-// $Id: mios32_usb_midi.c 2025 2014-07-06 18:22:18Z tk $
+// $Id$
 //! \defgroup MIOS32_USB_MIDI
 //!
 //! USB MIDI layer for MIOS32
