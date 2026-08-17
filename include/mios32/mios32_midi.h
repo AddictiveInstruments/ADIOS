@@ -167,24 +167,7 @@ typedef enum {
   SPIM12 = 0x5c,
   SPIM13 = 0x5d,
   SPIM14 = 0x5e,
-  SPIM15 = 0x5f,
-
-  MCAN0 = 0x60,
-  MCAN1 = 0x61,
-  MCAN2 = 0x62,
-  MCAN3 = 0x63,
-  MCAN4 = 0x64,
-  MCAN5 = 0x65,
-  MCAN6 = 0x66,
-  MCAN7 = 0x67,
-  MCAN8 = 0x68,
-  MCAN9 = 0x69,
-  MCAN10 = 0x6a,
-  MCAN11 = 0x6b,
-  MCAN12 = 0x6c,
-  MCAN13 = 0x6d,
-  MCAN14 = 0x6e,
-  MCAN15 = 0x6f
+  SPIM15 = 0x5f
  
 } mios32_midi_port_t;
 

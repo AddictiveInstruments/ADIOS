@@ -106,9 +106,8 @@ extern s32 MIOS32_SPIM_M16_SofEnable(u8 enable);
 // Running status optimisation. It lived in the transport as
 // MIOS32_SPI_MIDI_RS_OptimisationSet/Get, but its whole body was an M16
 // command carrying a 16-bit port mask - so it belongs here. The generic
-// MIOS32_MIDI_RS_OptimisationSet() now answers -1 for the SPIM port range,
-// exactly as it already did for CAN: the transport does not implement it,
-// the board does.
+// MIOS32_MIDI_RS_OptimisationSet() now answers -1 for the SPIM port range:
+// the transport does not implement it, the board does.
 extern s32 MIOS32_SPIM_M16_RS_OptimisationSet(u8 spim_port, u8 enable);
 extern s32 MIOS32_SPIM_M16_RS_OptimisationGet(u8 spim_port);
 

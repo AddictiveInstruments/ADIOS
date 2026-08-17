@@ -28,7 +28,7 @@
 // (2026-08-09 decision): MIDI is the whole point of this OS, a project that
 // needs neither MIDI nor the BSL is a plain CubeMX export, not an OS user.
 // Only the TRANSPORTS are opt-in: MIOS32_USE_DIN_MIDI / MIOS32_USE_USB_MIDI /
-// MIOS32_USE_SPI_MIDI / MIOS32_USE_CAN+MIOS32_USE_CAN_MIDI.
+// MIOS32_USE_SPI_MIDI.
 #if MIOS32_MIDI_BSL_ENHANCEMENTS
 // this compile switch should only be activated for the bootloader!
 #include <bsl_sysex.h>
@@ -227,11 +227,6 @@ s32 MIOS32_MIDI_Init(u32 mode)
 		ret |= (1 << 3);
 #endif
 
-#if defined(MIOS32_USE_CAN) && defined(MIOS32_USE_CAN_MIDI)
-	if( MIOS32_CAN_MIDI_Init(0) < 0 )
-		ret |= (1 << 4);
-#endif
-
 	last_sysex_port = DEFAULT;
 	sysex_state.ALL = 0;
 
@@ -298,13 +293,6 @@ s32 MIOS32_MIDI_CheckAvailable(mios32_midi_port_t port)
 		return 0; // SPI_MIDI not enabled
 #endif
 
-	case MCAN0 ://..15
-#if defined(MIOS32_USE_CAN) && defined(MIOS32_USE_CAN_MIDI)
-		return MIOS32_CAN_MIDI_CheckAvailable(port & 0xf);
-#else
-		return 0; // CAN_MIDI not enabled
-#endif
-
 	}
 
 	return 0; // invalid port
@@ -346,12 +334,8 @@ s32 MIOS32_MIDI_RS_OptimisationSet(mios32_midi_port_t port, u8 enable)
 		// optimisation - the board at the far end does. This used to call
 		// MIOS32_SPI_MIDI_RS_OptimisationSet(), whose entire body was an M16
 		// command carrying a port mask; it moved to modules/m16 on
-		// 2026-08-14 as MIOS32_SPIM_M16_RS_OptimisationSet(). Same answer as
-		// CAN gives below.
+		// 2026-08-14 as MIOS32_SPIM_M16_RS_OptimisationSet().
 		return -1; // not implemented by this transport
-
-	case MCAN0://..15
-		return -1; // not required for CAN
 
 	}
 
@@ -391,9 +375,6 @@ s32 MIOS32_MIDI_RS_OptimisationGet(mios32_midi_port_t port)
 		// MIOS32_SPIM_M16_RS_OptimisationGet()
 		return -1; // not implemented by this transport
 
-	case MCAN0://..15
-		return -1; // not required for CAN
-
 	}
 
 	return -1; // invalid port
@@ -429,9 +410,6 @@ s32 MIOS32_MIDI_RS_Reset(mios32_midi_port_t port)
 
 	case SPIM0://..15
 		return -1; // not required for SPI
-
-	case MCAN0://..15
-		return -1; // not required for CAN
 
 	}
 
@@ -497,13 +475,6 @@ s32 MIOS32_MIDI_SendPackage_NonBlocking(mios32_midi_port_t port, mios32_midi_pac
 		return -1; // SPI_MIDI not enabled
 #endif
 
-	case MCAN0://..15
-#if defined(MIOS32_USE_CAN) && defined(MIOS32_USE_CAN_MIDI)
-		return MIOS32_CAN_MIDI_PackageSend_NonBlocking(package);
-#else
-		return -1; // CAN_MIDI not enabled
-#endif
-
 	default:
 		// invalid port
 		return -1;
@@ -559,13 +530,6 @@ s32 MIOS32_MIDI_SendPackage(mios32_midi_port_t port, mios32_midi_package_t packa
 		return MIOS32_SPI_MIDI_PackageSend(package);
 #else
 		return -1; // SPI_MIDI not enabled
-#endif
-
-	case MCAN0://..15
-#if defined(MIOS32_USE_CAN) && defined(MIOS32_USE_CAN_MIDI)
-		return MIOS32_CAN_MIDI_PackageSend(package);
-#else
-		return -1; // CAN_MIDI not enabled
 #endif
 
 	default:
@@ -713,18 +677,6 @@ s32 MIOS32_MIDI_SendReset(mios32_midi_port_t port)
 s32 MIOS32_MIDI_SendSysEx(mios32_midi_port_t port, u8 *stream, u32 count)
 {
 	s32 res;
-#if 0
-#if defined(MIOS32_USE_CAN) && defined(MIOS32_USE_CAN_MIDI)
-#if defined(MIOS32_CAN_MIDI_SYSEX_DIRECT_STREAM)
-	if((port & 0xf0) == MCAN0){
-		mcan_header_t header;
-		MIOS32_CAN_MIDI_DefaultHeaderInit(&header);
-		header.cable = port & 0x0f;
-		return MIOS32_CAN_MIDI_SysexSend(header, (u8*)stream, count);
-	}
-#endif
-#endif
-#endif
 	u32 offset;
 	mios32_midi_package_t package;
 
@@ -1259,20 +1211,6 @@ s32 MIOS32_MIDI_Receive_Handler(void *_callback_package)
 	}
 #endif
 
-	// handle all CAN MIDI packages
-#if defined(MIOS32_USE_CAN) && defined(MIOS32_USE_CAN_MIDI)
-#if MIOS32_CAN_NUM >= 1
-	{
-		s32 status;
-		mios32_midi_package_t package;
-		while( (status=MIOS32_CAN_MIDI_PackageReceive(&package)) >= 0 ) {
-			if(status == 1)MIOS32_MIDI_ReceivePackage(MCAN0 + package.cable, package, _callback_package);
-		}
-	}
-#endif
-#endif
-
-
 	// handle all DIN (UART) based MIDI packages (round robin, max 10 packages because of possible timeouts)
 	{
 		typedef struct {
@@ -1417,10 +1355,6 @@ s32 MIOS32_MIDI_Periodic_mS(void)
 
 #if defined(MIOS32_USE_SPI_MIDI)
 	status |= MIOS32_SPI_MIDI_Periodic_mS();
-#endif
-
-#if defined(MIOS32_USE_CAN_MIDI)
-	status |= MIOS32_CAN_MIDI_Periodic_mS();
 #endif
 
 	// increment timeout counter for incoming packages

@@ -83,8 +83,6 @@ extern "C" {
 #include <mios32_timestamp.h>
 #include <mios32_utils.h>
 #include <mios32_sdcard.h>
-#include <mios32_can.h>
-#include <mios32_can_midi.h>
 
 
 /////////////////////////////////////////////////////////////////////////////

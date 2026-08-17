@@ -64,7 +64,6 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/common/mios32_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_din_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_spi_midi.c \
-	$(MIOS32_PATH)/mios32/common/mios32_can_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_sdcard.c \
 	$(MIOS32_PATH)/mios32/common/mios32_timestamp.c \
 	$(MIOS32_PATH)/mios32/common/mios32_bsl.c \
@@ -78,7 +77,6 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/common/printf-stdarg.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_uart.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_i2c.c \
-	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_can.c 
 	
 ifneq ($(FAMILY),STM32G0xx)
 THUMB_SOURCE += \
