@@ -44,6 +44,49 @@ static kb_state_t kb_state[CFG_TUH_HID];
 
 static u8 hid_present;
 
+// A HID device only speaks when asked, so a request must be standing at all
+// times - and asking can fail, transiently, when the bus is busy elsewhere.
+// A dropped request is not recoverable by itself: the device simply never
+// reports again, which looks like a keyboard that dies after a few keystrokes
+// rather than like an error. So a failed request is remembered here and
+// retried from the periodic call below.
+static struct {
+  u8 pending; // a request is owed for this interface
+  u8 dev;
+} arm[CFG_TUH_HID];
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Asks for the next report, and remembers the request if it could not be
+// placed. Every request goes through here - there is no other caller of
+// tuh_hid_receive_report() in this file, by design.
+/////////////////////////////////////////////////////////////////////////////
+
+// TEMPORARY diagnostic: how often a request had to be deferred, and how often
+// the retry then placed it. Read over SWD - it is what distinguishes "the fix
+// works" from "the failure did not happen this time". Remove with the rest of
+// the bench scaffolding.
+u32 mios32_usb_dbg_hid_deferred;
+u32 mios32_usb_dbg_hid_recovered;
+
+static void request_report(u8 dev_addr, u8 idx)
+{
+  u8 was_pending;
+
+  if( idx >= CFG_TUH_HID )
+    return;
+
+  was_pending = arm[idx].pending;
+
+  arm[idx].dev = dev_addr;
+  arm[idx].pending = tuh_hid_receive_report(dev_addr, idx) ? 0 : 1;
+
+  if( arm[idx].pending )
+    ++mios32_usb_dbg_hid_deferred;
+  else if( was_pending )
+    ++mios32_usb_dbg_hid_recovered;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 //! Initializes the USB HID host class.
@@ -61,8 +104,28 @@ s32 MIOS32_USB_HID_Init(u32 mode)
   keyboard_callback = NULL;
   hid_present = 0;
 
-  for(i=0; i<CFG_TUH_HID; ++i)
+  for(i=0; i<CFG_TUH_HID; ++i) {
     kb_state[i].in_use = 0;
+    arm[i].pending = 0;
+  }
+
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Retries whatever could not be asked for earlier. Called from the USB
+//! layer right after the host stack has run, so a request that failed while
+//! the bus was busy gets placed as soon as it frees up.
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_HID_Periodic_mS(void)
+{
+  u8 idx;
+
+  for(idx=0; idx<CFG_TUH_HID; ++idx)
+    if( arm[idx].pending )
+      request_report(arm[idx].dev, idx);
 
   return 0;
 }
@@ -163,13 +226,19 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t idx, const uint8_t *report_desc,
 
   // Nothing arrives unless asked for: reception must be primed once here,
   // and re-primed after every report (see below).
-  tuh_hid_receive_report(dev_addr, idx);
+  request_report(dev_addr, idx);
 }
 
 
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t idx)
 {
   u8 i, any = 0;
+
+  // Drop any request still owed to it, or the retry would keep asking a
+  // device that has left - and would take the interface index with it when
+  // the next device is given the same one.
+  if( idx < CFG_TUH_HID )
+    arm[idx].pending = 0;
 
   for(i=0; i<CFG_TUH_HID; ++i) {
     if( kb_state[i].in_use && kb_state[i].dev == dev_addr && kb_state[i].instance == idx )
@@ -185,8 +254,15 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t idx)
 }
 
 
+// TEMPORARY diagnostic: how many reports actually arrived. Compared against
+// the application's own count, it says whether a key that produces no note
+// was never reported, or was reported and lost further down.
+u32 mios32_usb_dbg_hid_reports;
+
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t idx, const uint8_t *report, uint16_t len)
 {
+  ++mios32_usb_dbg_hid_reports;
+
   if( report_callback != NULL )
     report_callback(dev_addr, idx, report, len);
 
@@ -205,7 +281,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t idx, const uint8_t *re
   }
 
   // Ask for the next one, or the device goes silent after a single report.
-  tuh_hid_receive_report(dev_addr, idx);
+  request_report(dev_addr, idx);
 }
 
 #endif /* MIOS32_USE_USB_HOST_HID */

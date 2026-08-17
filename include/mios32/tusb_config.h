@@ -64,9 +64,16 @@
 // FreeRTOS - which is a project decision, not a USB one.
 #define CFG_TUSB_OS                 OPT_OS_NONE
 
+// Off. Level 2 makes TinyUSB narrate enumeration into a RAM ring read over
+// SWD (mios32_usb_dbg_printf in mios32_usb.c), which is how the hub problem
+// was found - but the narration is not free: it runs from inside the USB
+// callbacks, and on a busy bus it perturbs the very timing under test. Turn
+// it on deliberately, for a question worth the disturbance, and read the
+// result knowing the instrument is part of the circuit.
 #ifndef CFG_TUSB_DEBUG
 # define CFG_TUSB_DEBUG             0
 #endif
+#define CFG_TUSB_DEBUG_PRINTF       mios32_usb_dbg_printf
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -180,8 +187,15 @@
 
 // A hub is what makes "MIDI and HID and MSC at the same time" possible on a
 // single socket. Without it the port serves exactly one device.
+//
+// This counts HUB CHIPS, not sockets - and the two differ in the wild: many
+// physical hubs carry two cascaded chips inside one box, so the first thing
+// that enumerates behind them is another hub. Measured on the bench: with
+// room for only one, TinyUSB runs out of hub addresses, asserts, and TEARS
+// DOWN THE PARENT HUB - nothing works through it at all, which looks nothing
+// like a capacity problem. Hence two by default.
 # ifndef MIOS32_USB_HOST_HUB
-#  define MIOS32_USB_HOST_HUB       1
+#  define MIOS32_USB_HOST_HUB       2
 # endif
 # define CFG_TUH_HUB                MIOS32_USB_HOST_HUB
 
@@ -193,6 +207,13 @@
 # define CFG_TUH_DEVICE_MAX         (MIOS32_USB_HOST_MAX_DEVICES + CFG_TUH_HUB)
 
 # define CFG_TUH_ENUMERATION_BUFSIZE 256
+
+// CFG_TUH_TASK_QUEUE_SZ is left at its default of 16 entries. Worth knowing
+// if a device ever goes quiet while the rest of the bus keeps working: a full
+// queue drops the event silently, and a dropped transfer-complete is never
+// recovered - the class never learns the transfer finished, so it never asks
+// for the next one. Raising it costs RAM, so raise it only against a measured
+// overflow, not on suspicion.
 
 # if defined(MIOS32_USE_USB_HOST_MIDI)
 #  define CFG_TUH_MIDI              1

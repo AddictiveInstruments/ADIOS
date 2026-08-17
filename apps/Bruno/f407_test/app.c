@@ -27,6 +27,14 @@ u32 count = 0;
 // a MIDI note on the first device cable, so pressing keys shows up in a MIDI
 // monitor on the PC exactly like the pad does. HID usage codes start at 4
 // (letter A); +56 lands A on middle C.
+// TEMPORARY diagnostic - the stage above it is mios32_usb_dbg_hid_reports.
+// Together they say whether a key that produces no note was never reported,
+// was reported but not decoded, or was decoded and then refused by the
+// transport.
+u32 app_dbg_keys;      // decoded key events that reached the application
+u32 app_dbg_send_fail; // sends the transport refused
+s32 app_dbg_last_err;  // and what it said the last time
+
 static void APP_HID_KeyNote(u8 keycode, u8 modifiers, u8 pressed)
 {
   (void)modifiers;
@@ -39,7 +47,13 @@ static void APP_HID_KeyNote(u8 keycode, u8 modifiers, u8 pressed)
   p.note  = (keycode + 56) & 0x7f;
   p.velocity = pressed ? 100 : 0;
 
-  MIOS32_MIDI_SendPackage_NonBlocking(USB0, p);
+  ++app_dbg_keys;
+
+  s32 status = MIOS32_MIDI_SendPackage_NonBlocking(USB0, p);
+  if( status < 0 ) {
+    ++app_dbg_send_fail;
+    app_dbg_last_err = status;
+  }
 }
 
 void APP_Init(void)

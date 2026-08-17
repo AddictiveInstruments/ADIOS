@@ -16,6 +16,7 @@
  */
 
 #include <mios32.h>
+#include <stdarg.h>
 
 #if defined(MIOS32_USE_USB)
 
@@ -185,6 +186,39 @@ u32 mios32_usb_dbg_tud_post; // after
 u32 mios32_usb_dbg_tuh;      // before tuh_task()
 u32 mios32_usb_dbg_tuh_post; // after
 
+// TEMPORARY: RAM ring buffer for TinyUSB's own debug narration (CFG_TUSB_DEBUG,
+// see tusb_config.h). Read over SWD: the write head first, then the text - the
+// newest bytes are just before the head, the oldest just after it.
+#if CFG_TUSB_DEBUG
+#define DBG_LOG_SIZE 4096
+char mios32_usb_dbg_log[DBG_LOG_SIZE];
+u32  mios32_usb_dbg_log_head;
+
+int mios32_usb_dbg_printf(const char *format, ...)
+{
+  // Static, and roomy, for two reasons learned the hard way. This runs from
+  // inside USB callbacks, where stack is the scarcest thing there is - a
+  // buffer this size on the stack is a stack overflow waiting to happen. And
+  // there is no bounded vsprintf here, so the only defence against a long
+  // line is to leave more room than any line needs. Bench instrument only:
+  // not re-entrant, which is why it stays off unless a question needs it.
+  static char line[512];
+  va_list args;
+  int n, i;
+
+  va_start(args, format);
+  n = vsprintf(line, format, args);
+  va_end(args);
+
+  for(i=0; i<n; ++i) {
+    mios32_usb_dbg_log[mios32_usb_dbg_log_head % DBG_LOG_SIZE] = line[i];
+    ++mios32_usb_dbg_log_head;
+  }
+
+  return n;
+}
+#endif
+
 s32 MIOS32_USB_Handler(void)
 {
   static u8 busy;
@@ -223,6 +257,12 @@ s32 MIOS32_USB_Handler(void)
       break;
     }
   }
+
+# if defined(MIOS32_USE_USB_HOST_HID)
+  // After the stack has run, so a request the class could not place while the
+  // bus was busy is retried now that it may be free.
+  MIOS32_USB_HID_Periodic_mS();
+# endif
 #endif
 
   busy = 0;

@@ -36,6 +36,9 @@
 
 extern s32 MIOS32_USB_HID_Init(u32 mode);
 
+// Called by the USB layer once the host stack has run - not by an application.
+extern s32 MIOS32_USB_HID_Periodic_mS(void);
+
 // Raw reports, any device. dev/instance identify who sent it.
 extern s32 MIOS32_USB_HID_ReportCallback_Init(void (*callback)(u8 dev, u8 instance, const u8 *report, u16 len));
 
