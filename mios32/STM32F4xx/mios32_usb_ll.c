@@ -5,6 +5,11 @@
  * controller, and mios32_usb.c only decides roles. What is left here is what
  * genuinely differs from one silicon to the next.
  *
+ * This family has two OTG cores, and TinyUSB numbers them the way the silicon
+ * does: port 0 is OTG_FS, port 1 is OTG_HS. Both are served here. Note that
+ * the high-speed core runs at FULL speed unless an external PHY is fitted -
+ * which is why its pins carry the AF that the reference manual calls OTG_HS_FS.
+ *
  * ==========================================================================
  *
  *  Copyright (C) 2026 Bruno Dupeyron
@@ -16,7 +21,7 @@
 
 #include <mios32.h>
 
-#if defined(MIOS32_USE_USB_MIDI)
+#if defined(MIOS32_USE_USB)
 
 #include <tusb.h>
 #include <stm32f4xx_ll_bus.h>
@@ -26,51 +31,73 @@
 /////////////////////////////////////////////////////////////////////////////
 // Pins
 //
-// The full-speed core brings its data pair out on one place only, so these
-// are facts rather than choices - but they stay overridable because a package
-// variant can move them.
+// Each core brings its data pair out on one place only, so these are facts
+// rather than choices - but they stay overridable because a package variant
+// can move them.
 /////////////////////////////////////////////////////////////////////////////
 
-#ifndef MIOS32_USB_DM_PORT
-# define MIOS32_USB_DM_PORT   GPIOA
+// Port 0 - OTG_FS, AF10
+#ifndef MIOS32_USB_P0_DM_PORT
+# define MIOS32_USB_P0_DM_PORT   GPIOA
 #endif
-#ifndef MIOS32_USB_DM_PIN
-# define MIOS32_USB_DM_PIN    LL_GPIO_PIN_11
+#ifndef MIOS32_USB_P0_DM_PIN
+# define MIOS32_USB_P0_DM_PIN    LL_GPIO_PIN_11
 #endif
-#ifndef MIOS32_USB_DP_PORT
-# define MIOS32_USB_DP_PORT   GPIOA
+#ifndef MIOS32_USB_P0_DP_PORT
+# define MIOS32_USB_P0_DP_PORT   GPIOA
 #endif
-#ifndef MIOS32_USB_DP_PIN
-# define MIOS32_USB_DP_PIN    LL_GPIO_PIN_12
+#ifndef MIOS32_USB_P0_DP_PIN
+# define MIOS32_USB_P0_DP_PIN    LL_GPIO_PIN_12
+#endif
+#ifndef MIOS32_USB_P0_AF
+# define MIOS32_USB_P0_AF        LL_GPIO_AF_10
 #endif
 
-// AF10 is the OTG_FS alternate function on this family.
-#define MIOS32_USB_PIN_AF     LL_GPIO_AF_10
+// Port 1 - OTG_HS in full-speed mode, AF12
+#ifndef MIOS32_USB_P1_DM_PORT
+# define MIOS32_USB_P1_DM_PORT   GPIOB
+#endif
+#ifndef MIOS32_USB_P1_DM_PIN
+# define MIOS32_USB_P1_DM_PIN    LL_GPIO_PIN_14
+#endif
+#ifndef MIOS32_USB_P1_DP_PORT
+# define MIOS32_USB_P1_DP_PORT   GPIOB
+#endif
+#ifndef MIOS32_USB_P1_DP_PIN
+# define MIOS32_USB_P1_DP_PIN    LL_GPIO_PIN_15
+#endif
+#ifndef MIOS32_USB_P1_AF
+# define MIOS32_USB_P1_AF        LL_GPIO_AF_12
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
-// How this port learns its role
+// How each port learns its role
 //
 // The OTG core CAN detect it: it has a real ID pin, reports it in
 // GOTGCTL.CIDSTS and interrupts on GINTSTS.CIDSCHG. But that only means
 // anything if the board fits a connector carrying ID - a micro-AB, or a
 // Type-C controller whose ID output is wired to it.
 //
-// So the default is FIXED, because most boards give each port a dedicated
-// connector and the role is then decided by the mechanics. A board that does
-// wire ID says so:
+// So the default is FIXED, because a board that gives each port its own
+// dedicated connector has already decided the role in its mechanics: a type-A
+// receptacle is a host socket, a type-B one is a device socket. A board that
+// really wires ID says so:
 //
-//   #define MIOS32_USB_ROLE_SOURCE  MIOS32_USB_ROLE_SRC_ID
+//   #define MIOS32_USB_P0_ROLE_SOURCE  MIOS32_USB_ROLE_SRC_ID
 /////////////////////////////////////////////////////////////////////////////
 
-#ifndef MIOS32_USB_ROLE_SOURCE
-# define MIOS32_USB_ROLE_SOURCE  MIOS32_USB_ROLE_SRC_FIXED
+#ifndef MIOS32_USB_P0_ROLE_SOURCE
+# define MIOS32_USB_P0_ROLE_SOURCE  MIOS32_USB_ROLE_SRC_FIXED
+#endif
+#ifndef MIOS32_USB_P1_ROLE_SOURCE
+# define MIOS32_USB_P1_ROLE_SOURCE  MIOS32_USB_ROLE_SRC_FIXED
 #endif
 
 
 /////////////////////////////////////////////////////////////////////////////
 //! Brings the controller up for one port in the requested role.
-//! \param[in] port the USB port
+//! \param[in] port 0 for OTG_FS, 1 for OTG_HS
 //! \param[in] role the role it is to play
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
@@ -78,33 +105,50 @@ s32 MIOS32_USB_LL_Init(u8 port, mios32_usb_role_t role)
 {
   LL_GPIO_InitTypeDef gpio;
 
-  if( port != 0 )
-    return -1; // only the full-speed core is served today
+  if( port >= MIOS32_USB_NUM_PORTS )
+    return -1;
 
   if( role != MIOS32_USB_ROLE_DEVICE && role != MIOS32_USB_ROLE_HOST )
     return -2;
 
-  // The 48 MHz the controller runs on is set up with the rest of the clock
+  // The 48 MHz the controllers run on is set up with the rest of the clock
   // tree in mios32_sys.c - it is a system-wide decision, not a USB one.
-
-  LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA);
 
   LL_GPIO_StructInit(&gpio);
   gpio.Mode       = LL_GPIO_MODE_ALTERNATE;
   gpio.Speed      = LL_GPIO_SPEED_FREQ_VERY_HIGH;
   gpio.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
   gpio.Pull       = LL_GPIO_PULL_NO;
-  gpio.Alternate  = MIOS32_USB_PIN_AF;
 
-  gpio.Pin = MIOS32_USB_DM_PIN;
-  LL_GPIO_Init(MIOS32_USB_DM_PORT, &gpio);
+  if( port == 0 ) {
+    LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA);
 
-  gpio.Pin = MIOS32_USB_DP_PIN;
-  LL_GPIO_Init(MIOS32_USB_DP_PORT, &gpio);
+    gpio.Alternate = MIOS32_USB_P0_AF;
+    gpio.Pin = MIOS32_USB_P0_DM_PIN;
+    LL_GPIO_Init(MIOS32_USB_P0_DM_PORT, &gpio);
+    gpio.Pin = MIOS32_USB_P0_DP_PIN;
+    LL_GPIO_Init(MIOS32_USB_P0_DP_PORT, &gpio);
 
-  LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_OTGFS);
+    LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_OTGFS);
 
-  MIOS32_IRQ_Install(OTG_FS_IRQn, MIOS32_IRQ_USB_PRIORITY);
+    MIOS32_IRQ_Install(OTG_FS_IRQn, MIOS32_IRQ_USB_PRIORITY);
+
+  } else {
+    LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOB);
+
+    gpio.Alternate = MIOS32_USB_P1_AF;
+    gpio.Pin = MIOS32_USB_P1_DM_PIN;
+    LL_GPIO_Init(MIOS32_USB_P1_DM_PORT, &gpio);
+    gpio.Pin = MIOS32_USB_P1_DP_PIN;
+    LL_GPIO_Init(MIOS32_USB_P1_DP_PORT, &gpio);
+
+    // OTGHS only. NOT OTGHSULPI: that clock feeds the external high-speed PHY
+    // interface, and leaving it on while using the internal full-speed PHY
+    // holds the core in a state where nothing enumerates.
+    LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_OTGHS);
+
+    MIOS32_IRQ_Install(OTG_HS_IRQn, MIOS32_IRQ_USB_PRIORITY);
+  }
 
   return 0;
 }
@@ -115,22 +159,32 @@ s32 MIOS32_USB_LL_Init(u8 port, mios32_usb_role_t role)
 /////////////////////////////////////////////////////////////////////////////
 mios32_usb_role_source_t MIOS32_USB_LL_RoleSourceGet(u8 port)
 {
-  if( port != 0 )
-    return MIOS32_USB_ROLE_SRC_FIXED;
-
-  return MIOS32_USB_ROLE_SOURCE;
+  switch( port ) {
+  case 0:  return MIOS32_USB_P0_ROLE_SOURCE;
+  case 1:  return MIOS32_USB_P1_ROLE_SOURCE;
+  default: return MIOS32_USB_ROLE_SRC_FIXED;
+  }
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Interrupt
+// Interrupts
 //
-// Declared weak in the startup file, so defining it here is what claims it.
+// Declared weak in the startup file, so defining them here is what claims
+// them. tusb_int_handler() dispatches to whichever stack owns the port, so
+// there is nothing to decide at this level.
 /////////////////////////////////////////////////////////////////////////////
 
 void OTG_FS_IRQHandler(void)
 {
-  tud_int_handler(0);
+  tusb_int_handler(0, true);
 }
 
-#endif /* MIOS32_USE_USB_MIDI */
+#if MIOS32_USB_NUM_PORTS > 1
+void OTG_HS_IRQHandler(void)
+{
+  tusb_int_handler(1, true);
+}
+#endif
+
+#endif /* MIOS32_USE_USB */

@@ -148,8 +148,64 @@
 // Host stack
 /////////////////////////////////////////////////////////////////////////////
 
-// Off for now. The host side is the next step; the switch is here so that
-// turning it on is a one-line change rather than a new file.
-#define CFG_TUH_ENABLED             0
+// Opt-in like the device side: asking for a host class turns the host stack
+// on. A project that only wants to BE a MIDI device pays nothing for this.
+#if defined(MIOS32_USE_USB_HOST_MIDI) || defined(MIOS32_USE_USB_HOST_HID) || defined(MIOS32_USE_USB_HOST_MSC)
+# define CFG_TUH_ENABLED            1
+#else
+# define CFG_TUH_ENABLED            0
+#endif
+
+#if CFG_TUH_ENABLED
+
+# define CFG_TUH_MAX_SPEED          OPT_MODE_FULL_SPEED
+
+// Same reasoning as the device side - see CFG_TUD_DWC2_SLAVE_ENABLE.
+# define CFG_TUH_DWC2_SLAVE_ENABLE  1
+# define CFG_TUH_DWC2_DMA_ENABLE    0
+
+// A hub is what makes "MIDI and HID and MSC at the same time" possible on a
+// single socket. Without it the port serves exactly one device.
+# ifndef MIOS32_USB_HOST_HUB
+#  define MIOS32_USB_HOST_HUB       1
+# endif
+# define CFG_TUH_HUB                MIOS32_USB_HOST_HUB
+
+// How many devices may be attached at once, hubs included. Each costs RAM,
+// so this is a project decision.
+# ifndef MIOS32_USB_HOST_MAX_DEVICES
+#  define MIOS32_USB_HOST_MAX_DEVICES 4
+# endif
+# define CFG_TUH_DEVICE_MAX         (MIOS32_USB_HOST_MAX_DEVICES + CFG_TUH_HUB)
+
+# define CFG_TUH_ENUMERATION_BUFSIZE 256
+
+# if defined(MIOS32_USE_USB_HOST_MIDI)
+#  define CFG_TUH_MIDI              1
+#  define CFG_TUH_MIDI_RX_BUFSIZE   64
+#  define CFG_TUH_MIDI_TX_BUFSIZE   64
+# else
+#  define CFG_TUH_MIDI              0
+# endif
+
+# if defined(MIOS32_USE_USB_HOST_HID)
+// Two per device: a keyboard reporting both a boot protocol and a consumer
+// page is one device with two interfaces, and missing the second one looks
+// like a keyboard whose media keys are dead.
+#  define CFG_TUH_HID               (2 * CFG_TUH_DEVICE_MAX)
+# else
+#  define CFG_TUH_HID               0
+# endif
+
+# if defined(MIOS32_USE_USB_HOST_MSC)
+#  define CFG_TUH_MSC               1
+# else
+#  define CFG_TUH_MSC               0
+# endif
+
+# define CFG_TUH_CDC                0
+# define CFG_TUH_VENDOR             0
+
+#endif /* CFG_TUH_ENABLED */
 
 #endif /* _TUSB_CONFIG_H */

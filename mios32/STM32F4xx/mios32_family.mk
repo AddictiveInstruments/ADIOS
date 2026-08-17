@@ -50,7 +50,13 @@ THUMB_SOURCE += \
 	$(TINYUSB)/src/device/usbd.c \
 	$(TINYUSB)/src/class/midi/midi_device.c \
 	$(TINYUSB)/src/portable/synopsys/dwc2/dcd_dwc2.c \
-	$(TINYUSB)/src/portable/synopsys/dwc2/dwc2_common.c
+	$(TINYUSB)/src/portable/synopsys/dwc2/dwc2_common.c \
+	$(TINYUSB)/src/portable/synopsys/dwc2/hcd_dwc2.c \
+	$(TINYUSB)/src/host/usbh.c \
+	$(TINYUSB)/src/host/hub.c \
+	$(TINYUSB)/src/class/midi/midi_host.c \
+	$(TINYUSB)/src/class/hid/hid_host.c \
+	$(TINYUSB)/src/class/msc/msc_host.c
 
 	#$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/misc.c \
 	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c \

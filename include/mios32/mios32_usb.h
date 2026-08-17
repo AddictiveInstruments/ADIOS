@@ -38,7 +38,17 @@
 #ifndef _MIOS32_USB_H
 #define _MIOS32_USB_H
 
-#if defined(MIOS32_USE_USB_MIDI)
+// Master switch, derived from the classes a project asks for - same idiom as
+// MIOS32_USE_SPI. Nobody sets this by hand: asking for a class is the opt-in,
+// and a project should never have to remember a second switch that only
+// repeats what the first one already said.
+#if !defined(MIOS32_USE_USB) && \
+    (defined(MIOS32_USE_USB_MIDI) || defined(MIOS32_USE_USB_HOST_MIDI) || \
+     defined(MIOS32_USE_USB_HOST_HID) || defined(MIOS32_USE_USB_HOST_MSC))
+#define MIOS32_USE_USB
+#endif
+
+#if defined(MIOS32_USE_USB)
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -102,6 +112,17 @@ typedef enum {
 # define MIOS32_USB_NUM_PORTS       1
 #endif
 
+// What each port does at startup, when nothing can detect it. These are the
+// usual arrangement rather than a guess about any particular board: a machine
+// with two sockets almost always presents itself on one and drives the other.
+// A board wired differently says so.
+#ifndef MIOS32_USB_P0_ROLE
+# define MIOS32_USB_P0_ROLE         MIOS32_USB_ROLE_DEVICE
+#endif
+#ifndef MIOS32_USB_P1_ROLE
+# define MIOS32_USB_P1_ROLE         MIOS32_USB_ROLE_HOST
+#endif
+
 
 /////////////////////////////////////////////////////////////////////////////
 // Prototypes
@@ -130,6 +151,6 @@ extern s32 MIOS32_USB_RoleChangeCallback_Init(void (*callback)(u8 port, mios32_u
 extern s32 MIOS32_USB_LL_Init(u8 port, mios32_usb_role_t role);
 extern mios32_usb_role_source_t MIOS32_USB_LL_RoleSourceGet(u8 port);
 
-#endif /* MIOS32_USE_USB_MIDI */
+#endif /* MIOS32_USE_USB */
 
 #endif /* _MIOS32_USB_H */

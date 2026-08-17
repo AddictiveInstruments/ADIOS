@@ -17,9 +17,37 @@
 
 #include <mios32.h>
 
-#if defined(MIOS32_USE_USB_MIDI)
+#if defined(MIOS32_USE_USB)
 
 #include <tusb.h>
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Time base for the host stack
+//
+// The host stack times things - enumeration steps, deferred work - which the
+// device stack never has to: a device only ever reacts to what the host asks.
+// So TinyUSB wants a millisecond clock, and the OS already keeps one.
+/////////////////////////////////////////////////////////////////////////////
+
+#if CFG_TUH_ENABLED
+
+# if !defined(MIOS32_USE_TIMESTAMP)
+#  error "USB host needs a millisecond time base: add #define MIOS32_USE_TIMESTAMP to your mios32_config.h. It is already incremented from the 1 mS tick, so there is nothing else to wire."
+# endif
+
+uint32_t tusb_time_millis_api(void)
+{
+  return (uint32_t)MIOS32_TIMESTAMP_Get();
+}
+
+void tusb_time_delay_ms_api(uint32_t ms)
+{
+  while( ms-- )
+    MIOS32_DELAY_Wait_uS(1000);
+}
+
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -60,8 +88,14 @@ static s32 port_start(u8 port, mios32_usb_role_t role)
     return -1;
 
   if( role == MIOS32_USB_ROLE_NONE ) {
+#if CFG_TUD_ENABLED
     if( port_role[port] == MIOS32_USB_ROLE_DEVICE )
       tud_deinit(port);
+#endif
+#if CFG_TUH_ENABLED
+    if( port_role[port] == MIOS32_USB_ROLE_HOST )
+      tuh_deinit(port);
+#endif
     port_role[port] = MIOS32_USB_ROLE_NONE;
     return 0;
   }
@@ -103,13 +137,28 @@ s32 MIOS32_USB_Init(u32 mode)
     port_role[port] = MIOS32_USB_ROLE_NONE;
 
   // A port whose role nothing can detect has to be told what it is, and the
-  // only role this OS can serve today is device. A port that CAN detect its
-  // role is left idle until it does - guessing would be worse than waiting.
+  // project says so. A port that CAN detect its role is left idle until it
+  // does - guessing would be worse than waiting.
   for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
-    if( MIOS32_USB_LL_RoleSourceGet(port) == MIOS32_USB_ROLE_SRC_FIXED ) {
-      if( port_start(port, MIOS32_USB_ROLE_DEVICE) < 0 )
-        return -2;
-    }
+    if( MIOS32_USB_LL_RoleSourceGet(port) != MIOS32_USB_ROLE_SRC_FIXED )
+      continue;
+
+    mios32_usb_role_t role = (port == 0) ? MIOS32_USB_P0_ROLE : MIOS32_USB_P1_ROLE;
+
+    // Asking for a role whose stack was never compiled in is a configuration
+    // mistake, not a runtime condition - so it is worth reporting rather than
+    // silently leaving the port dead.
+#if !CFG_TUD_ENABLED
+    if( role == MIOS32_USB_ROLE_DEVICE )
+      return -3;
+#endif
+#if !CFG_TUH_ENABLED
+    if( role == MIOS32_USB_ROLE_HOST )
+      return -4;
+#endif
+
+    if( port_start(port, role) < 0 )
+      return -2;
   }
 
   initialized = 1;
@@ -129,10 +178,25 @@ s32 MIOS32_USB_Handler(void)
   if( !initialized )
     return -1;
 
+  // Both tasks are global rather than per-port in TinyUSB, so each is called
+  // at most once however many ports play that role.
+#if CFG_TUD_ENABLED
   for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
-    if( port_role[port] == MIOS32_USB_ROLE_DEVICE )
+    if( port_role[port] == MIOS32_USB_ROLE_DEVICE ) {
       tud_task();
+      break;
+    }
   }
+#endif
+
+#if CFG_TUH_ENABLED
+  for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
+    if( port_role[port] == MIOS32_USB_ROLE_HOST ) {
+      tuh_task();
+      break;
+    }
+  }
+#endif
 
   return 0;
 }
@@ -206,4 +270,4 @@ void MIOS32_USB_RoleChangeNotify(u8 port, mios32_usb_role_t role)
     role_change_callback(port, role);
 }
 
-#endif /* MIOS32_USE_USB_MIDI */
+#endif /* MIOS32_USE_USB */

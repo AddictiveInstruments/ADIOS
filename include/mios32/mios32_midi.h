@@ -108,6 +108,12 @@ typedef enum {
   DEFAULT    = 0x00,
   MIDI_DEBUG = 0x01,
 
+  // One range per USB CONTROLLER, sixteen cables each - sixteen being the
+  // ceiling of USB MIDI 1.0, whose cable number is a 4-bit field.
+  //
+  // The range says which controller, not which role: a controller may be a
+  // device or a host, and the cables are numbered the same way either way.
+  // So a keyboard plugged into the second socket arrives on USB16..USB31.
   USB0 = 0x10,
   USB1 = 0x11,
   USB2 = 0x12,
@@ -116,58 +122,78 @@ typedef enum {
   USB5 = 0x15,
   USB6 = 0x16,
   USB7 = 0x17,
-  USB8 = 0x10,
-  USB9 = 0x11,
-  USB10 = 0x12,
-  USB11 = 0x13,
-  USB12 = 0x14,
-  USB13 = 0x15,
-  USB14 = 0x16,
-  USB15 = 0x17,
+  USB8 = 0x18,
+  USB9 = 0x19,
+  USB10 = 0x1a,
+  USB11 = 0x1b,
+  USB12 = 0x1c,
+  USB13 = 0x1d,
+  USB14 = 0x1e,
+  USB15 = 0x1f,
+
+  USB16 = 0x20,
+  USB17 = 0x21,
+  USB18 = 0x22,
+  USB19 = 0x23,
+  USB20 = 0x24,
+  USB21 = 0x25,
+  USB22 = 0x26,
+  USB23 = 0x27,
+  USB24 = 0x28,
+  USB25 = 0x29,
+  USB26 = 0x2a,
+  USB27 = 0x2b,
+  USB28 = 0x2c,
+  USB29 = 0x2d,
+  USB30 = 0x2e,
+  USB31 = 0x2f,
 
   // named after the classic 5-pin DIN MIDI connector - the physical/
   // hardware MIDI ports, as opposed to USBn/SPIMn. Not "UARTn":
   // that bare name collides with real CMSIS peripheral macros (UART4/5/7/
   // 8/9/10 on STM32F4/F7/H7) and with this driver's own MIOS32_UARTn
   // logical-port aliases in mios32_uart.c.
-  DIN0 = 0x20,
-  DIN1 = 0x21,
-  DIN2 = 0x22,
-  DIN3 = 0x23,
-  DIN4 = 0x24,
-  DIN5 = 0x25,
-  DIN6 = 0x26,
-  DIN7 = 0x27,
-  DIN8 = 0x28,
-  DIN9 = 0x29,
-  DIN10 = 0x2a,
-  DIN11 = 0x2b,
-  DIN12 = 0x2c,
-  DIN13 = 0x2d,
-  DIN14 = 0x2e,
-  DIN15 = 0x2f,
+  DIN0 = 0x30,
+  DIN1 = 0x31,
+  DIN2 = 0x32,
+  DIN3 = 0x33,
+  DIN4 = 0x34,
+  DIN5 = 0x35,
+  DIN6 = 0x36,
+  DIN7 = 0x37,
+  DIN8 = 0x38,
+  DIN9 = 0x39,
+  DIN10 = 0x3a,
+  DIN11 = 0x3b,
+  DIN12 = 0x3c,
+  DIN13 = 0x3d,
+  DIN14 = 0x3e,
+  DIN15 = 0x3f,
 
-  // 0x30 and 0x40 are deliberately left empty, and a new transport must NOT
-  // fill them. These numbers travel: they appear in SysEx and in host-side
-  // tools, so reusing a free range would renumber nothing but would give an
-  // old number a new meaning. Add new transports after the last range in use.
-
-  SPIM0 = 0x50,
-  SPIM1 = 0x51,
-  SPIM2 = 0x52,
-  SPIM3 = 0x53,
-  SPIM4 = 0x54,
-  SPIM5 = 0x55,
-  SPIM6 = 0x56,
-  SPIM7 = 0x57,
-  SPIM8 = 0x58,
-  SPIM9 = 0x59,
-  SPIM10 = 0x5a,
-  SPIM11 = 0x5b,
-  SPIM12 = 0x5c,
-  SPIM13 = 0x5d,
-  SPIM14 = 0x5e,
-  SPIM15 = 0x5f
+  // The ranges were compacted on 2026-08-17, when the second USB controller
+  // took 0x20: DIN moved 0x20 -> 0x30 and SPIM 0x50 -> 0x40. That was the
+  // planned realignment, not an accident, and it is the reason the previous
+  // note here - which said 0x30 and 0x40 were to stay empty - is gone.
+  //
+  // These numbers still travel: they appear in SysEx and in host-side tools.
+  // So a new transport takes the next free range, 0x50, and does not reuse
+  // one that has meant something else before.
+  SPIM0 = 0x40,
+  SPIM1 = 0x41,
+  SPIM2 = 0x42,
+  SPIM3 = 0x43,
+  SPIM4 = 0x44,
+  SPIM5 = 0x45,
+  SPIM6 = 0x46,
+  SPIM7 = 0x47,
+  SPIM8 = 0x48,
+  SPIM9 = 0x49,
+  SPIM10 = 0x4a,
+  SPIM11 = 0x4b,
+  SPIM12 = 0x4c,
+  SPIM13 = 0x4d,
+  SPIM14 = 0x4e,
+  SPIM15 = 0x4f
  
 } mios32_midi_port_t;
 
