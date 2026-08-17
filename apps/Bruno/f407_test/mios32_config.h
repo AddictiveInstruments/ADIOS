@@ -170,11 +170,19 @@
 #define MIOS32_DONT_USE_LCD
 // (the MIDI core itself is always compiled - not optional, see mios32_midi.c;
 // only the transports are opt-in: MIOS32_USE_DIN_MIDI etc, further below)
-//#define MIOS32_DONT_USE_USB
-#define MIOS32_DONT_USE_USB_HOST
-#define MIOS32_DONT_USE_USB_HS_HOST
-//#define MIOS32_DONT_USE_USB_MIDI
-//#define MIOS32_USE_USB_COM
+// USB is opt-in like the other transports: asking for a class is what turns
+// the stack on, there is no separate master switch.
+#define MIOS32_USE_USB_MIDI
+#define MIOS32_USB_MIDI_NUM_PORTS 1
+
+// This board's OTG_FS connector does not bring VBUS to the sensing pin.
+// Saying so is not optional: with sensing left on, the controller never sees
+// a host and the device silently never enumerates.
+#define MIOS32_USB_VBUS_SENSING 0
+
+// Identity. The vendor ID and the lab-range product ID come from the OS
+// defaults; only the name is worth setting on a test board.
+#define MIOS32_USB_PRODUCT_STR  "F407 Test"
 
 
 // =============================================================================

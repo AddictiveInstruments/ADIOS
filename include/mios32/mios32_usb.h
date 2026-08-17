@@ -1,108 +1,106 @@
-// $Id$
 /*
- * Header file for USB Driver
+ * Header file for the USB layer.
+ *
+ * This layer is a thin adapter over TinyUSB. It owns the device identity, the
+ * port roles, and the periodic call that drives the stack; the classes
+ * themselves (MIDI, and later HID and MSC) live in their own files.
  *
  * ==========================================================================
  *
- *  Copyright (C) 2008 Thorsten Klose (tk@midibox.org)
+ * HOW TO USE IT
+ *
+ * 1) Ask for a transport in your mios32_config.h. There is no master USB
+ *    switch to set - asking for a class is what turns USB on:
+ *
+ *      #define MIOS32_USE_USB_MIDI
+ *
+ * 2) Give the product its own identity. THE DEFAULTS BELOW ARE NOT SHIPPABLE
+ *    - see the note on the product ID:
+ *
+ *      #define MIOS32_USB_PRODUCT_ID   0x03e9
+ *      #define MIOS32_USB_PRODUCT_STR  "Your Instrument"
+ *
+ * 3) Call the two entry points: MIOS32_USB_Init() once, then
+ *    MIOS32_USB_Handler() regularly. The core already does both if you use the
+ *    standard main loop, so an ordinary application writes nothing here.
+ *
+ * A minimal application therefore needs one line of configuration and no code.
+ *
+ * ==========================================================================
+ *
+ *  Copyright (C) 2026 Bruno Dupeyron
  *  Licensed for personal non-commercial use only.
  *  All other rights reserved.
- * 
+ *
  * ==========================================================================
  */
 
 #ifndef _MIOS32_USB_H
 #define _MIOS32_USB_H
 
+#if defined(MIOS32_USE_USB_MIDI)
+
+
 /////////////////////////////////////////////////////////////////////////////
-// Global definitions
+// Device identity
 /////////////////////////////////////////////////////////////////////////////
 
-
-// Which USB core to drive. The full-speed core is the default because every
-// chip that has USB at all has it; the high-speed core exists only on the
-// larger STM32F4 and needs its own pins, so a board that wires it says so:
-//
-//   #define MIOS32_USE_USB_HS 1
-//
-// It costs around 400 bytes of extra core code, so ask for it only if the
-// board really carries the HS pins.
-//
-// Host mode rides on the same core: MIOS32_DONT_USE_USB_HS_HOST is what a
-// project sets to refuse it. Asking for the core and refusing its host mode
-// in the same project is a contradiction, and a silent one - the two used to
-// be resolved by whichever the preprocessor met first - so it is refused
-// here instead.
-#if defined(MIOS32_USE_USB_HS) && defined(MIOS32_DONT_USE_USB_HS_HOST)
-# error "MIOS32_USE_USB_HS and MIOS32_DONT_USE_USB_HS_HOST are both defined: decide whether this board drives the high-speed core or not, and keep only one."
-#endif
-
-#ifdef MIOS32_USE_USB_HS
-# define USE_USB_OTG_HS
-#else
-# ifndef MIOS32_DONT_USE_USB_HS_HOST
-#  define MIOS32_DONT_USE_USB_HS_HOST
-# endif
-#endif
-
-// Following settings allow to customize the USB device descriptor
+// The vendor ID is issued by the USB-IF and cannot be invented. 0x16c0 belongs
+// to Van Ooijen Technische Informatica, who allocate product IDs under it.
 #ifndef MIOS32_USB_VENDOR_ID
-#define MIOS32_USB_VENDOR_ID    0x16c0        // sponsored by voti.nl! see http://www.voti.nl/pids
+# define MIOS32_USB_VENDOR_ID       0x16c0
 #endif
-#ifndef MIOS32_USB_VENDOR_STR
-#define MIOS32_USB_VENDOR_STR   "midibox.org" // you will see this in the USB device description
-#endif
-#ifndef MIOS32_USB_PRODUCT_STR
-#define MIOS32_USB_PRODUCT_STR  "MIOS32"      // you will see this in the MIDI device list
-#endif
+
+// !! NOT SHIPPABLE AS-IS !!
+// 1000..1009 (0x03e8..0x03f1) is the range that vendor keeps free for lab use,
+// which is what this default is. A product ID identifies a PRODUCT, so every
+// instrument must declare its own: two devices answering the same ID is a
+// fault, and it bites the day both are plugged into one host.
 #ifndef MIOS32_USB_PRODUCT_ID
-#define MIOS32_USB_PRODUCT_ID   0x03fe        // ==1022; 1020-1029 reserved for T.Klose, 1000 - 1009 free for lab use
-                                              // note: Vendor ID 1022 is required if the GM5 driver should be used!
+# define MIOS32_USB_PRODUCT_ID      0x03e8
 #endif
+
+#ifndef MIOS32_USB_VENDOR_STR
+# define MIOS32_USB_VENDOR_STR      "Addictive Instruments"
+#endif
+
+// What the user reads in the MIDI device list of a DAW.
+#ifndef MIOS32_USB_PRODUCT_STR
+# define MIOS32_USB_PRODUCT_STR     "Unnamed Instrument"
+#endif
+
+// Binary-coded decimal, so 0x0100 reads as v1.00.
 #ifndef MIOS32_USB_VERSION_ID
-#define MIOS32_USB_VERSION_ID   0x0100        // v1.00
+# define MIOS32_USB_VERSION_ID      0x0100
 #endif
 
-
-// internal defines which are used by MIOS32 USB MIDI/COM (don't touch)
-#define MIOS32_USB_EP_NUM   5
-
-// buffer table base address
-#define MIOS32_USB_BTABLE_ADDRESS      0x000
-
-// EP0 rx/tx buffer base address
-#define MIOS32_USB_ENDP0_RXADDR        0x040
-#define MIOS32_USB_ENDP0_TXADDR        0x080
-
-// EP1 Rx/Tx buffer base address for MIDI driver
-#define MIOS32_USB_ENDP1_TXADDR        0x0c0
-#define MIOS32_USB_ENDP2_RXADDR        0x100
-
-// EP3/4/5 buffer base addresses for COM driver
-#define MIOS32_USB_ENDP3_RXADDR        0x140
-#define MIOS32_USB_ENDP4_TXADDR        0x180
-#define MIOS32_USB_ENDP5_TXADDR        0x1c0
-
-// function used to output Host debug messages
-//#define MIOS32_MIDI_USBH_DEBUG
-#ifdef MIOS32_MIDI_USBH_DEBUG
-#ifndef MIOS32_MIDI_USBH_DEBUG_PORT
-// debug port is DIN0
-#define MIOS32_MIDI_USBH_DEBUG_PORT DIN0
-#endif
-#ifndef DEBUG_MSG
-#define DEBUG_MSG MIOS32_MIDI_SendDebugMessage
-#endif
-#endif
 
 /////////////////////////////////////////////////////////////////////////////
-// Global Types
+// Port roles
 /////////////////////////////////////////////////////////////////////////////
+
+// A port has a role, and the role is a RUNTIME value even on boards that will
+// never change it. A board that can switch - a Type-C port with CC detection,
+// or an OTG ID pin - moves between these at will; a board that cannot sets one
+// at startup and stays there. Same code either way, which is why the role is
+// not a compile-time switch.
 typedef enum {
-  USBH_NO_CLASS   = 0,
-  USBH_IS_MIDI,
-  USBH_IS_HID
-}USBH_Class_Status;
+  MIOS32_USB_ROLE_NONE   = 0,   // port idle, no stack running on it
+  MIOS32_USB_ROLE_DEVICE = 1,
+  MIOS32_USB_ROLE_HOST   = 2
+} mios32_usb_role_t;
+
+// How a port learns its role. Which of these a family can offer is a fact of
+// the silicon and not a choice.
+typedef enum {
+  MIOS32_USB_ROLE_SRC_FIXED = 0, // the connector decides; nothing to detect
+  MIOS32_USB_ROLE_SRC_ID    = 1, // OTG ID pin
+  MIOS32_USB_ROLE_SRC_CC    = 2  // Type-C CC lines
+} mios32_usb_role_source_t;
+
+#ifndef MIOS32_USB_NUM_PORTS
+# define MIOS32_USB_NUM_PORTS       1
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -110,18 +108,28 @@ typedef enum {
 /////////////////////////////////////////////////////////////////////////////
 
 extern s32 MIOS32_USB_Init(u32 mode);
+
+// Drives the stack. Must be called regularly; the core calls it from the 1 ms
+// tick. Calling it more often is harmless and lowers latency.
+extern s32 MIOS32_USB_Handler(void);
+
 extern s32 MIOS32_USB_IsInitialized(void);
-extern s32 MIOS32_USB_ForceSingleUSB(void);
-extern s32 MIOS32_USB_ForceDeviceMode(void);
-extern s32 MIOS32_USB_HOST_Process(void);
+
+extern s32 MIOS32_USB_RoleSet(u8 port, mios32_usb_role_t role);
+extern mios32_usb_role_t MIOS32_USB_RoleGet(u8 port);
+
+// Called when a port changes role on its own - an ID pin grounded, a Type-C
+// cable attached. Never called on a port whose role source is FIXED.
+extern s32 MIOS32_USB_RoleChangeCallback_Init(void (*callback)(u8 port, mios32_usb_role_t role));
+
 
 /////////////////////////////////////////////////////////////////////////////
-// Export global variables
+// Implemented per family: clocks, pins, interrupt, role source
 /////////////////////////////////////////////////////////////////////////////
 
-extern void (*pEpInt_IN[7])(void);
-extern void (*pEpInt_OUT[7])(void);
+extern s32 MIOS32_USB_LL_Init(u8 port, mios32_usb_role_t role);
+extern mios32_usb_role_source_t MIOS32_USB_LL_RoleSourceGet(u8 port);
 
-extern  uint8_t USBD_DeviceQualifierDesc[0x0A];
+#endif /* MIOS32_USE_USB_MIDI */
 
 #endif /* _MIOS32_USB_H */

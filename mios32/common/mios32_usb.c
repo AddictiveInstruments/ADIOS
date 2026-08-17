@@ -1,0 +1,209 @@
+/*
+ * USB layer: the adapter between this OS and TinyUSB.
+ *
+ * It owns three things and nothing else - which port plays which role, the
+ * periodic call that drives the stack, and the handful of callbacks TinyUSB
+ * expects from its host application. The classes live in their own files, and
+ * everything below the controller lives in mios32/<FAMILY>/mios32_usb_ll.c.
+ *
+ * ==========================================================================
+ *
+ *  Copyright (C) 2026 Bruno Dupeyron
+ *  Licensed for personal non-commercial use only.
+ *  All other rights reserved.
+ *
+ * ==========================================================================
+ */
+
+#include <mios32.h>
+
+#if defined(MIOS32_USE_USB_MIDI)
+
+#include <tusb.h>
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Local variables
+/////////////////////////////////////////////////////////////////////////////
+
+static mios32_usb_role_t port_role[MIOS32_USB_NUM_PORTS];
+static u8 initialized;
+
+static void (*role_change_callback)(u8 port, mios32_usb_role_t role);
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Role mapping
+//
+// MIOS32_USB_ROLE_DEVICE/HOST are 1 and 2 on purpose: TinyUSB's own
+// TUSB_ROLE_DEVICE/HOST are 1 and 2 as well, so this is a cast and not a
+// lookup table that could drift.
+/////////////////////////////////////////////////////////////////////////////
+
+static tusb_role_t role_to_tusb(mios32_usb_role_t role)
+{
+  switch( role ) {
+  case MIOS32_USB_ROLE_DEVICE: return TUSB_ROLE_DEVICE;
+  case MIOS32_USB_ROLE_HOST:   return TUSB_ROLE_HOST;
+  default:                     return TUSB_ROLE_INVALID;
+  }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Brings one port up in the requested role.
+/////////////////////////////////////////////////////////////////////////////
+
+static s32 port_start(u8 port, mios32_usb_role_t role)
+{
+  if( port >= MIOS32_USB_NUM_PORTS )
+    return -1;
+
+  if( role == MIOS32_USB_ROLE_NONE ) {
+    if( port_role[port] == MIOS32_USB_ROLE_DEVICE )
+      tud_deinit(port);
+    port_role[port] = MIOS32_USB_ROLE_NONE;
+    return 0;
+  }
+
+  // Clocks, pins and interrupt first: the stack talks to a controller that
+  // must already be alive when it does.
+  if( MIOS32_USB_LL_Init(port, role) < 0 )
+    return -2;
+
+  tusb_rhport_init_t rh_init = {
+    .role  = role_to_tusb(role),
+    .speed = TUSB_SPEED_AUTO
+  };
+
+  if( !tusb_rhport_init(port, &rh_init) )
+    return -3;
+
+  port_role[port] = role;
+
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Initializes the USB layer.
+//! \param[in] mode currently only mode 0 is supported
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_Init(u32 mode)
+{
+  u8 port;
+
+  if( mode != 0 )
+    return -1;
+
+  role_change_callback = NULL;
+
+  for(port=0; port<MIOS32_USB_NUM_PORTS; ++port)
+    port_role[port] = MIOS32_USB_ROLE_NONE;
+
+  // A port whose role nothing can detect has to be told what it is, and the
+  // only role this OS can serve today is device. A port that CAN detect its
+  // role is left idle until it does - guessing would be worse than waiting.
+  for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
+    if( MIOS32_USB_LL_RoleSourceGet(port) == MIOS32_USB_ROLE_SRC_FIXED ) {
+      if( port_start(port, MIOS32_USB_ROLE_DEVICE) < 0 )
+        return -2;
+    }
+  }
+
+  initialized = 1;
+
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Drives the stack. Call regularly - the core calls it from the 1 mS tick.
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_Handler(void)
+{
+  u8 port;
+
+  if( !initialized )
+    return -1;
+
+  for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
+    if( port_role[port] == MIOS32_USB_ROLE_DEVICE )
+      tud_task();
+  }
+
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! \return 1 if the USB layer is up
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_IsInitialized(void)
+{
+  return initialized ? 1 : 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Puts a port into a role, or takes it down with MIOS32_USB_ROLE_NONE.
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_RoleSet(u8 port, mios32_usb_role_t role)
+{
+  if( port >= MIOS32_USB_NUM_PORTS )
+    return -1;
+
+  if( port_role[port] == role )
+    return 0; // already there
+
+  // Down before up, always: the two stacks cannot share a controller, and a
+  // half-torn-down one enumerates in ways that are painful to diagnose.
+  if( port_role[port] != MIOS32_USB_ROLE_NONE )
+    port_start(port, MIOS32_USB_ROLE_NONE);
+
+  return port_start(port, role);
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! \return the role a port is currently playing
+/////////////////////////////////////////////////////////////////////////////
+mios32_usb_role_t MIOS32_USB_RoleGet(u8 port)
+{
+  if( port >= MIOS32_USB_NUM_PORTS )
+    return MIOS32_USB_ROLE_NONE;
+
+  return port_role[port];
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Installs the hook called when a port changes role on its own.
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_RoleChangeCallback_Init(void (*callback)(u8 port, mios32_usb_role_t role))
+{
+  role_change_callback = callback;
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Called by the family layer when a port's role source says the role changed.
+// Not public: an application observes this through the callback above.
+/////////////////////////////////////////////////////////////////////////////
+void MIOS32_USB_RoleChangeNotify(u8 port, mios32_usb_role_t role)
+{
+  if( port >= MIOS32_USB_NUM_PORTS )
+    return;
+
+  MIOS32_USB_RoleSet(port, role);
+
+  if( role_change_callback != NULL )
+    role_change_callback(port, role);
+}
+
+#endif /* MIOS32_USE_USB_MIDI */

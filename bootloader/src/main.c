@@ -29,14 +29,9 @@
 
 
 
-#if defined(MIOS32_FAMILY_STM32F10x)
-#include <usb_lib.h>
-#elif defined(MIOS32_FAMILY_STM32F4xx)
-#include <usb_core.h>
-
-// imported from mios32_usb.c
-extern USB_OTG_CORE_HANDLE  USB_OTG_FS_dev;
-#endif
+// Nothing to include for USB: this file no longer reaches into the
+// controller. Quiescing it before the jump goes through MIOS32_USB_RoleSet(),
+// which is the same call on every family.
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -437,18 +432,13 @@ int main(void)
         LL_AHB2_GRP1_ReleaseReset(0x00000080);
 #endif
     } else {
-      // no hold mode: ensure that USB interrupts won't be triggered while jumping into application
-#if defined(MIOS32_FAMILY_STM32F4xx)
-#ifndef MIOS32_DONT_USE_USB_MIDI
-      if( MIOS32_USB_IsInitialized() && USB_OTG_FS_dev.dev.class_cb != NULL ) {
-	USB_OTG_DisableGlobalInt(&USB_OTG_FS_dev);
-      }
-#endif
-#elif defined(MIOS32_FAMILY_STM32G0xx)
-      __NOP();
-#else
-      _SetCNTR(0); // clear USB interrupt mask
-      _SetISTR(0); // clear all USB interrupt requests
+      // No hold mode: the USB interrupt must not fire while we jump into the
+      // application, which is about to replace the stack that would service
+      // it. Taking the port down does exactly that, and does it identically
+      // on every family - the controller is TinyUSB's business now, not ours.
+#if defined(MIOS32_USE_USB_MIDI)
+      if( MIOS32_USB_IsInitialized() )
+	MIOS32_USB_RoleSet(0, MIOS32_USB_ROLE_NONE);
 #endif
     }
 

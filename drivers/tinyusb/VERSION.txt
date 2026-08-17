@@ -1,0 +1,2 @@
+TinyUSB 9fb2f9c  2026-08-15
+src/ importe tel quel depuis https://github.com/hathach/tinyusb

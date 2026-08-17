@@ -4,16 +4,19 @@
 # select driver library
 #DRIVER_LIB =	$(MIOS32_PATH)/drivers/$(FAMILY)/v1.1.0
 DRIVER_LIB =	$(MIOS32_PATH)/drivers/$(FAMILY)/LL_HAL
-DRIVER_USB_LIB =	$(MIOS32_PATH)/drivers/$(FAMILY)/v1.1.0
+TINYUSB =	$(MIOS32_PATH)/drivers/tinyusb
 # enhance include path
 #C_INCLUDE +=	-I $(MIOS32_PATH)/mios32/$(FAMILY) -I $(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/inc -I $(DRIVER_LIB)/STM32_USB_Device_Library/Core/inc  -I $(DRIVER_LIB)/STM32_USB_HOST_Library/Core/inc -I $(DRIVER_LIB)/STM32_USB_OTG_Driver/inc -I $(DRIVER_LIB)/CMSIS/Include -I $(DRIVER_LIB)/CMSIS/ST/STM32F4xx/Include -I $(DRIVER_LIB)/CMSIS/ST/STM32F4xx/Include
 C_INCLUDE +=	-I $(DRIVER_LIB)/CMSIS/Include -I $(DRIVER_LIB)/CMSIS/Device/ST/STM32F4xx/Include
 C_INCLUDE +=	-I $(MIOS32_PATH)/mios32/$(FAMILY) -I $(DRIVER_LIB)/STM32F4xx_HAL_Driver/inc 
-C_INCLUDE +=	-I $(DRIVER_USB_LIB)/STM32_USB_Device_Library/Core/inc  -I $(DRIVER_USB_LIB)/STM32_USB_HOST_Library/Core/inc -I $(DRIVER_USB_LIB)/STM32_USB_OTG_Driver/inc 
+C_INCLUDE +=	-I $(TINYUSB)/src
  
 
 
-CFLAGS += -DUSE_FULL_LL_DRIVER -DUSB_SUPPORT_USER_STRING_DESC
+# The USB peripheral of this family is a Synopsys DWC2 core, so TinyUSB serves
+# it with its dwc2 controller driver. This is the one place that fact is
+# stated - everything above mios32_usb_ll.c is family-independent.
+CFLAGS += -DUSE_FULL_LL_DRIVER -DCFG_TUSB_MCU=OPT_MCU_STM32F4
 
 
 # add modules to thumb sources
@@ -32,20 +35,22 @@ THUMB_SOURCE += \
 	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_dma.c \
 	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_i2c.c \
 	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_fmpi2c.c \
-	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_adc.c \
-	$(DRIVER_USB_LIB)/STM32_USB_Device_Library/Core/src/usbd_core.c \
-	$(DRIVER_USB_LIB)/STM32_USB_Device_Library/Core/src/usbd_ioreq.c \
-	$(DRIVER_USB_LIB)/STM32_USB_Device_Library/Core/src/usbd_req.c \
-	$(DRIVER_USB_LIB)/STM32_USB_HOST_Library/Core/src/usbh_core.c \
-	$(DRIVER_USB_LIB)/STM32_USB_HOST_Library/Core/src/usbh_hcs.c \
-	$(DRIVER_USB_LIB)/STM32_USB_HOST_Library/Core/src/usbh_ioreq.c \
-	$(DRIVER_USB_LIB)/STM32_USB_HOST_Library/Core/src/usbh_stdreq.c \
-	$(DRIVER_USB_LIB)/STM32_USB_OTG_Driver/src/usb_core.c \
-	$(DRIVER_USB_LIB)/STM32_USB_OTG_Driver/src/usb_dcd.c \
-	$(DRIVER_USB_LIB)/STM32_USB_OTG_Driver/src/usb_dcd_int.c \
-	$(DRIVER_USB_LIB)/STM32_USB_OTG_Driver/src/usb_hcd.c \
-	$(DRIVER_USB_LIB)/STM32_USB_OTG_Driver/src/usb_hcd_int.c \
-	$(DRIVER_USB_LIB)/STM32_USB_OTG_Driver/src/usb_otg.c
+	$(DRIVER_LIB)/STM32F4xx_HAL_Driver/src/stm32f4xx_ll_adc.c
+
+
+# USB: the OS layer, then TinyUSB. The linker drops the lot when no project
+# asks for a USB class, so listing it here costs nothing to those that don't.
+THUMB_SOURCE += \
+	$(MIOS32_PATH)/mios32/common/mios32_usb.c \
+	$(MIOS32_PATH)/mios32/common/mios32_usb_midi.c \
+	$(MIOS32_PATH)/mios32/common/mios32_usb_desc.c \
+	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_usb_ll.c \
+	$(TINYUSB)/src/tusb.c \
+	$(TINYUSB)/src/common/tusb_fifo.c \
+	$(TINYUSB)/src/device/usbd.c \
+	$(TINYUSB)/src/class/midi/midi_device.c \
+	$(TINYUSB)/src/portable/synopsys/dwc2/dcd_dwc2.c \
+	$(TINYUSB)/src/portable/synopsys/dwc2/dwc2_common.c
 
 	#$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/misc.c \
 	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c \

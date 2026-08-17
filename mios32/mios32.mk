@@ -78,13 +78,9 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_uart.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_i2c.c \
 	
-ifneq ($(FAMILY),STM32G0xx)
-THUMB_SOURCE += \
-	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_usb.c \
-	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_usb_midi.c \
-	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_usb_com.c \
-	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_usb_hid.c 
-endif
+# USB is declared by the family, not here: whether a family has a USB
+# peripheral at all, and which TinyUSB controller driver serves it, are facts
+# of the silicon. See mios32/$(FAMILY)/mios32_family.mk.
 
 # MEMO: the gcc linker is clever enough to exclude functions from the final memory image
 # if they are not references from the main routine - accordingly we can savely include

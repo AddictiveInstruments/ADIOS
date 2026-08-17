@@ -282,11 +282,11 @@ static void MIOS32_CORE_MIDI_Tick(void)
 
 static void MIOS32_CORE_NonMIDI_Tick(void)
 {
-#if !defined(MIOS32_DONT_USE_USB_HOST) || !defined(MIOS32_DONT_USE_USB_HS_HOST)
-  // process USB Host, only others than USB MIDI
-#ifndef MIOS32_DONT_PROCESS_USB_HOST
-  MIOS32_USB_HOST_Process();
-#endif
+#if defined(MIOS32_USE_USB_MIDI)
+  // Drive the USB stack. One call whatever a port is doing - device or host,
+  // one port or several: deciding what to run is the USB layer's job, not
+  // this loop's.
+  MIOS32_USB_Handler();
 #endif
 
 #ifdef MIOS32_USE_SRIN
