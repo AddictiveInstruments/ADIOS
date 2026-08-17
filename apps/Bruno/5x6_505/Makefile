@@ -12,7 +12,7 @@
 PROCESSOR =	STM32G070CB
 FAMILY    =	STM32G0xx
 BOARD	  =	STM32G0GENERIC
-LCD       =	ili9488
+LCD       =	ili9488_5x6
 
 # self-locating repo root: apps live at a fixed depth inside the repo, so a
 # plain `make` works with no environment setup at all (any exported

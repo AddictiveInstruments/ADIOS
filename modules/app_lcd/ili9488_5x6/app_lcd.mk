@@ -3,18 +3,15 @@
 
 # enhance include path
 C_INCLUDE +=	-I $(MIOS32_PATH)/modules/app_lcd
-C_INCLUDE +=	-I $(MIOS32_PATH)/modules/app_lcd/ssd1322
+C_INCLUDE +=	-I $(MIOS32_PATH)/modules/app_lcd/ili9488_5x6
 
 # add modules to thumb sources
 THUMB_SOURCE += \
-	$(MIOS32_PATH)/modules/app_lcd/ssd1322/app_lcd.c
-
+	$(MIOS32_PATH)/modules/app_lcd/ili9488_5x6/app_lcd.c
+   
 # include fonts
 include $(MIOS32_PATH)/modules/glcd_font/glcd_font.mk
 
-# include fonts
-#include $(MIOS32_PATH)/modules/glcd_font/glcd_font_4bit.mk
-
 # directories and files that should be part of the distribution (release) package
-DIST += $(MIOS32_PATH)/modules/app_lcd/ssd1322
+DIST += $(MIOS32_PATH)/modules/app_lcd/ili9488_5x6
 
