@@ -2,7 +2,6 @@
 # defines additional rules for MIOS32 family
 
 # select driver library
-#DRIVER_LIB =	$(MIOS32_PATH)/drivers/$(FAMILY)/v1.1.0
 DRIVER_LIB =	$(MIOS32_PATH)/drivers/$(FAMILY)/LL_HAL
 TINYUSB =	$(MIOS32_PATH)/drivers/tinyusb
 # enhance include path
@@ -60,40 +59,7 @@ THUMB_SOURCE += \
 	$(TINYUSB)/src/class/hid/hid_host.c \
 	$(TINYUSB)/src/class/msc/msc_host.c
 
-	#$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/misc.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_adc.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_can.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_crc.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_aes.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_des.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_cryp_tdes.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dac.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dbgmcu.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dcmi.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_exti.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_fsmc.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_md5.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_hash_sha1.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_i2c.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_iwdg.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_pwr.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rng.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rtc.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_sdio.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_syscfg.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_tim.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c \
-	$(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_wwdg.c \
-
-
-THUMB_AS_SOURCE += 
+THUMB_AS_SOURCE +=
 
 # directories and files that should be part of the distribution (release) package
 DIST += $(MIOS32_PATH)/mios32/$(FAMILY)

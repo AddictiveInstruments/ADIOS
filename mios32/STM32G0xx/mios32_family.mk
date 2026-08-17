@@ -2,9 +2,7 @@
 # defines additional rules for MIOS32 family
 
 # select driver library
-#DRIVER_LIB =	$(MIOS32_PATH)/drivers/$(FAMILY)/v1.1.0
 DRIVER_LIB =	$(MIOS32_PATH)/drivers/$(FAMILY)/LL_HAL
-#DRIVER_USB_LIB =	$(MIOS32_PATH)/drivers/$(FAMILY)/v1.1.0
 # enhance include path
 #C_INCLUDE +=	-I $(MIOS32_PATH)/mios32/$(FAMILY) -I $(DRIVER_LIB)/STM32F4xx_StdPeriph_Driver/inc -I $(DRIVER_LIB)/STM32_USB_Device_Library/Core/inc  -I $(DRIVER_LIB)/STM32_USB_HOST_Library/Core/inc -I $(DRIVER_LIB)/STM32_USB_OTG_Driver/inc -I $(DRIVER_LIB)/CMSIS/Include -I $(DRIVER_LIB)/CMSIS/ST/STM32F4xx/Include -I $(DRIVER_LIB)/CMSIS/ST/STM32F4xx/Include
 C_INCLUDE +=	-I $(DRIVER_LIB)/CMSIS/Include -I $(DRIVER_LIB)/CMSIS/Device/ST/STM32G0xx/Include
