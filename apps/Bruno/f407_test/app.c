@@ -23,12 +23,35 @@ u32 count = 0;
 /////////////////////////////////////////////////////////////////////////////
 // This hook is called after startup to initialize the application
 /////////////////////////////////////////////////////////////////////////////
+// Host bring-up check for HID: every key of an attached USB keyboard becomes
+// a MIDI note on the first device cable, so pressing keys shows up in a MIDI
+// monitor on the PC exactly like the pad does. HID usage codes start at 4
+// (letter A); +56 lands A on middle C.
+static void APP_HID_KeyNote(u8 keycode, u8 modifiers, u8 pressed)
+{
+  (void)modifiers;
+
+  mios32_midi_package_t p;
+  p.ALL = 0;
+  p.type  = pressed ? NoteOn : NoteOff;
+  p.event = pressed ? NoteOn : NoteOff;
+  p.chn   = Chn1;
+  p.note  = (keycode + 56) & 0x7f;
+  p.velocity = pressed ? 100 : 0;
+
+  MIOS32_MIDI_SendPackage_NonBlocking(USB0, p);
+}
+
 void APP_Init(void)
 {
   // The display is yours to start, and yours to place: put this call where
   // it belongs in your own init sequence. Uncomment to activate it - the
   // driver itself is chosen by LCD= in this project's Makefile.
   //APP_LCD_Init(0);
+
+#if defined(MIOS32_USE_USB_HOST_HID)
+  MIOS32_USB_HID_KeyboardCallback_Init(APP_HID_KeyNote);
+#endif
 
   // initialize all LEDs
   MIOS32_SOL_Init();
@@ -62,6 +85,33 @@ void APP_Tick(void)
     MIOS32_SOL_Set();
   else
     MIOS32_SOL_Clr();
+
+#if defined(MIOS32_USE_USB_HOST_MSC)
+  // Host bring-up check for MSC: announce a medium once when it appears, with
+  // its capacity and the first bytes of its sector 0 - a read through the
+  // whole chain, visible in Studio's console.
+  {
+    static u8 was_available = 0;
+    u8 now = MIOS32_USB_MSC_CheckAvailable() ? 1 : 0;
+
+    if( now && !was_available ) {
+      u32 num_sectors; u16 sector_size;
+      static u8 sector0[512];
+
+      MIOS32_USB_MSC_SizeGet(&num_sectors, &sector_size);
+      MIOS32_MIDI_SendDebugMessage("USB-MSD: %u sectors of %u bytes (%u MB)\n",
+                                   num_sectors, sector_size, num_sectors / 2048);
+
+      if( MIOS32_USB_MSC_SectorRead(0, sector0) == 0 )
+        MIOS32_MIDI_SendDebugMessage("USB-MSD: sector 0 reads %02x %02x .. %02x %02x (%s)\n",
+                                     sector0[0], sector0[1], sector0[510], sector0[511],
+                                     (sector0[510] == 0x55 && sector0[511] == 0xaa) ? "boot signature OK" : "no boot signature");
+      else
+        MIOS32_MIDI_SendDebugMessage("USB-MSD: sector 0 read FAILED\n");
+    }
+    was_available = now;
+  }
+#endif
 }
 
 

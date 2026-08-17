@@ -44,6 +44,8 @@ THUMB_SOURCE += \
 	$(MIOS32_PATH)/mios32/common/mios32_usb.c \
 	$(MIOS32_PATH)/mios32/common/mios32_usb_midi.c \
 	$(MIOS32_PATH)/mios32/common/mios32_usb_desc.c \
+	$(MIOS32_PATH)/mios32/common/mios32_usb_hid.c \
+	$(MIOS32_PATH)/mios32/common/mios32_usb_msc.c \
 	$(MIOS32_PATH)/mios32/$(FAMILY)/mios32_usb_ll.c \
 	$(TINYUSB)/src/tusb.c \
 	$(TINYUSB)/src/common/tusb_fifo.c \

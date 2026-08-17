@@ -161,6 +161,12 @@ s32 MIOS32_USB_Init(u32 mode)
       return -2;
   }
 
+#if defined(MIOS32_USE_USB_HOST_HID)
+  // The class keeps per-keyboard state for its report diffing; give it a
+  // clean start alongside the ports.
+  MIOS32_USB_HID_Init(0);
+#endif
+
   initialized = 1;
 
   return 0;
