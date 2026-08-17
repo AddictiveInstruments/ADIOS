@@ -184,7 +184,7 @@
 // serves as the device, the type-A receptacle is on OTG_HS (port 1) and drives
 // whatever is plugged into it. The mechanics decide the roles, so nothing has
 // to be detected.
-#define MIOS32_USB_NUM_PORTS 1
+#define MIOS32_USB_NUM_PORTS 2
 
 // The host stack times its enumeration and its deferred work, so it needs the
 // millisecond counter. The device stack does not - it only ever reacts.
@@ -192,9 +192,9 @@
 
 // Host classes, opt-in one by one. The hub is what lets all three be present
 // at once on the single socket.
-//#define MIOS32_USE_USB_HOST_MIDI
-//#define MIOS32_USE_USB_HOST_HID
-//#define MIOS32_USE_USB_HOST_MSC
+#define MIOS32_USE_USB_HOST_MIDI
+#define MIOS32_USE_USB_HOST_HID
+#define MIOS32_USE_USB_HOST_MSC
 
 // Identity. The vendor ID and the lab-range product ID come from the OS
 // defaults; only the name is worth setting on a test board.
@@ -331,7 +331,7 @@
 // vApplicationMallocFailedHook silently at runtime rather than a build
 // error (configUSE_MALLOC_FAILED_HOOK=1 in FreeRTOSConfig.h).
 #ifndef MIOS32_HEAP_SIZE
-#define MIOS32_HEAP_SIZE 4*1024
+#define MIOS32_HEAP_SIZE 8*1024   // 8 Ko : la pile USB hote demande une pile de tache plus grande, et toutes les piles sortent de ce tas
 #endif
 
 #endif /* _MIOS32_CONFIG_H */

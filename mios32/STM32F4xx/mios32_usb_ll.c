@@ -96,6 +96,72 @@
 
 
 /////////////////////////////////////////////////////////////////////////////
+// VBUS
+//
+// A host must SUPPLY the 5 V; a device only consumes it. The controller
+// cannot do that itself - it drives a power switch through an ordinary GPIO,
+// and a board without such a switch can never act as a host whatever the
+// software does.
+//
+// Without this, a plugged device is never powered, never pulls D+ up, and the
+// port reports nothing at all: HPRT.PCSTS stays at 0. A device with its own
+// supply changes nothing - most still wait to see the host's VBUS before
+// presenting themselves.
+//
+// CAUTION on this family: PC14/PC15 are OSC32_IN/OSC32_OUT, the 32 kHz
+// crystal pins, and live in the backup domain. They are usable as plain GPIO
+// only while the LSE is off, and they drive less current than an ordinary
+// pin - enough for a switch's enable input, not for anything else.
+//
+// Polarity is a property of the SWITCH, not of the chip, so it is declared.
+// The default is active LOW, which is what ST's STMPS216x family wants on its
+// enable input - measured, not assumed. A board using a switch that enables on
+// a high says so:
+//   #define MIOS32_USB_P1_VBUS_ACTIVE_HIGH 1
+//
+// Those switches also bring out a FLAG output for over-current, open drain and
+// asserted LOW, so the pin reading it needs a pull-up.
+/////////////////////////////////////////////////////////////////////////////
+
+#ifndef MIOS32_USB_P1_VBUS_PORT
+# define MIOS32_USB_P1_VBUS_PORT   GPIOC
+#endif
+#ifndef MIOS32_USB_P1_VBUS_PIN
+# define MIOS32_USB_P1_VBUS_PIN    LL_GPIO_PIN_14
+#endif
+#ifndef MIOS32_USB_P1_VBUS_ACTIVE_HIGH
+# define MIOS32_USB_P1_VBUS_ACTIVE_HIGH 0
+#endif
+
+static void vbus_set(u8 on)
+{
+  LL_GPIO_InitTypeDef gpio;
+
+  LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOC);
+
+  LL_GPIO_StructInit(&gpio);
+  gpio.Pin        = MIOS32_USB_P1_VBUS_PIN;
+  gpio.Mode       = LL_GPIO_MODE_OUTPUT;
+  gpio.Speed      = LL_GPIO_SPEED_FREQ_LOW;
+  gpio.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+  gpio.Pull       = LL_GPIO_PULL_NO;
+  LL_GPIO_Init(MIOS32_USB_P1_VBUS_PORT, &gpio);
+
+#if MIOS32_USB_P1_VBUS_ACTIVE_HIGH
+  if( on )
+    LL_GPIO_SetOutputPin(MIOS32_USB_P1_VBUS_PORT, MIOS32_USB_P1_VBUS_PIN);
+  else
+    LL_GPIO_ResetOutputPin(MIOS32_USB_P1_VBUS_PORT, MIOS32_USB_P1_VBUS_PIN);
+#else
+  if( on )
+    LL_GPIO_ResetOutputPin(MIOS32_USB_P1_VBUS_PORT, MIOS32_USB_P1_VBUS_PIN);
+  else
+    LL_GPIO_SetOutputPin(MIOS32_USB_P1_VBUS_PORT, MIOS32_USB_P1_VBUS_PIN);
+#endif
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
 //! Brings the controller up for one port in the requested role.
 //! \param[in] port 0 for OTG_FS, 1 for OTG_HS
 //! \param[in] role the role it is to play
@@ -146,6 +212,10 @@ s32 MIOS32_USB_LL_Init(u8 port, mios32_usb_role_t role)
     // interface, and leaving it on while using the internal full-speed PHY
     // holds the core in a state where nothing enumerates.
     LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_OTGHS);
+
+    // Power the socket before the stack looks at it. A host with no VBUS sees
+    // an empty port forever; a device must not be handed 5 V at all.
+    vbus_set(role == MIOS32_USB_ROLE_HOST);
 
     MIOS32_IRQ_Install(OTG_HS_IRQn, MIOS32_IRQ_USB_PRIORITY);
   }

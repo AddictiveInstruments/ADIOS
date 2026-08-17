@@ -171,19 +171,40 @@ s32 MIOS32_USB_Init(u32 mode)
 //! Drives the stack. Call regularly - the core calls it from the 1 mS tick.
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
+// TEMPORARY diagnostic - tells whether this is reached at all, and how often.
+// Read over SWD; remove once the host/device interaction is understood.
+u32 mios32_usb_dbg_handler;
+u32 mios32_usb_dbg_tud;      // before tud_task()
+u32 mios32_usb_dbg_tud_post; // after
+u32 mios32_usb_dbg_tuh;      // before tuh_task()
+u32 mios32_usb_dbg_tuh_post; // after
+
 s32 MIOS32_USB_Handler(void)
 {
+  static u8 busy;
   u8 port;
+
+  ++mios32_usb_dbg_handler;
 
   if( !initialized )
     return -1;
+
+  // Refuse to be re-entered. TinyUSB is not re-entrant, and there is a real
+  // path that tries: a blocking send waits for buffer space, pumps the stack
+  // to make room, and that pump delivers received packets - back into the
+  // parser whose message is still half-read. What comes out the other side is
+  // then not a valid stream. Waiting a turn instead costs nothing: the caller
+  // has its own timeout, and the tick will pump soon enough.
+  if( busy )
+    return -2;
+  busy = 1;
 
   // Both tasks are global rather than per-port in TinyUSB, so each is called
   // at most once however many ports play that role.
 #if CFG_TUD_ENABLED
   for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
     if( port_role[port] == MIOS32_USB_ROLE_DEVICE ) {
-      tud_task();
+      ++mios32_usb_dbg_tud; tud_task(); ++mios32_usb_dbg_tud_post;
       break;
     }
   }
@@ -192,11 +213,13 @@ s32 MIOS32_USB_Handler(void)
 #if CFG_TUH_ENABLED
   for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
     if( port_role[port] == MIOS32_USB_ROLE_HOST ) {
-      tuh_task();
+      ++mios32_usb_dbg_tuh; tuh_task(); ++mios32_usb_dbg_tuh_post;
       break;
     }
   }
 #endif
+
+  busy = 0;
 
   return 0;
 }

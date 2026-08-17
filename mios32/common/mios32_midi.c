@@ -1758,17 +1758,11 @@ static s32 MIOS32_MIDI_SYSEX_Cmd_Query(mios32_midi_port_t port, mios32_midi_syse
 	default: // MIOS32_MIDI_SYSEX_CMD_STATE_END
 		switch( query_req ) {
 		case 0x01: // operating system
-#if MIOS32_USB_MIDI_NUM_PORTS > 1
-			// workaround for strange Windows USB MIDI bug:
-			// after power-on we've to flood the IN pipe with messages to get reliable transfers
-			if( port == USB0 && !MIOS32_USB_ForceSingleUSB() ) {
-				int i;
-				for(i=0; i<256; ++i) {
-					MIOS32_MIDI_SendActiveSense(port);
-					MIOS32_USB_MIDI_Periodic_mS();
-				}
-			}
-#endif
+			// (a legacy multi-cable workaround lived here - flooding the IN
+			// pipe with ActiveSense on the first query, for a Windows bug in
+			// the old USB stack. It leaned on an API that stack took with it,
+			// and only ever compiled with more than one cable, which is why
+			// it survived unnoticed until 2026-08-17.)
 			// the operating system's own name. MIOS Studio checks it before
 			// starting an upload, so the two must change together - it
 			// accepts both spellings (UploadHandler.cpp).

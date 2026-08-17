@@ -108,10 +108,24 @@
 #define CFG_TUD_HID                 0
 #define CFG_TUD_VENDOR              0
 
-// One bulk packet each way. Going wider buys nothing at full speed: the wire
-// delivers 64 bytes per frame whatever the buffer holds.
-#define CFG_TUD_MIDI_RX_BUFSIZE     64
-#define CFG_TUD_MIDI_TX_BUFSIZE     64
+// The wire moves 64 bytes per frame whatever the buffer holds, so these do
+// not buy throughput. They buy something else: room for a whole SysEx answer
+// to be queued in one go.
+//
+// That matters more than it looks. An identification reply runs to several
+// hundred bytes; with a 64-byte buffer the sender fills it, then has to drive
+// the stack itself to make room - from inside the very parser that is still
+// handling the request. TinyUSB is not re-entrant, and the reply comes out
+// malformed or not at all. Sized to hold the answer, the sender never blocks
+// and the question does not arise.
+#ifndef MIOS32_USB_MIDI_RX_BUFSIZE
+# define MIOS32_USB_MIDI_RX_BUFSIZE 256
+#endif
+#ifndef MIOS32_USB_MIDI_TX_BUFSIZE
+# define MIOS32_USB_MIDI_TX_BUFSIZE 512
+#endif
+#define CFG_TUD_MIDI_RX_BUFSIZE     MIOS32_USB_MIDI_RX_BUFSIZE
+#define CFG_TUD_MIDI_TX_BUFSIZE     MIOS32_USB_MIDI_TX_BUFSIZE
 
 
 /////////////////////////////////////////////////////////////////////////////

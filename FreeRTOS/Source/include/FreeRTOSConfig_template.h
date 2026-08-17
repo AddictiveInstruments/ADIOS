@@ -88,7 +88,12 @@
 #define configIDLE_SHOULD_YIELD           1
 #define configUSE_MUTEXES                 1
 #define configQUEUE_REGISTRY_SIZE         10
-#define configCHECK_FOR_STACK_OVERFLOW    1
+// Mode 2: the kernel fills each stack with a known pattern and checks it on
+// every switch, which also catches TRANSIENT overshoots - a deep call spike
+// that recedes before the switch. Mode 1 only compares the stack pointer at
+// switch time and lets those through; one of them silently corrupted the
+// neighbouring task during USB host bring-up before this was raised.
+#define configCHECK_FOR_STACK_OVERFLOW    2
 #define configUSE_RECURSIVE_MUTEXES       1
 #define configUSE_MALLOC_FAILED_HOOK      1
 #define configUSE_APPLICATION_TASK_TAG    0

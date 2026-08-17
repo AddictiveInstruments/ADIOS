@@ -49,6 +49,17 @@
 #define CABLES_PER_CONTROLLER  16
 
 
+// TEMPORARY diagnostics, read over SWD. Declared here rather than beside
+// their uses because the send path comes first in this file.
+u32 mios32_usb_dbg_rxpoll;   // PackageReceive called
+u32 mios32_usb_dbg_mounted;  // tud_midi_mounted() was true
+u32 mios32_usb_dbg_rxpkt;    // a device packet was actually returned
+u32 mios32_usb_dbg_txok;     // device packet written
+u32 mios32_usb_dbg_txfull;   // device write refused (buffer full)
+u32 mios32_usb_dbg_txna;     // send refused: cable not available
+u32 mios32_usb_dbg_rxhost;   // packet received from an attached device (host side)
+
+
 /////////////////////////////////////////////////////////////////////////////
 // Host-side cable allocation
 //
@@ -155,13 +166,17 @@ s32 MIOS32_USB_MIDI_PackageSend_NonBlocking(u8 idx, mios32_midi_package_t packag
   u8 controller = idx / CABLES_PER_CONTROLLER;
   u8 cable      = idx % CABLES_PER_CONTROLLER;
 
-  if( !MIOS32_USB_MIDI_CheckAvailable(idx) )
+  if( !MIOS32_USB_MIDI_CheckAvailable(idx) ) {
+    ++mios32_usb_dbg_txna;
     return -1;
+  }
 
   if( controller == 0 ) {
 #if CFG_TUD_MIDI
     package.cable = cable;
-    return tud_midi_packet_write(package.bytes) ? 0 : -2;
+    if( tud_midi_packet_write(package.bytes) ) { ++mios32_usb_dbg_txok; return 0; }
+    ++mios32_usb_dbg_txfull;
+    return -2;
 #else
     return -1;
 #endif
@@ -200,9 +215,11 @@ s32 MIOS32_USB_MIDI_PackageSend(u8 idx, mios32_midi_package_t package)
     if( waited_ms >= MIOS32_USB_MIDI_SEND_TIMEOUT_MS )
       return -3;
 
-    // The buffer only drains when the stack runs, and the caller is holding
-    // the only thread there is. Waiting without driving it would deadlock.
-    MIOS32_USB_Handler();
+    // Deliberately NOT pumping the stack here. Doing so re-enters TinyUSB
+    // from inside whatever callback led to this send, which is not safe. The
+    // buffers are sized so a whole answer fits without needing a mid-flight
+    // drain; if we ever land here, waiting for the tick is the correct thing,
+    // and the timeout above is what keeps it bounded.
     MIOS32_DELAY_Wait_uS(1000);
     ++waited_ms;
   }
@@ -217,10 +234,16 @@ s32 MIOS32_USB_MIDI_PackageSend(u8 idx, mios32_midi_package_t package)
 /////////////////////////////////////////////////////////////////////////////
 s32 MIOS32_USB_MIDI_PackageReceive(mios32_midi_package_t *package, u8 *idx)
 {
+  ++mios32_usb_dbg_rxpoll;
+
 #if CFG_TUD_MIDI
-  if( tud_midi_mounted() && tud_midi_packet_read(package->bytes) ) {
-    *idx = package->cable; // controller 0, so the cable is the index
-    return 0;
+  if( tud_midi_mounted() ) {
+    ++mios32_usb_dbg_mounted;
+    if( tud_midi_packet_read(package->bytes) ) {
+      ++mios32_usb_dbg_rxpkt;
+      *idx = package->cable; // controller 0, so the cable is the index
+      return 0;
+    }
   }
 #endif
 
@@ -234,6 +257,7 @@ s32 MIOS32_USB_MIDI_PackageReceive(mios32_midi_package_t *package, u8 *idx)
       if( tuh_midi_packet_read_n(host_itf[i].tuh_idx, package->bytes, 4) == 4 ) {
         // Local cable of the attached device -> OS cable, then into the
         // second controller's range.
+        ++mios32_usb_dbg_rxhost;
         u8 cable = host_itf[i].first_cable + package->cable;
         *idx = CABLES_PER_CONTROLLER + cable;
         return 0;

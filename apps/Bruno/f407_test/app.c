@@ -80,6 +80,14 @@ void APP_MIDI_Tick(void)
 /////////////////////////////////////////////////////////////////////////////
 void APP_MIDI_NotifyPackage(mios32_midi_port_t port, mios32_midi_package_t midi_package)
 {
+  // Host bring-up check: everything received from devices attached to the
+  // host socket (USB16..31) is mirrored to the FIRST device cable - the same
+  // one MIOS Studio talks on. That mixing is not a compromise, it is what any
+  // MIDI port does: sends all go through one task, so every message is
+  // written whole, and a note lands BETWEEN two SysEx messages, never inside
+  // one. Notes and a firmware upload do not even share a direction.
+  if( port >= USB16 && port <= USB31 )
+    MIOS32_MIDI_SendPackage_NonBlocking(USB0, midi_package);
 
 //	if(midi_package.event==NoteOn){
 //		 MIOS32_MIDI_SendDebugMessage("Note On\n");

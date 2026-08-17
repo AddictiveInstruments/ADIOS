@@ -76,10 +76,52 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 #define PRIORITY_TASK_HOOKS		( tskIDLE_PRIORITY + 3 )
 
 #ifndef MIOS32_TASK_HOOKS_STACK_SIZE
-#define MIOS32_TASK_HOOKS_STACK_SIZE (configMINIMAL_STACK_SIZE*4)
+# if defined(MIOS32_USE_USB_HOST_MIDI) || defined(MIOS32_USE_USB_HOST_HID) || defined(MIOS32_USE_USB_HOST_MSC)
+// The USB HOST stack runs from this task, and its enumeration path is deep:
+// control transfers, descriptor parsing, hub, class drivers. The device stack
+// is nothing like as demanding - it only ever reacts to what a host asks - so
+// this extra room is charged to host mode alone.
+//
+// Getting it wrong is brutal rather than gradual, which is why the default
+// moves instead of being left to each project: FreeRTOS's overflow check
+// fires, vApplicationStackOverflowHook() calls _abort(), and EVERY task stops
+// while interrupts keep running. The machine then still enumerates over USB
+// and answers nothing - a symptom that points nowhere near a stack.
+// Expressed with MIOS32_MINIMAL_STACK_SIZE, which is a plain number of BYTES,
+// and not with configMINIMAL_STACK_SIZE, which is words AND carries a cast -
+// a cast the preprocessor cannot evaluate, so the check further down could
+// not be written against it.
+#  define MIOS32_TASK_HOOKS_STACK_SIZE (3*(MIOS32_MINIMAL_STACK_SIZE))
+# else
+#  define MIOS32_TASK_HOOKS_STACK_SIZE (MIOS32_MINIMAL_STACK_SIZE)
+# endif
 #endif
 #ifndef MIOS32_TASK_MIDI_HOOKS_STACK_SIZE
-#define MIOS32_TASK_MIDI_HOOKS_STACK_SIZE (configMINIMAL_STACK_SIZE*4)
+# if defined(MIOS32_USE_USB_HOST_MIDI) || defined(MIOS32_USE_USB_HOST_HID) || defined(MIOS32_USE_USB_HOST_MSC)
+// This is the task that does the deep work on a request: SysEx parser,
+// building the reply, sprintf, and the whole USB write path underneath. A
+// host-enabled build pushes that path just past one minimal stack - and a
+// TRANSIENT overshoot is the worst failure there is: overflow check 1 only
+// looks at the stack pointer on a context switch, so a spike that recedes in
+// time is never seen, it just corrupts whatever the heap placed next door.
+// (Check mode 2, set in FreeRTOSConfig.h, does catch these - keep it there.)
+#  define MIOS32_TASK_MIDI_HOOKS_STACK_SIZE (2*(MIOS32_MINIMAL_STACK_SIZE))
+# else
+#  define MIOS32_TASK_MIDI_HOOKS_STACK_SIZE (MIOS32_MINIMAL_STACK_SIZE)
+# endif
+#endif
+
+// Every task stack is carved out of the FreeRTOS heap, and an allocation that
+// does not fit does NOT degrade gracefully: xTaskCreate() simply fails, the
+// scheduler never starts, and the machine looks stone dead - no USB, no LED,
+// nothing to read but a task count of zero. Catch it here, where the numbers
+// are still visible, rather than on the bench.
+//
+// The idle task takes one minimal stack; the rest is control blocks, queues
+// and the allocator's own overhead.
+#define MIOS32_TASK_STACK_TOTAL ((MIOS32_TASK_HOOKS_STACK_SIZE) + (MIOS32_TASK_MIDI_HOOKS_STACK_SIZE) + (MIOS32_MINIMAL_STACK_SIZE))
+#if (MIOS32_HEAP_SIZE) < ((MIOS32_TASK_STACK_TOTAL) + 1024)
+# error "MIOS32_HEAP_SIZE is too small for the task stacks this build asks for: raise it in your mios32_config.h. Asking for a USB HOST class enlarges the Hooks stack, which is the usual reason to land here."
 #endif
 #endif
 
@@ -633,8 +675,17 @@ void HardFault_Handler(void)
 
 // used if configCHECK_FOR_STACK_OVERFLOW enabled (set to 1 or 2) in FreeRTOSConfig.h
 #if configCHECK_FOR_STACK_OVERFLOW
+// Which task overflowed, readable over SWD after the crash. The MIDI debug
+// message below rarely gets out: the overflow stops the very machinery that
+// would send it. This buffer survives where the message does not.
+char mios32_stack_overflow_task[16];
+
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
+  u8 i;
+  for(i=0; i<15 && pcTaskName[i]; ++i)
+    mios32_stack_overflow_task[i] = pcTaskName[i];
+  mios32_stack_overflow_task[i] = 0;
 
   MIOS32_MIDI_SendDebugMessage("======================\n");
   MIOS32_MIDI_SendDebugMessage("!!! STACK OVERFLOW !!!\n");
