@@ -40,6 +40,12 @@ typedef struct {
   volatile bool configured; // Receive SET_CONFIGURE
   volatile bool mounted;    // Enumeration is complete
 
+  // LOCAL PATCH (not upstream): state of the LUN scan done at enumeration.
+  uint8_t enum_lun;   // unit being probed
+  uint8_t enum_retry; // attempts spent on it
+  uint8_t enum_found; // at least one unit answered with a medium
+  uint8_t enum_ended; // the scan has already been wound up
+
   // SCSI command data
   uint8_t stage;
   void* buffer;
@@ -355,6 +361,14 @@ bool msch_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t event, uint32
 //--------------------------------------------------------------------+
 // MSC Enumeration
 //--------------------------------------------------------------------+
+// LOCAL PATCH (not upstream): the LUN scan - see config_get_maxlun_complete().
+#ifndef MSCH_ENUM_TUR_RETRY
+#define MSCH_ENUM_TUR_RETRY 3
+#endif
+static void enum_probe_lun(uint8_t daddr);
+static void enum_next_lun(uint8_t daddr);
+static void enum_finish(uint8_t daddr);
+
 static void config_get_maxlun_complete(tuh_xfer_t* xfer);
 static bool config_test_unit_ready_complete(uint8_t dev_addr, tuh_msc_complete_data_t const* cb_data);
 static bool config_request_sense_complete(uint8_t dev_addr, tuh_msc_complete_data_t const* cb_data);
@@ -435,30 +449,109 @@ static void config_get_maxlun_complete(tuh_xfer_t* xfer) {
     p_msc->max_lun = 1;
   }
 
+  // LOCAL PATCH (not upstream): never trust the device further than the room
+  // that was reserved for it - capacity[] holds CFG_TUH_MSC_MAXLUN entries.
+  if (p_msc->max_lun > CFG_TUH_MSC_MAXLUN) {
+    p_msc->max_lun = CFG_TUH_MSC_MAXLUN;
+  }
+
   TU_LOG_DRV("  Max LUN = %u\r\n", p_msc->max_lun);
 
-  // TODO multiple LUN support
-  TU_LOG_DRV("SCSI Test Unit Ready\r\n");
-  uint8_t const lun = 0;
-  tuh_msc_test_unit_ready(daddr, lun, config_test_unit_ready_complete, 0);
+  // LOCAL PATCH (not upstream) - this is the "TODO multiple LUN support" that
+  // used to sit here, and a card reader is what makes it matter: each slot is
+  // a unit of its own, and an empty slot answers "not ready" forever. Probing
+  // only unit 0 meant a reader whose first slot is empty never finished
+  // enumerating at all - it sat in an endless Test Unit Ready / Request Sense
+  // exchange, so the cards in the other slots were never even looked at, and
+  // the bus carried that traffic for as long as the reader stayed plugged in.
+  //
+  // Every unit is probed instead, each with a bounded number of attempts, and
+  // enumeration always ENDS - with a medium if one was found, without one
+  // otherwise, but never in a loop.
+  p_msc->enum_lun   = 0;
+  p_msc->enum_retry = 0;
+  p_msc->enum_found = 0;
+  enum_probe_lun(daddr);
+}
+
+// Ask the unit currently being scanned whether it is ready.
+static void enum_probe_lun(uint8_t daddr) {
+  msch_interface_t* p_msc = get_itf(daddr);
+
+  if (p_msc->enum_lun >= p_msc->max_lun) {
+    enum_finish(daddr);
+    return;
+  }
+
+  TU_LOG_DRV("SCSI Test Unit Ready, LUN %u\r\n", p_msc->enum_lun);
+  if (!tuh_msc_test_unit_ready(daddr, p_msc->enum_lun, config_test_unit_ready_complete, 0)) {
+    enum_finish(daddr); // cannot even ask: stop here rather than hang
+  }
+}
+
+// Give up on the current unit and move to the next one.
+static void enum_next_lun(uint8_t daddr) {
+  msch_interface_t* p_msc = get_itf(daddr);
+  p_msc->enum_lun++;
+  p_msc->enum_retry = 0;
+  enum_probe_lun(daddr);
+}
+
+// End of the scan. Announce the device either way: a reader with no card is a
+// perfectly good device that simply has nothing to offer yet, and leaving its
+// enumeration unfinished is what kept the bus busy for nothing.
+static void enum_finish(uint8_t daddr) {
+  msch_interface_t* p_msc = get_itf(daddr);
+
+  // Once, and once only. Several paths through the scan lead here - a unit
+  // that answers, one that refuses, a command that cannot even be submitted -
+  // and a late callback can arrive after the scan has already been wound up.
+  // Telling the stack twice that this device is configured corrupts the
+  // enumeration it is running, and since devices are enumerated one after the
+  // other, EVERY device that follows is then never brought up. The symptom is
+  // not in this class at all: the storage device works, and the keyboard and
+  // the MIDI device behind the same hub simply never appear.
+  if (p_msc->enum_ended) {
+    return;
+  }
+  p_msc->enum_ended = 1;
+
+  // Announced either way, medium or not. A card reader is normally plugged in
+  // with empty slots and filled later; refusing to announce it would leave the
+  // application unaware the reader exists, with nothing to watch for a card
+  // appearing. Capacity of zero on every unit is the honest answer to "what is
+  // in it" - it is not a reason to pretend the device is not there.
+  p_msc->mounted = true;
+  tuh_msc_mount_cb(daddr);
+
+  usbh_driver_set_config_complete(daddr, p_msc->itf_num);
 }
 
 static bool config_test_unit_ready_complete(uint8_t dev_addr, tuh_msc_complete_data_t const* cb_data) {
   msc_cbw_t const* cbw = cb_data->cbw;
   msc_csw_t const* csw = cb_data->csw;
+  msch_interface_t* p_msc = get_itf(dev_addr);
   uint8_t* enum_buf = usbh_get_enum_buf();
 
   if (csw->status == 0) {
     // Unit is ready, read its capacity
-    TU_LOG_DRV("SCSI Read Capacity\r\n");
-    tuh_msc_read_capacity(dev_addr, cbw->lun, (scsi_read_capacity10_resp_t*) (uintptr_t) enum_buf,
-                          config_read_capacity_complete, 0);
+    TU_LOG_DRV("SCSI Read Capacity, LUN %u\r\n", cbw->lun);
+    if (!tuh_msc_read_capacity(dev_addr, cbw->lun, (scsi_read_capacity10_resp_t*) (uintptr_t) enum_buf,
+                               config_read_capacity_complete, 0)) {
+      enum_next_lun(dev_addr);
+    }
+  } else if (++p_msc->enum_retry < MSCH_ENUM_TUR_RETRY) {
+    // Some devices fail Test Unit Ready and need a few retries with Request
+    // Sense before they answer - which is why this exchange exists at all. It
+    // is bounded here: an empty slot never becomes ready, and without a limit
+    // the scan never reached the slot with the card in it.
+    TU_LOG_DRV("SCSI Request Sense, LUN %u\r\n", cbw->lun);
+    if (!tuh_msc_request_sense(dev_addr, cbw->lun, enum_buf, config_request_sense_complete, 0)) {
+      enum_next_lun(dev_addr);
+    }
   } else {
-    // Note: During enumeration, some device fails Test Unit Ready and require a few retries
-    // with Request Sense to start working !!
-    // TODO limit number of retries
-    TU_LOG_DRV("SCSI Request Sense\r\n");
-    TU_ASSERT(tuh_msc_request_sense(dev_addr, cbw->lun, enum_buf, config_request_sense_complete, 0));
+    TU_LOG_DRV("  LUN %u not ready, moving on\r\n", cbw->lun);
+    enum_next_lun(dev_addr);
   }
 
   return true;
@@ -468,29 +561,33 @@ static bool config_request_sense_complete(uint8_t dev_addr, tuh_msc_complete_dat
   msc_cbw_t const* cbw = cb_data->cbw;
   msc_csw_t const* csw = cb_data->csw;
 
-  TU_ASSERT(csw->status == 0);
-  TU_ASSERT(tuh_msc_test_unit_ready(dev_addr, cbw->lun, config_test_unit_ready_complete, 0));
+  // A unit that cannot even report why it is unhappy is one to leave alone.
+  if (csw->status != 0 ||
+      !tuh_msc_test_unit_ready(dev_addr, cbw->lun, config_test_unit_ready_complete, 0)) {
+    enum_next_lun(dev_addr);
+  }
+
   return true;
 }
 
 static bool config_read_capacity_complete(uint8_t dev_addr, tuh_msc_complete_data_t const* cb_data) {
   msc_cbw_t const* cbw = cb_data->cbw;
   msc_csw_t const* csw = cb_data->csw;
-  TU_ASSERT(csw->status == 0);
   msch_interface_t* p_msc = get_itf(dev_addr);
   uint8_t* enum_buf = usbh_get_enum_buf();
 
-  // Capacity response field: Block size and Last LBA are both Big-Endian
-  scsi_read_capacity10_resp_t* resp = (scsi_read_capacity10_resp_t*) (uintptr_t) enum_buf;
-  p_msc->capacity[cbw->lun].block_count = (uint32_t) (tu_ntohl(resp->last_lba) + 1u);
-  p_msc->capacity[cbw->lun].block_size  = tu_ntohl(resp->block_size);
+  if (csw->status == 0) {
+    // Capacity response field: Block size and Last LBA are both Big-Endian
+    scsi_read_capacity10_resp_t* resp = (scsi_read_capacity10_resp_t*) (uintptr_t) enum_buf;
+    p_msc->capacity[cbw->lun].block_count = (uint32_t) (tu_ntohl(resp->last_lba) + 1u);
+    p_msc->capacity[cbw->lun].block_size  = tu_ntohl(resp->block_size);
+    p_msc->enum_found = 1;
+  }
 
-  // Mark enumeration is complete
-  p_msc->mounted = true;
-  tuh_msc_mount_cb(dev_addr);
-
-  // notify usbh that driver enumeration is complete
-  usbh_driver_set_config_complete(dev_addr, p_msc->itf_num);
+  // Carry on down the units: a reader can hold more than one card, and the
+  // capacities of all of them are worth having before anyone is told the
+  // device is ready.
+  enum_next_lun(dev_addr);
 
   return true;
 }

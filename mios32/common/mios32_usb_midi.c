@@ -88,6 +88,27 @@ static host_itf_t host_itf[CFG_TUH_DEVICE_MAX];
 // OS cable -> attached interface, or 0xff when nothing owns it
 static u8 host_cable_owner[CABLES_PER_CONTROLLER];
 
+static void (*host_change_callback)(u8 itf, u8 connected);
+
+// Arrivals and departures, held until the periodic call can report them. Not
+// passed on the moment they happen: that moment is inside the stack's own
+// bringing-up of the device, where application code disturbs the enumeration
+// still in progress - which shows up as other devices on the same bus never
+// appearing at all.
+#define MIDI_EVENT_MAX 8
+
+static struct { u8 connected; u8 itf; } event_q[MIDI_EVENT_MAX];
+static u8 event_n;
+
+static void event_add(u8 connected, u8 itf)
+{
+  if( event_n < MIDI_EVENT_MAX ) {
+    event_q[event_n].connected = connected;
+    event_q[event_n].itf = itf;
+    ++event_n;
+  }
+}
+
 #endif
 
 
@@ -106,6 +127,10 @@ s32 MIOS32_USB_MIDI_Init(u32 mode)
 #if CFG_TUH_MIDI
   {
     u8 i;
+
+    host_change_callback = NULL;
+    event_n = 0;
+
     for(i=0; i<CFG_TUH_DEVICE_MAX; ++i)
       host_itf[i].in_use = 0;
     for(i=0; i<CABLES_PER_CONTROLLER; ++i)
@@ -278,8 +303,84 @@ s32 MIOS32_USB_MIDI_PackageReceive(mios32_midi_package_t *package, u8 *idx)
 /////////////////////////////////////////////////////////////////////////////
 s32 MIOS32_USB_MIDI_Periodic_mS(void)
 {
+#if CFG_TUH_MIDI
+  // Arrivals and departures, now that we are out of the stack's own work.
+  while( event_n ) {
+    u8 i;
+
+    if( host_change_callback != NULL )
+      host_change_callback(event_q[0].itf, event_q[0].connected);
+
+    for(i=1; i<event_n; ++i)
+      event_q[i-1] = event_q[i];
+    --event_n;
+  }
+#endif
+
   return 0;
 }
+
+
+#if CFG_TUH_MIDI
+
+/////////////////////////////////////////////////////////////////////////////
+//! Installs the hook called when an attached device arrives or leaves.
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_MIDI_HostChangeCallback_Init(void (*callback)(u8 itf, u8 connected))
+{
+  host_change_callback = callback;
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Where an attached device sits in the port range, and how big it is.
+//! \return < 0 if the index is out of range
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_MIDI_HostInfoGet(u8 itf, mios32_usb_midi_host_info_t *info)
+{
+  u8 i;
+
+  if( info == NULL )
+    return -1;
+
+  info->connected = 0;
+  info->first_port = 0;
+  info->num_ports = 0;
+  info->num_in = 0;
+  info->num_out = 0;
+
+  if( itf >= CFG_TUH_DEVICE_MAX )
+    return -1;
+
+  // The table is indexed by our own slot, not by TinyUSB's index, so the one
+  // being asked about has to be found.
+  for(i=0; i<CFG_TUH_DEVICE_MAX; ++i) {
+    if( !host_itf[i].in_use || host_itf[i].tuh_idx != itf )
+      continue;
+
+    info->connected  = 1;
+    info->first_port = USB16 + host_itf[i].first_cable;
+    info->num_ports  = host_itf[i].num_cables;
+    info->num_in     = tuh_midi_get_rx_cable_count(itf);
+    info->num_out    = tuh_midi_get_tx_cable_count(itf);
+    break;
+  }
+
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! \return how many interfaces may be attached at once
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_MIDI_HostNumGet(void)
+{
+  return CFG_TUH_DEVICE_MAX;
+}
+
+#endif /* CFG_TUH_MIDI */
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -318,6 +419,8 @@ void tuh_midi_mount_cb(uint8_t tuh_idx, const tuh_midi_mount_cb_t *mount_cb_data
         host_itf[i].tuh_idx     = tuh_idx;
         host_itf[i].first_cable = c;
         host_itf[i].num_cables  = num;
+
+        event_add(1, tuh_idx);
         return;
       }
     }
@@ -332,6 +435,8 @@ void tuh_midi_mount_cb(uint8_t tuh_idx, const tuh_midi_mount_cb_t *mount_cb_data
 void tuh_midi_umount_cb(uint8_t tuh_idx)
 {
   u8 i, k;
+
+  event_add(0, tuh_idx);
 
   for(i=0; i<CFG_TUH_DEVICE_MAX; ++i) {
     if( !host_itf[i].in_use || host_itf[i].tuh_idx != tuh_idx )

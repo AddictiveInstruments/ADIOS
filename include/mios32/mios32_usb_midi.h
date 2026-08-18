@@ -37,6 +37,39 @@ extern s32 MIOS32_USB_MIDI_PackageSend(u8 idx, mios32_midi_package_t package);
 extern s32 MIOS32_USB_MIDI_PackageReceive(mios32_midi_package_t *package, u8 *idx);
 extern s32 MIOS32_USB_MIDI_Periodic_mS(void);
 
+
+/////////////////////////////////////////////////////////////////////////////
+// Attached MIDI devices
+//
+// Each one is given a block of consecutive ports out of the host range, in
+// the order it arrives, and keeps that block until it leaves. A second device
+// therefore never renumbers the first, and a route an application stored stays
+// pointing at the same instrument.
+//
+// What an application needs is where a device's block starts and how long it
+// is; from there the ports are the usual ones.
+/////////////////////////////////////////////////////////////////////////////
+
+typedef struct {
+  u8 connected;   // 1 while the interface is attached
+  u8 first_port;  // its first OS port (USB16 and up)
+  u8 num_ports;   // how many consecutive ports it owns
+  u8 num_in;      // cables it can send to us on
+  u8 num_out;     // cables we can send to it on
+} mios32_usb_midi_host_info_t;
+
+// Told when a device arrives or leaves. Reported from the periodic call, not
+// from the moment it happens: an arrival lands while the stack is still
+// bringing the device up, which is no place to run application code.
+extern s32 MIOS32_USB_MIDI_HostChangeCallback_Init(void (*callback)(u8 itf, u8 connected));
+
+// What is on that interface. < 0 if the index is out of range; an interface
+// with nothing on it simply reports connected = 0.
+extern s32 MIOS32_USB_MIDI_HostInfoGet(u8 itf, mios32_usb_midi_host_info_t *info);
+
+// How many interfaces may be attached at once - the range of valid itf.
+extern s32 MIOS32_USB_MIDI_HostNumGet(void);
+
 #endif /* MIOS32_USE_USB */
 
 #endif /* _MIOS32_USB_MIDI_H */

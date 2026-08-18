@@ -257,15 +257,41 @@ s32 MIOS32_USB_Handler(void)
       break;
     }
   }
-
-# if defined(MIOS32_USE_USB_HOST_HID)
-  // After the stack has run, so a request the class could not place while the
-  // bus was busy is retried now that it may be free.
-  MIOS32_USB_HID_Periodic_mS();
-# endif
 #endif
 
+  // The stack's own tasks are done, so the guard above can be lifted here
+  // rather than at the end. What follows is the classes' own periodic work,
+  // and it reaches application code: a class tells an application that a
+  // medium is ready, and the application reads a sector of it there and then.
+  // That read is blocking, and it waits by driving this very function - which
+  // it must be allowed to do. Holding the guard until the end would refuse it,
+  // and the wait would run to its timeout with nothing ever pumped.
   busy = 0;
+
+#if CFG_TUH_ENABLED
+  {
+    // The periodic work itself is not re-entrant, so a nested call pumps the
+    // stack - which is what it came for - and skips this part.
+    static u8 periodic_busy;
+
+    if( !periodic_busy ) {
+      periodic_busy = 1;
+
+# if defined(MIOS32_USE_USB_HOST_HID)
+      // After the stack has run, so a request the class could not place while
+      // the bus was busy is retried now that it may be free.
+      MIOS32_USB_HID_Periodic_mS();
+# endif
+
+# if defined(MIOS32_USE_USB_HOST_MSC)
+      // Looks for a card appearing in, or leaving, a reader's slots.
+      MIOS32_USB_MSC_Periodic_mS();
+# endif
+
+      periodic_busy = 0;
+    }
+  }
+#endif
 
   return 0;
 }

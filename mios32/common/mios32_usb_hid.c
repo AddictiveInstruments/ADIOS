@@ -30,6 +30,12 @@
 
 static void (*report_callback)(u8 dev, u8 instance, const u8 *report, u16 len);
 static void (*keyboard_callback)(u8 keycode, u8 modifiers, u8 pressed);
+static void (*mouse_callback)(s8 dx, s8 dy, s8 wheel, u8 buttons);
+static void (*change_callback)(u8 dev, u8 itf, mios32_usb_hid_type_t type, u8 connected);
+
+// What each attached interface turned out to be, so an application can ask
+// without keeping its own tally.
+static mios32_usb_hid_type_t itf_type[CFG_TUH_HID];
 
 // Previous boot report per keyboard interface, for the pressed/released diff.
 // Index: TinyUSB interface index, which is unique across attached devices.
@@ -69,6 +75,35 @@ static struct {
 u32 mios32_usb_dbg_hid_deferred;
 u32 mios32_usb_dbg_hid_recovered;
 
+// Arrivals and departures, held until the periodic call can report them.
+//
+// They are NOT passed on the moment they happen: that moment is inside the
+// stack's own bringing-up of the device, and application code has no business
+// running there - it disturbs the enumeration still in progress, which shows
+// up as other devices on the same bus never appearing at all. Noted here,
+// delivered a tick later, where anything is allowed.
+#define HID_EVENT_MAX 8
+
+static struct {
+  u8 connected;
+  u8 dev;
+  u8 itf;
+  mios32_usb_hid_type_t type;
+} event_q[HID_EVENT_MAX];
+
+static u8 event_n;
+
+static void event_add(u8 connected, u8 dev, u8 itf, mios32_usb_hid_type_t type)
+{
+  if( event_n < HID_EVENT_MAX ) {
+    event_q[event_n].connected = connected;
+    event_q[event_n].dev  = dev;
+    event_q[event_n].itf  = itf;
+    event_q[event_n].type = type;
+    ++event_n;
+  }
+}
+
 static void request_report(u8 dev_addr, u8 idx)
 {
   u8 was_pending;
@@ -102,14 +137,53 @@ s32 MIOS32_USB_HID_Init(u32 mode)
 
   report_callback = NULL;
   keyboard_callback = NULL;
+  mouse_callback = NULL;
+  change_callback = NULL;
   hid_present = 0;
+  event_n = 0;
 
   for(i=0; i<CFG_TUH_HID; ++i) {
     kb_state[i].in_use = 0;
     arm[i].pending = 0;
+    itf_type[i] = MIOS32_USB_HID_TYPE_NONE;
   }
 
   return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Installs the hook called when an interface arrives or leaves.
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_HID_ChangeCallback_Init(void (*callback)(u8 dev, u8 itf, mios32_usb_hid_type_t type, u8 connected))
+{
+  change_callback = callback;
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Installs the decoded mouse callback.
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_HID_MouseCallback_Init(void (*callback)(s8 dx, s8 dy, s8 wheel, u8 buttons))
+{
+  mouse_callback = callback;
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! \param[in] itf the interface index
+//! \return what is on it, MIOS32_USB_HID_TYPE_NONE if nothing
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_HID_TypeGet(u8 itf)
+{
+  if( itf >= CFG_TUH_HID )
+    return MIOS32_USB_HID_TYPE_NONE;
+
+  return itf_type[itf];
 }
 
 
@@ -122,6 +196,18 @@ s32 MIOS32_USB_HID_Init(u32 mode)
 s32 MIOS32_USB_HID_Periodic_mS(void)
 {
   u8 idx;
+
+  // Arrivals and departures, now that we are out of the stack's own work.
+  while( event_n ) {
+    u8 i;
+
+    if( change_callback != NULL )
+      change_callback(event_q[0].dev, event_q[0].itf, event_q[0].type, event_q[0].connected);
+
+    for(i=1; i<event_n; ++i)
+      event_q[i-1] = event_q[i];
+    --event_n;
+  }
 
   for(idx=0; idx<CFG_TUH_HID; ++idx)
     if( arm[idx].pending )
@@ -171,6 +257,24 @@ s32 MIOS32_USB_HID_CheckAvailable(void)
 // keep state of its own.
 /////////////////////////////////////////////////////////////////////////////
 
+// A boot report can carry something that is not a list of keys at all. When
+// more keys are held than the protocol can describe, the keyboard fills every
+// one of the six slots with the same reserved code - 0x01 ErrorRollOver, or
+// 0x02/0x03 for its own faults. It is the keyboard saying "I cannot report
+// this combination", and the keys actually held are unchanged and unknown.
+//
+// Such a report must be dropped whole. Read as keys it produces six identical
+// phantom presses, and the real keys go missing - then the next valid report
+// looks like six releases at once.
+static u8 report_is_error(const u8 *report)
+{
+  u8 i;
+  for(i=2; i<8; ++i)
+    if( report[i] >= 1 && report[i] <= 3 )
+      return 1;
+  return 0;
+}
+
 static u8 report_contains(const u8 *report, u8 keycode)
 {
   u8 i;
@@ -209,24 +313,47 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t idx, const uint8_t *report_desc,
 
   hid_present = 1;
 
-  if( tuh_hid_interface_protocol(dev_addr, idx) == HID_ITF_PROTOCOL_KEYBOARD ) {
-    u8 i;
-    for(i=0; i<CFG_TUH_HID; ++i) {
-      if( !kb_state[i].in_use ) {
-        u8 k;
-        kb_state[i].in_use = 1;
-        kb_state[i].dev = dev_addr;
-        kb_state[i].instance = idx;
-        for(k=0; k<8; ++k)
-          kb_state[i].report[k] = 0;
-        break;
+  {
+    mios32_usb_hid_type_t type;
+
+    switch( tuh_hid_interface_protocol(dev_addr, idx) ) {
+    case HID_ITF_PROTOCOL_KEYBOARD: type = MIOS32_USB_HID_TYPE_KEYBOARD; break;
+    case HID_ITF_PROTOCOL_MOUSE:    type = MIOS32_USB_HID_TYPE_MOUSE;    break;
+    default:                        type = MIOS32_USB_HID_TYPE_GENERIC;  break;
+    }
+
+    if( idx < CFG_TUH_HID )
+      itf_type[idx] = type;
+
+    event_add(1, dev_addr, idx, type);
+
+    if( type == MIOS32_USB_HID_TYPE_KEYBOARD ) {
+      u8 i;
+      for(i=0; i<CFG_TUH_HID; ++i) {
+        if( !kb_state[i].in_use ) {
+          u8 k;
+          kb_state[i].in_use = 1;
+          kb_state[i].dev = dev_addr;
+          kb_state[i].instance = idx;
+          for(k=0; k<8; ++k)
+            kb_state[i].report[k] = 0;
+          break;
+        }
       }
     }
   }
 
-  // Nothing arrives unless asked for: reception must be primed once here,
-  // and re-primed after every report (see below).
-  request_report(dev_addr, idx);
+  // Nothing arrives unless asked for - but the asking is deliberately NOT done
+  // here. Starting a transfer from inside a mount callback disturbs the stack
+  // while it is still bringing devices up: with several devices arriving
+  // together behind a hub, the ones still to be enumerated can be missed, and
+  // transfers already placed can stop completing. So the request is only
+  // marked as owed, and the periodic call places it on the next turn, once
+  // enumeration has had its moment.
+  if( idx < CFG_TUH_HID ) {
+    arm[idx].dev = dev_addr;
+    arm[idx].pending = 1;
+  }
 }
 
 
@@ -234,11 +361,15 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t idx)
 {
   u8 i, any = 0;
 
+  event_add(0, dev_addr, idx, (idx < CFG_TUH_HID) ? itf_type[idx] : MIOS32_USB_HID_TYPE_NONE);
+
   // Drop any request still owed to it, or the retry would keep asking a
   // device that has left - and would take the interface index with it when
   // the next device is given the same one.
-  if( idx < CFG_TUH_HID )
+  if( idx < CFG_TUH_HID ) {
     arm[idx].pending = 0;
+    itf_type[idx] = MIOS32_USB_HID_TYPE_NONE;
+  }
 
   for(i=0; i<CFG_TUH_HID; ++i) {
     if( kb_state[i].in_use && kb_state[i].dev == dev_addr && kb_state[i].instance == idx )
@@ -266,7 +397,17 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t idx, const uint8_t *re
   if( report_callback != NULL )
     report_callback(dev_addr, idx, report, len);
 
-  if( keyboard_callback != NULL && len >= 8 &&
+  // A boot mouse report is buttons, then two movements, then the wheel if it
+  // has one. The movements are signed and RELATIVE - how far it moved since
+  // the last report, which is all a mouse ever knows.
+  if( mouse_callback != NULL && len >= 3 &&
+      tuh_hid_interface_protocol(dev_addr, idx) == HID_ITF_PROTOCOL_MOUSE ) {
+    mouse_callback((s8)report[1], (s8)report[2],
+                   (len >= 4) ? (s8)report[3] : 0,
+                   report[0]);
+  }
+
+  if( keyboard_callback != NULL && len >= 8 && !report_is_error(report) &&
       tuh_hid_interface_protocol(dev_addr, idx) == HID_ITF_PROTOCOL_KEYBOARD ) {
     u8 i;
     for(i=0; i<CFG_TUH_HID; ++i) {

@@ -181,9 +181,21 @@
 
 # define CFG_TUH_MAX_SPEED          OPT_MODE_FULL_SPEED
 
-// Same reasoning as the device side - see CFG_TUD_DWC2_SLAVE_ENABLE.
+// Host side: let the controller move the data itself where it can.
+//
+// This is NOT the same trade-off as the device side. A device only answers
+// when spoken to; a host POLLS, and an endpoint with nothing to say answers
+// NAK every time. Driven from the CPU, every one of those NAKs is an
+// interrupt and an immediate retry - a device that streams keeps the handler
+// busy continuously, and that load is what everything else has to survive.
+// Handed to the controller's own DMA, the retries never reach the CPU.
+//
+// Only cores that advertise it will use it (OTG_ARCH = internal DMA in
+// GHWCFG2); the others fall back to CPU-driven transfers on their own, so
+// this is safe to ask for everywhere. Buffers must live in memory the USB
+// DMA can reach - main SRAM, never CCM.
 # define CFG_TUH_DWC2_SLAVE_ENABLE  1
-# define CFG_TUH_DWC2_DMA_ENABLE    0
+# define CFG_TUH_DWC2_DMA_ENABLE    1
 
 // A hub is what makes "MIDI and HID and MSC at the same time" possible on a
 // single socket. Without it the port serves exactly one device.
@@ -217,8 +229,13 @@
 
 # if defined(MIOS32_USE_USB_HOST_MIDI)
 #  define CFG_TUH_MIDI              1
-#  define CFG_TUH_MIDI_RX_BUFSIZE   64
-#  define CFG_TUH_MIDI_TX_BUFSIZE   64
+// Room for several transfers, not one. A bulk endpoint moves up to 64 bytes
+// in a single transaction, so a 64-byte buffer is full the moment one arrives
+// with anything still unread - and what does not fit is dropped, silently, as
+// missing notes. The reader empties this every millisecond; these sizes are
+// there to cover the bursts in between.
+#  define CFG_TUH_MIDI_RX_BUFSIZE   256
+#  define CFG_TUH_MIDI_TX_BUFSIZE   256
 # else
 #  define CFG_TUH_MIDI              0
 # endif
