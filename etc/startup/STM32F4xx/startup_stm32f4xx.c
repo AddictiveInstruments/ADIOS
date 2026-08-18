@@ -191,7 +191,12 @@ void WEAK FPU_IRQHandler                    (void);  /* FPU                     
 *
 ******************************************************************************/
 
-__attribute__ ((section(".isr_vector")))
+/* "used" keeps the table alive under whole-program optimization (LTO): no C
+   code ever references it - the HARDWARE reads it at address 0 - so without
+   the attribute the optimizer discards it before the linker script's
+   KEEP(*(.isr_vector)) can claim it, and with it goes the only retention
+   root of the entire image (empty binary). Harmless outside LTO. */
+__attribute__ ((section(".isr_vector"), used))
 void (* const g_pfnVectors[])(void) =
 {
     (intfunc)((unsigned long)&_estack), /* The initial stack pointer */
