@@ -73,15 +73,16 @@
 // together only if TIM17 conflicts with something else on your hardware:
 //#define STOPWATCH_TIMER_BASE TIM17						// (default)
 //#define STOPWATCH_TIMER_RCC  LL_APB2_GRP1_PERIPH_TIM17	// (default)
+// The bootloader hold pin, on this board PA0. Relayed to the bootloader by
+// etc/gen_bsl_boundary.sh: the pin belongs to the PCB, so the project states
+// it once and the bootloader follows, rather than the bootloader source being
+// edited per board. Its default is PA11.
+#define MIOS32_BSL_HOLD_PORT_OVERRIDE GPIOA
+#define MIOS32_BSL_HOLD_PIN_OVERRIDE  LL_GPIO_PIN_0
+
 #define MIOS32_USE_SOL
-// MIOS32_SOL_PORT/MIOS32_SOL_PIN default to PA12 (same on every
-// family/processor) - overridden here: PA12 is USB_OTG_FS DP on STM32F4xx,
-// not safe to toggle as a plain GPIO on a board with USB wired up. PD12 is
-// free of every MIOS32 default peripheral pin used by this project (UART0
-// TX/RX = PA2/PA3, UART1 TX/RX = PC10/PC11) and is the usual "user LED"
-// location on STM32F4 boards (e.g. STM32F4-Discovery's green LED).
-#define MIOS32_SOL_PORT GPIOD
-#define MIOS32_SOL_PIN  LL_GPIO_PIN_12
+// The pin itself is declared further down, inside the BSL_RELAY block, so that
+// the bootloader gets the same one - see there for why that matters.
 
 // ---------------------------------------------------------------------------
 // mios32_spi.c - left commented = SPI entirely disabled (default). Uncomment
@@ -198,7 +199,26 @@
 
 // Identity. The vendor ID and the lab-range product ID come from the OS
 // defaults; only the name is worth setting on a test board.
+//
+// BSL_RELAY_BEGIN - copied verbatim into the bootloader build by
+// etc/gen_bsl_boundary.sh. The bootloader and this application are the same
+// instrument seen at two moments, so they must present the same USB identity:
+// the name is what a host turns into a MIDI port name, and a host that finds
+// a different name after a reset has, as far as it can tell, lost the device
+// and gained another one. Whoever was talking to that port then has nothing
+// to reconnect to - which is exactly what breaks an upload, since an upload
+// IS a reset into the bootloader.
 #define MIOS32_USB_PRODUCT_STR  "F407 Test"
+
+// The sign-of-life pin, on this board PC6 - and it MUST travel with the USB
+// identity above, because the OS default for it is PA12, which on this family
+// is USB_OTG_FS D+. A bootloader that serves USB and keeps that default drives
+// its LED onto the data line and wrecks the very link it needs. Measured here
+// the day USB was given to the bootloader: enumeration completing yet nothing
+// usable coming out of it.
+#define MIOS32_SOL_PORT GPIOC
+#define MIOS32_SOL_PIN  LL_GPIO_PIN_6
+// BSL_RELAY_END
 
 
 // =============================================================================

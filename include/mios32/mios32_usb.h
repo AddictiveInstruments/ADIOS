@@ -84,6 +84,15 @@
 # define MIOS32_USB_VERSION_ID      0x0100
 #endif
 
+// How long the device lets go of the bus when it comes up, in milliseconds.
+// A core that restarts into its bootloader, or an application that restarts,
+// changes what it IS while the cable stays in - and the reset alone drops the
+// pull-up too briefly for a host to call it an unplug. Letting go on purpose
+// is what makes the change visible. See port_start() in mios32_usb.c.
+#ifndef MIOS32_USB_DETACH_MS
+# define MIOS32_USB_DETACH_MS       50
+#endif
+
 
 /////////////////////////////////////////////////////////////////////////////
 // Port roles
@@ -143,6 +152,11 @@ extern mios32_usb_role_t MIOS32_USB_RoleGet(u8 port);
 // cable attached. Never called on a port whose role source is FIXED.
 extern s32 MIOS32_USB_RoleChangeCallback_Init(void (*callback)(u8 port, mios32_usb_role_t role));
 
+// Prepares the device port for a hand-over (bootloader <-> application): the
+// session stays alive for the other side to adopt, only the interrupt is
+// silenced. The host never sees a disconnect.
+extern s32 MIOS32_USB_HandoffPrepare(void);
+
 
 /////////////////////////////////////////////////////////////////////////////
 // Implemented per family: clocks, pins, interrupt, role source
@@ -150,6 +164,15 @@ extern s32 MIOS32_USB_RoleChangeCallback_Init(void (*callback)(u8 port, mios32_u
 
 extern s32 MIOS32_USB_LL_Init(u8 port, mios32_usb_role_t role);
 extern mios32_usb_role_source_t MIOS32_USB_LL_RoleSourceGet(u8 port);
+
+// Does this port hold a live device session from a previous life? Read from
+// the silicon, never from RAM - a core-only reset wipes the RAM and leaves
+// the controller running, which is precisely the state being asked about.
+extern s32 MIOS32_USB_LL_DeviceIsWarm(u8 port);
+
+// Silences the port's interrupt (controller global enable + NVIC line) so a
+// live session can be adopted with no software to serve it yet.
+extern s32 MIOS32_USB_LL_IrqSilence(u8 port);
 
 #endif /* MIOS32_USE_USB */
 

@@ -56,7 +56,8 @@ u32 mios32_usb_dbg_mounted;  // tud_midi_mounted() was true
 u32 mios32_usb_dbg_rxpkt;    // a device packet was actually returned
 u32 mios32_usb_dbg_txok;     // device packet written
 u32 mios32_usb_dbg_txfull;   // device write refused (buffer full)
-u32 mios32_usb_dbg_txna;     // send refused: cable not available
+u32 mios32_usb_dbg_txna;   // send refused: cable not available
+u32 mios32_usb_dbg_txna_idx; // TEMPORARY: the index it was refused for
 u32 mios32_usb_dbg_rxhost;   // packet received from an attached device (host side)
 
 
@@ -193,6 +194,7 @@ s32 MIOS32_USB_MIDI_PackageSend_NonBlocking(u8 idx, mios32_midi_package_t packag
 
   if( !MIOS32_USB_MIDI_CheckAvailable(idx) ) {
     ++mios32_usb_dbg_txna;
+    mios32_usb_dbg_txna_idx = idx;   // TEMPORARY: which port keeps being refused
     return -1;
   }
 

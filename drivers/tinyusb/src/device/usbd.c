@@ -582,6 +582,80 @@ bool tud_rhport_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
   return true;
 }
 
+// LOCAL PATCH (not upstream) - bring the device stack up around a session
+// that is ALREADY LIVE: attached, enumerated, addressed, configured. A
+// core-only reset leaves the controller in exactly that state with only the
+// software gone; initialising normally would tear the session down (dcd_init
+// soft-resets the core and detaches), and the host - which never saw any
+// reset - would lose the device it was talking to. This does everything
+// tud_rhport_init does EXCEPT dcd_init, adopts the controller as it stands
+// (dcd_warm_adopt), declares the device state the hardware already embodies,
+// and re-opens the classes onto the live endpoints - toggles preserved.
+//
+// cfg_num is the configuration the host chose in the previous life; with a
+// single-configuration device that is 1.
+bool dcd_warm_adopt(uint8_t rhport);
+void dcd_warm_adopt_done(uint8_t rhport);
+
+bool tud_rhport_adopt(uint8_t rhport, uint8_t cfg_num) {
+  if (tud_inited()) {
+    return true; // skip if already initialized
+  }
+
+  tu_varclr(&_usbd_dev);
+  _usbd_queued_setup = 0;
+
+  osal_spin_init(&_usbd_spin);
+
+#if OSAL_MUTEX_REQUIRED
+  _usbd_mutex = osal_mutex_create(&_ubsd_mutexdef);
+  TU_ASSERT(_usbd_mutex);
+#endif
+
+  _usbd_q = osal_queue_create(&_usbd_qdef);
+  TU_ASSERT(_usbd_q);
+
+  _app_driver = usbd_app_driver_get_cb(&_app_driver_count);
+  TU_ASSERT(_app_driver_count + _builtin_driver_count <= UINT8_MAX);
+
+  for (uint8_t i = 0; i < TOTAL_DRIVER_COUNT; i++) {
+    usbd_class_driver_t const* driver = get_driver(i);
+    TU_ASSERT(driver && driver->init);
+    driver->init();
+  }
+
+  _usbd_rhport = rhport;
+
+  // Register the port's role exactly as tusb_rhport_init() would have.
+  // Without it, tusb_int_handler() dispatches this port's interrupts to
+  // NOBODY - they are never serviced, re-assert forever, and the storm
+  // starves the main loop whole. Found the hard way: core spinning at the
+  // dispatcher with XFRC and a host packet pending at every sample.
+  {
+    extern tusb_role_t _tusb_rhport_role[];
+    _tusb_rhport_role[rhport] = TUSB_ROLE_DEVICE;
+  }
+
+  TU_ASSERT(dcd_warm_adopt(rhport));
+
+  // the state the hardware already embodies - the host addressed and
+  // configured this device in the previous life, and nothing on the bus has
+  // changed since
+  _usbd_dev.connected = 1;
+  _usbd_dev.addressed = 1;
+  _usbd_dev.speed = TUSB_SPEED_FULL;
+
+  // re-open the classes onto the live endpoints, exactly as the host's
+  // SET_CONFIGURATION did the first time
+  TU_ASSERT(process_set_config(rhport, cfg_num));
+  _usbd_dev.cfg_num = cfg_num;
+
+  dcd_warm_adopt_done(rhport);
+  dcd_int_enable(rhport);
+
+  return true;
+}
+
 bool tud_deinit(uint8_t rhport) {
   if (!tud_inited()) {
     return true; // skip if not initialized

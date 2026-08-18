@@ -225,6 +225,55 @@ s32 MIOS32_USB_LL_Init(u8 port, mios32_usb_role_t role)
 
 
 /////////////////////////////////////////////////////////////////////////////
+//! Does this port hold a LIVE device session from a previous life?
+//!
+//! A core-only reset restarts the processor and leaves this controller
+//! running: still attached, still carrying the address the host assigned.
+//! That is the state the adoption path takes over (see mios32_usb.c), and
+//! this is how it is recognised - from the silicon, never from RAM, which a
+//! reset wipes.
+//! \return 1 if the device controller is clocked, attached and addressed
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_LL_DeviceIsWarm(u8 port)
+{
+  if( port != 0 )
+    return 0; // only the device-side controller is ever adopted
+
+  if( !(RCC->AHB2ENR & RCC_AHB2ENR_OTGFSEN) )
+    return 0; // controller not even clocked: cold boot
+
+  USB_OTG_DeviceTypeDef *dev = (USB_OTG_DeviceTypeDef *)(USB_OTG_FS_PERIPH_BASE + USB_OTG_DEVICE_BASE);
+
+  if( dev->DCTL & USB_OTG_DCTL_SDIS )
+    return 0; // soft-disconnected: no session to adopt
+
+  if( ((dev->DCFG & USB_OTG_DCFG_DAD) >> USB_OTG_DCFG_DAD_Pos) == 0 )
+    return 0; // never addressed: enumeration had not happened
+
+  return 1;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Silences the port's interrupt at BOTH levels - the controller's global
+//! enable and the NVIC line - so a live session can be adopted without a
+//! single interrupt landing on software that does not exist yet. The adoption
+//! re-enables both when its state is ready.
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_LL_IrqSilence(u8 port)
+{
+  if( port != 0 )
+    return -1;
+
+  USB_OTG_GlobalTypeDef *otg = (USB_OTG_GlobalTypeDef *)USB_OTG_FS_PERIPH_BASE;
+  otg->GAHBCFG &= ~USB_OTG_GAHBCFG_GINT;
+  NVIC_DisableIRQ(OTG_FS_IRQn);
+
+  return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
 //! \return how this port learns its role
 /////////////////////////////////////////////////////////////////////////////
 mios32_usb_role_source_t MIOS32_USB_LL_RoleSourceGet(u8 port)

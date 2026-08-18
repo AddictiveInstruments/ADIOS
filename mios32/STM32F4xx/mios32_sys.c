@@ -223,12 +223,28 @@ s32 MIOS32_SYS_Reset(void)
   LL_APB1_GRP1_ReleaseReset(0xffffffff);
   LL_APB2_GRP1_ReleaseReset(0xffffffff);
 
-  // CAUTION: do not replace this with a direct write to SCB->AIRCR's
-  // VECTRESET bit - that bit only exists on Cortex-M0/M0+ (ARMv6-M) and is
-  // reserved (no effect) on this chip's Cortex-M4 (ARMv7-M), so the CPU
-  // would never actually reset. NVIC_SystemReset() (SYSRESETREQ) is the
-  // correct, portable CMSIS call - used the same way on STM32G0xx.
-  NVIC_SystemReset();
+  // A CORE reset, not a system one - and that is what the masking above is
+  // for. The USB device controller and its pins are deliberately left out of
+  // the peripheral resets, so the session they carry - attached, addressed,
+  // configured, DATA toggles mid-conversation - stays ALIVE across the
+  // restart. The code that boots next adopts it (see port_start in
+  // mios32_usb.c), and the host never sees a disconnect: its handles survive,
+  // an upload costs nothing but the transfer itself. This is the manoeuvre
+  // the old stack always relied on; the adoption path is what makes the
+  // current stack able to do the same.
+  //
+  // A system reset (NVIC_SystemReset) would take the controller down with
+  // everything else - the pull-up drops, the host sees an unplug, and whoever
+  // was talking to the port is left holding a dead handle.
+  //
+  // On availability, since a comment here once had it backwards: VECTRESET is
+  // an ARMv7-M facility and exists on this Cortex-M4 (CMSIS defines
+  // SCB_AIRCR_VECTRESET_Msk in core_cm4.h). It is ARMv6-M - Cortex-M0/M0+ -
+  // that reserves the bit, which is why the G0 family cannot pull this trick
+  // and resets the whole system instead.
+  __DSB();
+  SCB->AIRCR = (0x5FAUL << SCB_AIRCR_VECTKEY_Pos) | SCB_AIRCR_VECTRESET_Msk;
+  __DSB();
 
   while( 1 );
 

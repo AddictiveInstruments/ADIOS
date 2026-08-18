@@ -28,10 +28,9 @@
 #include "bsl_sysex.h"
 
 
-
 // Nothing to include for USB: this file no longer reaches into the
-// controller. Quiescing it before the jump goes through MIOS32_USB_RoleSet(),
-// which is the same call on every family.
+// controller. The hand-over goes through MIOS32_USB_HandoffPrepare(), which
+// leaves the session ALIVE for the application to adopt.
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -170,8 +169,23 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
   // board's MIDI connector became DIN2 instead of DIN0.
   BSL_SYSEX_SendUploadReq(MIOS32_MIDI_DEFAULT_PORT);
 #endif
-  if( usb_was_initialized )
-    BSL_SYSEX_SendUploadReq(USB0);
+  // On USB the announcement cannot be made here: the port does not exist
+  // yet. Coming up means letting go of the bus first, so that the host sees
+  // a NEW device rather than the one it already knew, and enumeration only
+  // finishes some tens of milliseconds later - announcing now would be
+  // announcing to nobody. The loop below does it once the port is there.
+  //
+  // It used to be sent from here, guarded by "was USB already up?". That
+  // made sense when the connection survived a reset and the host was still
+  // talking to us. It cannot be answered from RAM any more: the flag it read
+  // is cleared at start-up, so the guard was always false and the
+  // announcement never went out at all - which is precisely what a host
+  // waits for before it starts an upload.
+#if defined(MIOS32_USE_USB_MIDI)
+  u32 usb_announced_at = 0;
+  u8  usb_announced_once = 0;
+#endif
+  (void)usb_was_initialized;
 
   MIOS32_STOPWATCH_Reset();
   do {
@@ -189,6 +203,28 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
       MIOS32_STOPWATCH_Reset();
       cnt = 0;
     }
+
+#if defined(MIOS32_USE_USB_MIDI)
+    // Say it again, about once a second, for as long as we are waiting.
+    //
+    // Announcing once is not enough. Whoever asked for this reset has to
+    // find the port again first - it is a NEW device to the host, and the
+    // tool at the other end only reopens it when it notices - so a single
+    // announcement, sent the moment we are ready, goes out before anyone is
+    // listening. Repeating costs nine bytes a second and removes the race
+    // entirely: whenever the other end arrives, the next one is along
+    // shortly.
+    // The FIRST one goes out the moment the port exists - the tool that asked
+    // for this reset is already waiting, and its window is not infinite. The
+    // old form waited a full second before saying anything, which is exactly
+    // the kind of delay that expires a waiting uploader.
+    if( MIOS32_USB_MIDI_CheckAvailable(0) &&
+        (!usb_announced_once || cnt < usb_announced_at || (cnt - usb_announced_at) >= 10000) ) {
+      usb_announced_once = 1;
+      usb_announced_at = cnt;
+      BSL_SYSEX_SendUploadReq(USB0);
+    }
+#endif
     if( no_app ) {
       // 200 mS on, 200 mS off - same cadence as the former dead-end loop, but
       // derived from the counter instead of blocking on it, so MIDI is served
@@ -211,6 +247,17 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
     // check for incoming MIDI messages - no hooks are used
     // SysEx requests will be parsed by MIOS32 internally, BSL_SYSEX_Cmd() will be called
     // directly by MIOS32 to enhance command set
+    // Drive the USB stack. Unlike the interrupt-only driver this replaced,
+    // TinyUSB does its work in a task that something has to call: an
+    // application gets that from its 1 mS tick, and this bare loop is the
+    // only thing here, so it calls it itself. Without this the controller is
+    // clocked and configured and the pull-up is asserted, yet enumeration
+    // never completes - the host sees nothing at all, and whoever was waiting
+    // for this bootloader to answer waits forever.
+#if defined(MIOS32_USE_USB)
+    MIOS32_USB_Handler();
+#endif
+
     MIOS32_MIDI_Receive_Handler(NULL);
 
     // The "no application" case leaves as soon as SOMETHING has been written
@@ -240,6 +287,20 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
 	 MIOS32_STOPWATCH_ValueGet() < 2000 ); // 200 mS ceiling
   MIOS32_DELAY_Wait_uS(1000); // the byte still in the shift register
 #endif
+
+#if defined(MIOS32_USE_USB)
+  // Same duty for USB - and it was missing, while the DIN had its flush
+  // above. ReleaseHaltState() queues its answers to MIOS Studio's post-
+  // upload reboot query; the loop condition then goes false and this
+  // function returns, main() quiesces the port, and everything still in
+  // the TX FIFO dies unsent. Studio waits for exactly those bytes, and
+  // reports a failed reboot on an upload that succeeded. Pumping the
+  // stack for a few tens of milliseconds is all it takes to let them go.
+  MIOS32_STOPWATCH_Reset();
+  while( MIOS32_STOPWATCH_ValueGet() < 500 ) { // 50 mS
+    MIOS32_USB_Handler();
+  }
+#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -268,8 +329,12 @@ int main(void)
 
   MIOS32_SOL_Init();
 
-  // BSL_HOLD_PIN (PA11)
-#if !defined(MIOS32_FAMILY_STM32F10x) && !defined(MIOS32_FAMILY_STM32F4xx)
+  // The hold pin: input, pulled DOWN, read as active-high - on EVERY family.
+  // F4 used to be excluded here (a leftover of the F10x-style init), which
+  // left the pin FLOATING on this family: no mode, no pull, measured reading
+  // random levels. A floating hold pin means random bootloader entries and a
+  // hold release that depends on the weather.
+#if !defined(MIOS32_FAMILY_STM32F10x)
   {
     LL_GPIO_InitTypeDef GPIO_InitStructure;
     LL_GPIO_StructInit(&GPIO_InitStructure);
@@ -299,25 +364,19 @@ int main(void)
   u8 hold_mode_active_after_reset = BSL_HOLD_STATE | bootloader_mode_requested;
   MIOS32_SOL_Set();
   ///////////////////////////////////////////////////////////////////////////
-  // initialize USB only if already done (-> not after Power On) or Hold mode enabled
+  // initialize USB - MIOS32_USB_Init decides HOW
   ///////////////////////////////////////////////////////////////////////////
 #ifndef MIOS32_DONT_USE_USB_MIDI
-  u8 usb_was_initialized = MIOS32_USB_IsInitialized();
-  if( usb_was_initialized || hold_mode_active_after_reset ) {
-    // if initialized, this function will only set some variables - it won't re-init the peripheral.
-    // if hold mode activated via external pin, force re-initialisation by resetting USB
-    if( hold_mode_active_after_reset ) {
-#if defined(MIOS32_FAMILY_STM32F10x)
-      RCC_APB1PeriphResetCmd(0x00800000, ENABLE); // reset USB device
-      RCC_APB1PeriphResetCmd(0x00800000, DISABLE);
-#elif defined(MIOS32_FAMILY_STM32F4xx)
-      LL_AHB2_GRP1_ForceReset(0x00000080); // reset USB device
-      LL_AHB2_GRP1_ReleaseReset(0x00000080);
-#endif
-    }
-
-    MIOS32_USB_Init(0);
-  }
+  // Always brought up. A LIVE session left behind by the application's
+  // core-only reset is ADOPTED - the host never sees a disconnect, which is
+  // the whole point of the reboot-to-BSL flow: whoever asked for the reboot
+  // keeps talking on the same handles. A cold boot enumerates fresh.
+  //
+  // The old gate here ("only if it was already initialized") read a RAM flag
+  // that every reset cleared - so it never fired - and the peripheral
+  // force-reset that came with it destroyed the very session worth keeping.
+  u8 usb_was_initialized = 0; // kept for BSL_WaitLoop's signature only
+  MIOS32_USB_Init(0);
 #else
   u8 usb_was_initialized = 0;
 #endif
@@ -425,23 +484,20 @@ int main(void)
 	  LL_APB2_GRP1_ReleaseReset(LL_APB2_GRP1_PERIPH_ALL);
 #endif
 
-    if( hold_mode_active_after_reset ) {
-      // if hold mode activated via external pin, force re-initialisation by resetting USB
-#if defined(MIOS32_FAMILY_STM32F4xx)
-        LL_AHB2_GRP1_ForceReset(0x00000080); // reset USB device
-        LL_AHB2_GRP1_ReleaseReset(0x00000080);
-#endif
-    } else {
-      // No hold mode: the USB interrupt must not fire while we jump into the
-      // application, which is about to replace the stack that would service
-      // it. Taking the port down does exactly that, and does it identically
-      // on every family - the controller is TinyUSB's business now, not ours.
+    // Hand the USB session over ALIVE. The application adopts it (see
+    // port_start in mios32_usb.c): the host never sees a disconnect, its
+    // handles survive, and the post-upload query lands on the same port it
+    // used all along. Only the interrupt is silenced - between this jump and
+    // the application's adoption there is no software to serve it, and the
+    // hardware NAKs the host by itself meanwhile, which is lossless.
+    //
+    // Taking the port DOWN here (the previous behaviour) is exactly what
+    // forced every upload to end in a disconnect the host tooling then had
+    // to survive.
 #if defined(MIOS32_USE_USB_MIDI)
-      if( MIOS32_USB_IsInitialized() )
-	MIOS32_USB_RoleSet(0, MIOS32_USB_ROLE_NONE);
+    if( MIOS32_USB_IsInitialized() )
+      MIOS32_USB_HandoffPrepare();
 #endif
-    }
-
 #if defined (MIOS32_FAMILY_STM32G0xx) || defined(MIOS32_FAMILY_STM32F4xx)
   // same base as reset_vector above - follows the entry override when set
   u32 *stack_pointer = (u32 *)app_vector_base;

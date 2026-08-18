@@ -249,6 +249,11 @@ static void dfifo_device_init(uint8_t rhport) {
 }
 
 
+// LOCAL PATCH (not upstream) - true while a live, already-enumerated session
+// is being adopted (dcd_warm_adopt): endpoint activation then preserves the
+// session's DATA toggles instead of resetting them.
+static bool _dcd_warm_adopting = false;
+
 //--------------------------------------------------------------------
 // Endpoint
 //--------------------------------------------------------------------
@@ -280,6 +285,20 @@ static void edpt_activate(uint8_t rhport, const tusb_desc_endpoint_t* p_endpoint
   }
 
   dwc2_dep_t* dep = &dwc2->ep[dir == TUSB_DIR_IN ? 0 : 1][epnum];
+
+  // LOCAL PATCH (not upstream) - when ADOPTING a live session (see
+  // dcd_warm_adopt below), the endpoint is not new: the host has been talking
+  // to it and the DATA toggle is wherever the conversation left it. Forcing
+  // DATA0 here - right for a fresh SET_CONFIGURATION, which resets toggles on
+  // both sides - would desynchronise us from a host that never saw any reset:
+  // every second packet would be silently dropped as a duplicate. So the
+  // CURRENT toggle is read back from the register and re-asserted instead.
+  if (_dcd_warm_adopting && p_endpoint_desc->bmAttributes.xfer != TUSB_XFER_ISOCHRONOUS) {
+    const dwc2_depctl_t cur = {.value = dep->ctl};
+    depctl.set_data0_iso_even = cur.dpid_iso_odd ? 0 : 1;
+    depctl.set_data1_iso_odd  = cur.dpid_iso_odd ? 1 : 0;
+  }
+
   dep->ctl = depctl.value;
   dwc2->daintmsk |= TU_BIT(epnum + DAINT_SHIFT(dir));
 }
@@ -486,6 +505,88 @@ bool dcd_deinit(uint8_t rhport) {
   dcd_disconnect(rhport);
   dwc2_core_deinit(rhport);
   return true;
+}
+
+// LOCAL PATCH (not upstream) - adopt a LIVE, already-enumerated device session.
+//
+// A core-only reset leaves this controller running: still attached, still
+// addressed, endpoints still configured, DATA toggles wherever the host's
+// conversation left them - only the SOFTWARE state died with the RAM. The old
+// stack rebuilt its few variables from the silicon and the host never noticed
+// a reboot; this is the same manoeuvre for this stack. Everything the
+// hardware needs is already in its registers, so this touches only what a
+// fresh software state requires, and deliberately NEVER the device address.
+//
+// Modelled line by line on handle_bus_reset(), which is the stack's own
+// recipe for "make the software match a bus state" - minus the address reset
+// (keeping it is the whole point) and plus a quiesce of whatever transfers
+// the previous life left armed. The host has been NAKed since the core reset,
+// so nothing is lost: it simply retries into the adopted session.
+bool dcd_warm_adopt(uint8_t rhport) {
+  dwc2_regs_t* dwc2 = DWC2_REG(rhport);
+  const uint8_t ep_count = dwc2_ep_count(dwc2);
+
+  // nothing may fire while the software half is being rebuilt
+  dcd_int_disable(rhport);
+  dwc2->gahbcfg &= ~GAHBCFG_GINT;
+
+  // fresh software state - the hardware keeps its own
+  tu_memclr(&_dcd_data, sizeof(_dcd_data));
+  tu_memclr(xfer_status, sizeof(xfer_status));
+
+  // quiesce what the previous life left armed: OUT endpoints go to NAK,
+  // enabled IN endpoints are properly disabled (bounded waits - if the core
+  // does not answer, adoption is abandoned rather than hung)
+  for (uint8_t n = 0; n < ep_count; n++) {
+    dwc2->epout[n].doepctl |= DOEPCTL_SNAK;
+  }
+  for (uint8_t n = 1; n < ep_count; n++) {
+    dwc2_dep_t* dep = &dwc2->epin[n];
+    if (edpt_is_enabled(dep)) {
+      dep->diepctl |= DIEPCTL_SNAK | DIEPCTL_EPDIS;
+      uint32_t guard = 100000;
+      while (!(dep->diepint & DIEPINT_EPDISD_Msk) && --guard) {}
+      if (!guard) {
+        return false;
+      }
+    }
+  }
+
+  // stale per-endpoint flags die here, not in the first interrupt
+  for (uint8_t n = 0; n < ep_count; n++) {
+    dwc2->epout[n].doepint = 0xFFFFFFFFU;
+    dwc2->epin[n].diepint = 0xFFFFFFFFU;
+  }
+
+  // interrupt masks exactly as a bus reset would set them
+  dwc2->daintmsk = TU_BIT(DAINTMSK_OEPM_Pos) | TU_BIT(DAINTMSK_IEPM_Pos);
+  dwc2->doepmsk = DOEPMSK_STUPM | DOEPMSK_XFRCM;
+  dwc2->diepmsk = DIEPMSK_TOM | DIEPMSK_XFRCM;
+
+  // whatever data the previous life had in flight is unusable - flush it,
+  // then rebuild the FIFO map: same code, same config, same layout as before
+  dfifo_flush_tx(dwc2, 0x10);
+  dfifo_flush_rx(dwc2);
+  dfifo_device_init(rhport);
+
+  // EP0 software state and SETUP reception - the ADDRESS stays untouched
+  xfer_status[0][TUSB_DIR_OUT].max_size = CFG_TUD_ENDPOINT0_SIZE;
+  xfer_status[0][TUSB_DIR_IN].max_size = CFG_TUD_ENDPOINT0_SIZE;
+  dwc2->epout[0].doeptsiz |= (3 << DOEPTSIZ_STUPCNT_Pos);
+
+  dwc2->gintmsk |= GINTMSK_OTGINT | GINTMSK_IEPINT | GINTMSK_IISOIXFRM;
+
+  // endpoint re-activation may now run (through the class open path); it will
+  // preserve the session's DATA toggles - see edpt_activate
+  _dcd_warm_adopting = true;
+  return true;
+}
+
+// End of the adoption: re-activation is done, interrupts may flow again.
+void dcd_warm_adopt_done(uint8_t rhport) {
+  dwc2_regs_t* dwc2 = DWC2_REG(rhport);
+  _dcd_warm_adopting = false;
+  dwc2->gahbcfg |= GAHBCFG_GINT;
 }
 
 void dcd_int_enable(uint8_t rhport) {

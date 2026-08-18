@@ -51,8 +51,11 @@
 // TODO: find a proper way, as there could be high density devices with less than 256k?)
 # define FLASH_PAGE_SIZE   (MIOS32_SYS_FlashSizeGet() >= (256*1024) ? 0x800 : 0x400)
 
-// STM32: flash memory range (16k BSL range excluded)
-# define FLASH_START_ADDR  (0x08000000 + 0x4000)
+// STM32: flash memory range - the BSL region excluded. NOT a hardcoded 16k:
+// this bootloader's size decides the boundary, and it can span more than one
+// sector. Hardcoding 0x4000 here made it erase its own tail on every upload.
+
+# define FLASH_START_ADDR  (0x08000000 + MIOS32_APP_FLASH_START_ADDR)
 # define FLASH_END_ADDR    (0x08000000 + MIOS32_SYS_FlashSizeGet() - 1)
 
 
@@ -65,6 +68,14 @@
 // sector base addresses
 
 #define MAX_FLASH_SECTOR 12
+// TEMPORARY bench trace: which sector actually gets erased, and how often.
+// Read over SWD. The bootloader tail keeps disappearing and no path in this
+// file should be able to do it - so the fact is worth having rather than
+// deduced.
+u32 bsl_dbg_erase_sector = 0xff;
+u32 bsl_dbg_erase_count;
+u32 bsl_dbg_erase_addr;
+
 const u32 flash_sector_map[MAX_FLASH_SECTOR][3] = {
 		{ 0xffffffff, LL_FLASH_Sector_0 }, /* Base @ of Sector 0, 16 Kbyte */ // TK: actually 0x08000000, ensure that it won't be taken
 		{ 0x08004000, LL_FLASH_Sector_1 }, /* Base @ of Sector 1, 16 Kbyte */
@@ -85,8 +96,11 @@ static u32 flash_erase_done = 0;
 # error "Please adapt value range of flash_erase_done!"
 #endif
 
-// STM32: flash memory range (16k BSL range excluded)
-# define FLASH_START_ADDR  (0x08000000 + 0x4000)
+// STM32: flash memory range - the BSL region excluded. NOT a hardcoded 16k:
+// this bootloader's size decides the boundary, and it can span more than one
+// sector. Hardcoding 0x4000 here made it erase its own tail on every upload.
+
+# define FLASH_START_ADDR  (0x08000000 + MIOS32_APP_FLASH_START_ADDR)
 # define FLASH_END_ADDR    (0x08000000 + MIOS32_SYS_FlashSizeGet() - 1)
 
 
@@ -826,6 +840,7 @@ static s32 BSL_SYSEX_EraseAppHead(void)
 	for(sector=MAX_FLASH_SECTOR-1; sector>=0; --sector) {
 		if( FLASH_START_ADDR >= flash_sector_map[sector][0] ) {
 			LL_FLASH_Unlock();
+			bsl_dbg_erase_sector = sector; ++bsl_dbg_erase_count; bsl_dbg_erase_addr = FLASH_START_ADDR;
 			LL_FLASH_Status status = LL_FLASH_EraseSector(flash_sector_map[sector][1], LL_FLASH_VOLTRG_3);
 			LL_FLASH_Lock();
 			if( status != FLASH_COMPLETE ) {
@@ -1003,6 +1018,7 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 					}
 
 					if( erase_required ) {
+						bsl_dbg_erase_sector = sector; ++bsl_dbg_erase_count; bsl_dbg_erase_addr = addr;
 						LL_FLASH_Status status = LL_FLASH_EraseSector(flash_sector_map[sector][1], LL_FLASH_VOLTRG_3);
 						if( status != FLASH_COMPLETE ) {
 							LL_FLASH_ClearFlag(0xffffffff); // clear error flags, otherwise next program attempts will fail

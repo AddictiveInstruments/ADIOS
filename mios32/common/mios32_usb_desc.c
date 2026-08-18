@@ -224,8 +224,21 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
       // Per-cable names. This is what a DAW lists, so they are numbered from
       // 1 like the ports on the panel, not from 0 like the array.
       if( index >= STR_CABLE_1 && index < (STR_CABLE_1 + MIOS32_USB_MIDI_NUM_PORTS) ) {
+        // Built by hand rather than with sprintf. That one call is enough to
+        // pull the whole formatting machinery into the image - around 1.3 kB
+        // of printf and the 64-bit division it leans on - which is a great
+        // deal to pay for appending a number below 100, and decides on its
+        // own whether a bootloader still fits in its flash sector.
         u8 cable = index - STR_CABLE_1 + 1;
-        sprintf(cable_str, "%s %d", MIOS32_USB_PRODUCT_STR, cable);
+        u8 pos = 0;
+        const char *p = MIOS32_USB_PRODUCT_STR;
+        while( *p && pos < (sizeof(cable_str) - 4) )
+          cable_str[pos++] = *p++;
+        cable_str[pos++] = 0x20;
+        if( cable >= 10 )
+          cable_str[pos++] = 0x30 + (cable / 10);
+        cable_str[pos++] = 0x30 + (cable % 10);
+        cable_str[pos] = 0;
         str = cable_str;
       } else {
         return NULL;

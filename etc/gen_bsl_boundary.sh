@@ -526,11 +526,29 @@ else
     echo "NOTE: no BSL_RELAY block in $RELAY_SRC_DIR/mios32_config.h - the bootloader gets no board wiring from this project."
 fi
 
+# Pass 2 must recompile EVERYTHING, not just relink. The boundary the
+# bootloader was just told about is a compile-time constant baked into
+# several translation units - bsl_sysex.c decides from it which sector to
+# erase, main.c where to jump - and make cannot see that a generated header
+# changed under objects whose .c files did not. Reusing them mixes two
+# boundaries in one binary: measured on 2026-08-18, an F4 bootloader
+# carrying BOTH 0x08004000 and 0x08008000, answering with the new boundary
+# while erasing at the old one - which is its own tail once it outgrows the
+# first sector. It bricked the board on every upload attempt.
+#
+# Before write_ld below, never after: clean wipes project_build/, and that is
+# where the linker script it writes lives.
+( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" clean > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
+    echo "Bootloader clean before pass 2 failed, see $BSL_DIR/gen_bsl_boundary_build.log"
+    exit 1
+}
+# clean removed project_build/ entirely, and write_ld below writes into it
+mkdir -p "$BSL_DIR/project_build"
+
 # --- regenerate cpu_bsl.ld with the final boundary BEFORE pass 2, so the
 #     bootloader links against its real, final flash window ---
 write_ld "$BSL_LD_FILE" "bsl"
 echo "Wrote $BSL_LD_FILE (FLASH=$BOUNDARY bytes)"
-
 echo "=== Pass 2: rebuilding bootloader with the final boundary baked in ==="
 build_bootloader
 BSL_SIZE_FINAL=$(wc -c < "$BIN_FILE")

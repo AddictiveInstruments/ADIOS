@@ -22,6 +22,12 @@
 
 #include <tusb.h>
 
+#if CFG_TUD_ENABLED
+// LOCAL PATCH to TinyUSB (usbd.c): bring the device stack up around a session
+// that is already live - see port_start() below for when that happens.
+extern bool tud_rhport_adopt(uint8_t rhport, uint8_t cfg_num);
+#endif
+
 
 /////////////////////////////////////////////////////////////////////////////
 // Time base for the host stack
@@ -101,6 +107,40 @@ static s32 port_start(u8 port, mios32_usb_role_t role)
     return 0;
   }
 
+#if CFG_TUD_ENABLED
+  // A LIVE session first: a core-only reset - an application rebooting into
+  // its bootloader, or the bootloader handing over to a fresh application -
+  // leaves this controller attached, addressed and configured, with only the
+  // software gone. Adopting it means the host never sees a disconnect: its
+  // handles stay valid, its conversation resumes where it left off. This is
+  // what the old stack did with its handful of variables, and it is why an
+  // upload never used to cost the port. Detect from the silicon, silence the
+  // interrupt while the software half is rebuilt, adopt.
+  if( role == MIOS32_USB_ROLE_DEVICE && MIOS32_USB_LL_DeviceIsWarm(port) ) {
+    MIOS32_USB_LL_IrqSilence(port);
+
+    if( MIOS32_USB_LL_Init(port, role) >= 0 && tud_rhport_adopt(port, 1) ) {
+      // Close whatever SysEx the host's parser may hold half-open across the
+      // seam. If a single event was lost at the transition - one F0 that
+      // never met its F7 - the host-side reassembly waits forever and
+      // silently swallows EVERYTHING that follows, while the device sees its
+      // transfers drain perfectly: deafness with all counters green. A lone
+      // terminator is ignored when nothing is open, and unblocks the parser
+      // when something is. Cable 0, CIN 5: single-byte SysEx end.
+      {
+        uint8_t const sysex_flush[4] = { 0x05, 0xF7, 0x00, 0x00 };
+        tud_midi_packet_write(sysex_flush);
+      }
+
+      port_role[port] = role;
+      return 0;
+    }
+
+    // Adoption failed: fall through to a cold start. The worst it costs is
+    // the disconnect the adoption exists to avoid.
+  }
+#endif
+
   // Clocks, pins and interrupt first: the stack talks to a controller that
   // must already be alive when it does.
   if( MIOS32_USB_LL_Init(port, role) < 0 )
@@ -113,6 +153,31 @@ static s32 port_start(u8 port, mios32_usb_role_t role)
 
   if( !tusb_rhport_init(port, &rh_init) )
     return -3;
+
+#if CFG_TUD_ENABLED
+  // Present ourselves as a NEW attachment, by letting go of the bus for long
+  // enough that the host cannot miss it.
+  //
+  // Coming up is not always coming up from nothing: a core that resets into
+  // its bootloader, or an application that restarts, changes what it IS while
+  // the cable stays in. The reset drops the pull-up for barely a moment -
+  // too briefly for a host to call it an unplug - so the host carries on
+  // addressing what it enumerated before, while this side has forgotten
+  // everything and answers to nobody. Measured in exactly that state: pull-up
+  // asserted, device address still zero, and no interrupt pending on either
+  // side. Nothing breaks the deadlock, because neither end thinks anything
+  // happened.
+  //
+  // Detaching deliberately makes the change visible: the host sees a device
+  // leave and another arrive, and enumerates it from scratch.
+  if( role == MIOS32_USB_ROLE_DEVICE ) {
+    u32 i;
+    tud_disconnect();
+    for(i=0; i<MIOS32_USB_DETACH_MS; ++i)
+      MIOS32_DELAY_Wait_uS(1000);
+    tud_connect();
+  }
+#endif
 
   port_role[port] = role;
 
@@ -303,6 +368,27 @@ s32 MIOS32_USB_Handler(void)
 s32 MIOS32_USB_IsInitialized(void)
 {
   return initialized ? 1 : 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Prepares the USB device port for a hand-over to other code - a bootloader
+//! jumping into its application, or the reverse.
+//!
+//! The session is deliberately left ALIVE: attached, addressed, endpoints
+//! configured. The code taking over adopts it (see port_start) and the host
+//! never sees a disconnect - its handles survive, exactly as they did with
+//! the old stack. Only the interrupt is silenced, because between the jump
+//! and the adoption there is no software to serve it; the hardware NAKs the
+//! host on its own in the meantime, which is lossless.
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_USB_HandoffPrepare(void)
+{
+  if( !initialized )
+    return -1;
+
+  return MIOS32_USB_LL_IrqSilence(0);
 }
 
 
