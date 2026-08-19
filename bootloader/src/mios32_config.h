@@ -77,12 +77,13 @@
 // keeps the UART transport out - the old DONT_USE_UART* opt-outs are gone)
 
 #else
-// the default MIDI port for MIDI output
-#define MIOS32_MIDI_DEFAULT_PORT USB0
-// the default MIDI port for debugging output via MIOS32_MIDI_SendDebugMessage
-#define MIOS32_MIDI_DEBUG_PORT USB0
-
-#define MIOS32_USE_USB_MIDI
+// No transport is chosen here, deliberately - see the check further down,
+// where the generated header lands. Which connector this build must talk on
+// is a fact of the BOARD, so it arrives from the project's BSL_RELAY block
+// like every other board fact, and its absence stops the build instead of
+// falling back to a family default. That fallback is exactly what let this
+// bootloader and its update tool end up on DIFFERENT connectors, each
+// silently right in its own file: the tool then answered nobody.
 #endif
 #endif
 // enable BSL enhancements in MIOS32 SysEx parser
@@ -95,6 +96,15 @@
 
 // exclude default BSL image from MIOS32
 #define MIOS32_DONT_INCLUDE_BSL
+
+// The only strings this build formats are its answers to the host's identity
+// queries, and between them they use "%d" and "%08x". printf-stdarg.c serves
+// those from a parser a quarter of the size when this is defined - worth it
+// here and nowhere else, because it is THIS binary's size that decides where
+// the application starts (the boundary rounds up to an erase unit, a whole
+// 16K sector on some families). See that file for what the reduced parser
+// does and does not understand.
+#define BSL_USE_REDUCED_SPRINTF
 
 // to save memory on STM32 build:
 #if defined(MIOS32_FAMILY_STM32F10x) || defined(MIOS32_FAMILY_STM32F4xx)
@@ -112,6 +122,9 @@
 // see below.
 #if __has_include("mios32_bsl_boundary.h")
 #include "mios32_bsl_boundary.h"
+#endif
+#ifndef MIOS32_MIDI_DEFAULT_PORT
+# error "No board MIDI wiring reached this bootloader build: add a BSL_RELAY_BEGIN/END block to your project's mios32_config.h declaring the port it must talk on (see apps/Bruno/f407_test/mios32_config.h)."
 #endif
 #ifndef MIOS32_APP_FLASH_START_ADDR
 // NO fallback, deliberately. There used to be one - 0x4000, "only applies

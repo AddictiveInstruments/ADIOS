@@ -210,6 +210,15 @@
 // IS a reset into the bootloader.
 #define MIOS32_USB_PRODUCT_STR  "F407 Test"
 
+// The connector this board is actually reached on. Both the bootloader and
+// its update tool take their transport from here and declare none of their
+// own, so the two cannot come up on different ports - which they did, and
+// the result was a tool installed by a bootloader the host could talk to,
+// answering on a connector that isn't wired.
+#define MIOS32_USE_USB_MIDI
+#define MIOS32_MIDI_DEFAULT_PORT USB0
+#define MIOS32_MIDI_DEBUG_PORT   USB0
+
 // The sign-of-life pin, on this board PC6 - and it MUST travel with the USB
 // identity above, because the OS default for it is PA12, which on this family
 // is USB_OTG_FS D+. A bootloader that serves USB and keeps that default drives

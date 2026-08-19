@@ -169,9 +169,11 @@ static u8 halt_state;
 #endif
 // scan parameters for locating the OLD device's persistent info block:
 // candidate boundaries start at the family's minimum and advance by the
-// erase granularity (same values as etc/gen_bsl_boundary.sh)
+// erase granularity (same values as etc/gen_bsl_boundary.sh - a minimum
+// lowered there has to be lowered here too, or the scan starts ABOVE the
+// boundaries it is meant to find)
 #if defined(MIOS32_FAMILY_STM32G0xx)
-# define BSL_UPDATER_SCAN_FIRST 10240
+# define BSL_UPDATER_SCAN_FIRST 8192
 # define BSL_UPDATER_SCAN_STEP  2048
 #elif defined(MIOS32_FAMILY_STM32F4xx)
 # define BSL_UPDATER_SCAN_FIRST 16384

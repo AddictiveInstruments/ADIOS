@@ -27,10 +27,13 @@
 
 // (MIDI core is always compiled - not optional, see mios32_midi.c; only the
 // transports below are opt-in)
-#define MIOS32_DONT_USE_USB
+// Same two opt-outs as the bootloader, and no more: this tool REPLACES that
+// bootloader, so it has to come up on the same connector - which means it
+// must be able to compile the same transports. Disabling USB outright here
+// (as this file used to) made that impossible on a USB-wired board, whatever
+// the project relayed.
 #define MIOS32_DONT_USE_USB_HOST
 #define MIOS32_DONT_USE_USB_HS_HOST
-#define MIOS32_DONT_USE_USB_MIDI
 //#define MIOS32_USE_USB_COM
 
 //#define MIOS32_USE_I2S
@@ -79,15 +82,12 @@
 // keeps the UART transport out - the old DONT_USE_UART* opt-outs are gone)
 
 #else
-// the default MIDI port for MIDI output
-#define MIOS32_MIDI_DEFAULT_PORT DIN0
-// the default MIDI port for debugging output via MIOS32_MIDI_SendDebugMessage
-#define MIOS32_MIDI_DEBUG_PORT DIN0
-
-#define MIOS32_USE_UART0
-#define MIOS32_USE_DIN_MIDI
-#define MIOS32_DONT_USE_USB
-#define MIOS32_DONT_USE_USB_MIDI
+// No transport is chosen here, deliberately - see the check further down,
+// where the generated header lands. This tool has to answer on the same
+// connector as the bootloader it installs, so it takes the port from the
+// same place that bootloader does: the project's BSL_RELAY block. A family
+// default here is precisely how the two came to disagree - this file said
+// DIN, the bootloader said USB, each perfectly consistent on its own.
 #endif
 #endif
 // enable BSL enhancements in MIOS32 SysEx parser
@@ -117,6 +117,9 @@
 // only applies before the first run of that script.
 #if __has_include("mios32_bsl_boundary.h")
 #include "mios32_bsl_boundary.h"
+#endif
+#ifndef MIOS32_MIDI_DEFAULT_PORT
+# error "No board MIDI wiring reached this updater build: add a BSL_RELAY_BEGIN/END block to your project's mios32_config.h declaring the port it must talk on (see apps/Bruno/f407_test/mios32_config.h)."
 #endif
 #ifndef MIOS32_APP_FLASH_START_ADDR
 #define MIOS32_APP_FLASH_START_ADDR 0x4000

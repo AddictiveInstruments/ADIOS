@@ -79,19 +79,16 @@ OPTIMIZE  =	-Os
 
 # The bootloader is the one binary whose byte count directly buys flash for
 # the application: the app/BSL boundary rounds the measured size up to the
-# chip's erase granularity, and F4xx erases by 16K SECTORS - crossing 16384
-# bytes therefore costs the application a whole sector. Link-time
-# optimization keeps the F4 bootloader (which carries a full USB device
-# stack) inside ONE sector. LTO's prerequisite: every retention root that
-# only the HARDWARE references - the vector table - must carry
+# chip's erase granularity, so every byte saved here can hand a whole erase
+# unit back to the application - a 16K SECTOR on F4xx, a 2K PAGE on G0xx.
+# That is why this binary, and no other, is built with link-time
+# optimization. Its prerequisite: every retention root that only the
+# HARDWARE references - the vector table - must carry
 # __attribute__((used)) in the startup file, otherwise the whole-program
 # optimizer discards it before the linker script's KEEP() can claim it and
-# the image collapses to an empty binary (the attribute is in place, see
-# etc/startup). G0xx stays on plain -Os: its bootloader fits its boundary
-# without LTO, and MIN_BOUNDARY clamps its 2K-page granularity anyway.
-ifeq ($(FAMILY),STM32F4xx)
+# the image collapses to an empty binary, silently (the attribute is in
+# place, see etc/startup).
 OPTIMIZE += -flto
-endif
 
 CFLAGS =	$(DEBUG) $(OPTIMIZE)
 

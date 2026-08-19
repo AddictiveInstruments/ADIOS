@@ -227,7 +227,7 @@ LD_TEMPLATE := $(LD_TEMPLATE_S)
 # boundary, recomputing the application length from the chip's total flash -
 # so the reservation the template carved out would be silently undone. It
 # subtracts the same pages itself; the page size it already knows.
-GEN_BSL_BOUNDARY_STATUS := $(shell MIOS32_PATH=$(MIOS32_PATH) ADIOS_USERDATA_PAGES=$(MIOS32_USERDATA_PAGES) MIOS32_DEVICE_ID_PERSIST=$(MIOS32_DEVICE_ID_PERSIST) $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
+GEN_BSL_BOUNDARY_STATUS := $(shell MIOS32_PATH=$(MIOS32_PATH) ADIOS_USERDATA_PAGES=$(MIOS32_USERDATA_PAGES) ADIOS_BSL_PADDING=$(MIOS32_BSL_PADDING) MIOS32_DEVICE_ID_PERSIST=$(MIOS32_DEVICE_ID_PERSIST) $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
 ifneq ($(GEN_BSL_BOUNDARY_STATUS),0)
 $(error gen_bsl_boundary.sh failed (exit $(GEN_BSL_BOUNDARY_STATUS)) - see its messages above, and bootloader/src/gen_bsl_boundary_build.log for the bootloader sub-make output)
 endif

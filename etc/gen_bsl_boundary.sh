@@ -28,14 +28,20 @@
 #      compiled code size)
 #   2) measure the real compiled size of project_build/project.bin
 #   3) round it up to the next flash erase-granularity boundary (page for
-#      G0xx, sector for F4xx), clamped to a safety MINIMUM because STM32G0xx
-#      keeps a small persistent config block (device ID, fast-boot flag,
-#      etc, see MIOS32_SYS_ADDR_BSL_INFO_BEGIN in include/mios32/mios32_sys.h)
-#      at a FIXED OFFSET BEFORE the boundary that must stay inside the
-#      protected BSL region - never shrink the boundary below this without
-#      also moving that block. F4xx has the same block, but since its
-#      boundary is already sector-granular (min 1 sector = 16K) it's always
-#      comfortably larger than the 256-byte block needs.
+#      G0xx, sector for F4xx), then clamp to a MINIMUM.
+#
+#      That minimum is a DELIBERATE FLEET CHOICE, not a technical limit: the
+#      rounding alone would let the boundary follow the bootloader's compiled
+#      size, so one added feature - or merely a different compiler, which is
+#      worth tens of bytes here - would move it and oblige every deployed
+#      board to migrate. Pinning it buys a stable address with a known margin,
+#      and the build stops loudly (#error, further down) if the bootloader
+#      ever outgrows it, instead of silently relocating the application.
+#
+#      Choose it as: the boundary you intend the fleet to keep, at least one
+#      erase unit above the largest bootloader that boundary must hold. On
+#      F4xx the erase unit IS the minimum (one 16K sector). On G0xx, 0x2000
+#      with roughly 600 bytes to spare at the time of writing.
 #   4) writes mios32_bsl_boundary.h into bootloader/src AND the project dir
 #   5) rebuilds the bootloader - pass 2, now with the final boundary baked in
 #      (bsl_sysex.c's protection check AND main.c's jump-to-app address both
@@ -88,11 +94,17 @@ LD_TEMPLATE="$2"
 PROJECT_DIR="$3"
 
 # family-appropriate erase-granularity defaults, overridable via $4/$6.
-# UPDATER_ORIGIN_OFF/UPDATER_REGION_LEN: layout of the BSL-update tool when
+# UPDATER_ORIGIN_OFF: where the BSL-update tool is linked when
 # BSL_BOUNDARY_MODE=updater (see below) - the updater is linked ABOVE the
 # normal app origin. It writes the incoming bootloader image DIRECTLY into
-# the BSL region (no staging - see bootloader/src/bsl_sysex.c), so it only
-# needs its own code window here.
+# the BSL region (no staging - see bootloader/src/bsl_sysex.c).
+# It is given everything from there to the top of usable flash. There used
+# to be a fixed-size window as well, and it was a leftover: the only thing
+# that ever needed protecting up there is the application's own data area,
+# and MIOS32_USERDATA_PAGES already carves that out - for the updater as for
+# the application, both being relayed the same page count. A hand-picked
+# length on top of that protected nothing and merely capped the tool, which
+# is how a tool that grew a USB stack stopped fitting.
 # ORIGIN = the FLEET BOUNDARY CEILING (the highest boundary any device can
 # have). The updater is compiled code with absolute addresses - its link
 # address is fixed at build time, before the target device's OLD boundary is
@@ -114,19 +126,22 @@ case "$CHIP" in
         DEFAULT_PAGE_SIZE=16384   # sector-erase, fixed by silicon
         DEFAULT_MIN_BOUNDARY=16384
         UPDATER_ORIGIN_OFF=32768  # 0x8000, 16K sector #2 (ceiling = sector #1 = 0x4000)
-        UPDATER_REGION_LEN=16384
         ;;
     *)
         FAMILY_DIR="STM32G0xx"
         DEFAULT_PAGE_SIZE=2048    # uniform page-erase
-        DEFAULT_MIN_BOUNDARY=10240 # 0x2800 - see MIOS32_SYS_ADDR_BSL_INFO_BEGIN note above
+        DEFAULT_MIN_BOUNDARY=8192  # 0x2000 - a CHOSEN floor, see note below
         UPDATER_ORIGIN_OFF=12288  # 0x3000 - the fleet boundary ceiling
-        UPDATER_REGION_LEN=12288  # 0x3000..0x6000, fits a 32K part
         ;;
 esac
 
 PAGE_SIZE="${4:-$DEFAULT_PAGE_SIZE}"
-PADDING_BYTES="${5:-0}"
+# Also settable from the project's Makefile as MIOS32_BSL_PADDING, relayed
+# through the environment like the other project facts. It MUST reach every
+# pass that computes a boundary - the application's and the updater's - or
+# the two would size the same bootloader differently and the tool would
+# install an image cut for a boundary the application does not use.
+PADDING_BYTES="${5:-${ADIOS_BSL_PADDING:-0}}"
 MIN_BOUNDARY="${6:-$DEFAULT_MIN_BOUNDARY}"
 
 if [ -z "$PROJECT_DIR" ]; then
@@ -581,8 +596,13 @@ if [ "$BSL_BOUNDARY_MODE" = "updater" ]; then
         echo "ERROR: boundary $BOUNDARY exceeds the updater origin $UPDATER_ORIGIN_OFF - the updater window layout (see UPDATER_ORIGIN_OFF in this script) must be moved up for this bootloader size."
         exit 1
     fi
-    if [ $(( UPDATER_ORIGIN_OFF + UPDATER_REGION_LEN )) -gt "$TOTAL_FLASH" ]; then
-        echo "ERROR: updater window ($UPDATER_ORIGIN_OFF + $UPDATER_REGION_LEN bytes) exceeds this chip's $TOTAL_FLASH bytes of flash."
+    # The tool gets everything from its origin to the top of usable flash -
+    # the application's reserved data pages excluded, exactly as the
+    # application's own region excludes them. A tool too big to fit now fails
+    # at the LINK, naming the overflow, instead of being silently capped.
+    UPDATER_REGION_LEN=$(( TOTAL_FLASH - UPDATER_ORIGIN_OFF - USERDATA_LEN ))
+    if [ "$UPDATER_REGION_LEN" -le 0 ]; then
+        echo "ERROR: nothing left for the updater between its origin $UPDATER_ORIGIN_OFF and this chip's $TOTAL_FLASH bytes of flash minus $USERDATA_LEN reserved bytes."
         exit 1
     fi
     UPDATER_ORIGIN_HEX=$(printf '0x%08X' $(( 0x08000000 + UPDATER_ORIGIN_OFF )))
@@ -601,6 +621,14 @@ if [ "$BSL_BOUNDARY_MODE" = "updater" ]; then
         echo "// where this updater itself is linked (entry override target for Studio,"
         echo "// and the upper bound of the old-info-block scan)"
         echo "#define MIOS32_UPDATER_ORIGIN_ADDR $UPDATER_ORIGIN_HEX"
+        # The persistent device-ID opt-in, relayed exactly as it is to the
+        # bootloader (see write_header): this tool answers the host on the
+        # instrument's own SysEx ID, so it has to know where that ID is kept.
+        # Without it the tool comes up on the compile-time default and a host
+        # addressing the instrument cannot reach it.
+        if [ "${MIOS32_DEVICE_ID_PERSIST:-0}" = "1" ]; then
+            echo "#define MIOS32_DEVICE_ID_PERSIST 1"
+        fi
         if [ -n "$BSL_RELAY_BLOCK" ]; then
             echo "// Board MIDI wiring, copied verbatim from the BSL_RELAY block of the"
             echo "// application's mios32_config.h (BSL_RELAY_SRC): this tool must come"

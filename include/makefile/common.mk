@@ -182,8 +182,12 @@ $(DYNAMIC_BSL_APP_NAME)_app_only.hex: project_build/$(PROJECT).elf
 #    here, the bootloader that ends up in the combined image is the one built
 #    by this second pass - i.e. one that never looks for the stored device ID,
 #    silently undoing what the application's own pass produced (2026-08-11).
+#    MIOS32_USERDATA_PAGES travels for its own reason: the update tool is given
+#    everything from its origin to the top of usable flash, so it has to know
+#    which pages up there belong to the application's data and are not flash it
+#    may be linked over.
 $(DYNAMIC_BSL_APP_NAME)_bsl_updater.hex: project_build/$(PROJECT).elf
-	+$(MAKE) -C $(MIOS32_PATH)/bootloader/updater MIOS32_PATH=../.. PROCESSOR=$(PROCESSOR) BSL_RELAY_SRC=$(CURDIR) MIOS32_DEVICE_ID_PERSIST=$(MIOS32_DEVICE_ID_PERSIST)
+	+$(MAKE) -C $(MIOS32_PATH)/bootloader/updater MIOS32_PATH=../.. PROCESSOR=$(PROCESSOR) BSL_RELAY_SRC=$(CURDIR) MIOS32_DEVICE_ID_PERSIST=$(MIOS32_DEVICE_ID_PERSIST) MIOS32_USERDATA_PAGES=$(MIOS32_USERDATA_PAGES) MIOS32_BSL_PADDING=$(MIOS32_BSL_PADDING)
 	cp $(MIOS32_PATH)/bootloader/updater/updater_$(PROCESSOR).hex $@
 endif
 

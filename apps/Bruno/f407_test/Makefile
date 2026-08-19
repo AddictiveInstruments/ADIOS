@@ -17,6 +17,17 @@ FAMILY    =	STM32F4xx
 BOARD	  =	MBHP_DIPCOREF4
 LCD       =	dummy
 
+# Padding can be added to the measured bootloader size before it is rounded to
+# an erase unit, which is how you make a build behave as a bootloader that
+# outgrew its sector without changing a line of its code:
+#
+#   MIOS32_BSL_PADDING = 1024      -> boundary 0x8000 instead of 0x4000
+#
+# Used on 2026-08-19 to exercise a boundary MIGRATION on this family for the
+# first time: a device sitting at 0x4000 was sent a bootloader wanting 0x8000,
+# which also forced the entry handover, the tool then being linked above the
+# boundary the device declared. Both worked. Left at 0 for normal builds.
+
 # self-locating repo root: apps live at a fixed depth inside the repo, so a
 # plain `make` works with no environment setup at all (any exported
 # MIOS32_PATH - e.g. from a CubeIDE workspace - still overrides this default)

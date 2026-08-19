@@ -55,6 +55,106 @@ static void printchar(char **str, int c)
 	}
 }
 
+#ifdef BSL_USE_REDUCED_SPRINTF
+
+/* A format parser cut down to what a bootloader needs. Defined by the
+ * bootloader's own mios32_config.h and by nothing else - every other build
+ * compiles the full parser further down and is not affected in any way, the
+ * switch being absent from its preprocessor.
+ *
+ * WHY IT EXISTS: a bootloader's size decides where the application starts,
+ * because the boundary is rounded up to the flash erase granularity - a whole
+ * 16K sector on some families. The full parser costs about 600 bytes to
+ * answer four host queries which between them use "%d" and "%08x".
+ *
+ * WHAT IT UNDERSTANDS: "%d" (signed decimal), "%x" (lower-case hex), each
+ * with optional zero padding written "%0<width>"; "%%"; and literal text.
+ *
+ * WHAT IT DOES NOT: "%s", "%X", "%u", "%c", left justification, blank
+ * padding. Those emit '?' instead of consuming their argument silently, so a
+ * format this build cannot serve is VISIBLE in the answer rather than
+ * swallowed - add the specifier here, or drop the switch for that build.
+ */
+static int print( char **out, const char *format, va_list args )
+{
+	char buf[12];			/* 10 digits of a 32 bit value, plus NUL */
+	register int pc = 0;
+	int width, base, neg, len, value;
+	unsigned u;
+	char *s;
+
+	for (; *format != 0; ++format) {
+
+		if( *format != '%' ) {
+			printchar (out, *format);
+			++pc;
+			continue;
+		}
+
+		++format;
+		if( *format == '\0' ) break;
+
+		if( *format == '%' ) {
+			printchar (out, '%');
+			++pc;
+			continue;
+		}
+
+		width = 0;
+		if( *format == '0' ) {
+			++format;
+			for ( ; *format >= '0' && *format <= '9'; ++format)
+				width = 10*width + (*format - '0');
+		}
+
+		if( *format == 'd' || *format == 'x' ) {
+			base = (*format == 'x') ? 16 : 10;
+			value = va_arg( args, int );
+			u = (unsigned)value;
+			neg = 0;
+
+			if( base == 10 && value < 0 ) {
+				neg = 1;
+				u = (unsigned)(-value);
+			}
+
+			s = buf + sizeof(buf) - 1;
+			*s = '\0';
+			do {
+				unsigned t = u % base;
+				*--s = (t < 10) ? ('0' + t) : ('a' + t - 10);
+				u /= base;
+			} while( u );
+
+			if( neg ) {		/* sign first, then the zeros */
+				printchar (out, '-');
+				++pc;
+				if( width ) --width;
+			}
+
+			for (len = (buf + sizeof(buf) - 1) - s; len < width; ++len) {
+				printchar (out, '0');
+				++pc;
+			}
+
+			while( *s ) {
+				printchar (out, *s++);
+				++pc;
+			}
+			continue;
+		}
+
+		printchar (out, '?');	/* see the comment above */
+		++pc;
+	}
+
+	if (out) **out = '\0';
+	va_end( args );
+	return pc;
+}
+
+#else /* !BSL_USE_REDUCED_SPRINTF - the full parser */
+
 #define PAD_RIGHT 1
 #define PAD_ZERO 2
 
@@ -207,6 +307,8 @@ static int print( char **out, const char *format, va_list args )
 	va_end( args );
 	return pc;
 }
+
+#endif /* BSL_USE_REDUCED_SPRINTF */
 
 int printf(const char *format, ...)
 {
