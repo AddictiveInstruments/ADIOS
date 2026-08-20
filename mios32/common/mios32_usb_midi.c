@@ -251,6 +251,18 @@ s32 MIOS32_USB_MIDI_PackageSend(u8 idx, mios32_midi_package_t package)
     ++waited_ms;
   }
 }
+// Padding, not a message. A sender fills the unused space of a bulk
+// transfer with zero bytes, and the class RESERVES code index numbers 0x0
+// and 0x1 for future use - so an event carrying one holds no MIDI at all.
+// Dropped here, once, for both directions, because a note nobody played is
+// worse than no note: it was always arriving, and only ever looked like
+// silence because whoever received it happened to ignore it.
+static u8 package_is_padding(const mios32_midi_package_t *package)
+{
+  return package->type < 0x2;
+}
+
+
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -266,7 +278,10 @@ s32 MIOS32_USB_MIDI_PackageReceive(mios32_midi_package_t *package, u8 *idx)
 #if CFG_TUD_MIDI
   if( tud_midi_mounted() ) {
     ++mios32_usb_dbg_mounted;
-    if( tud_midi_packet_read(package->bytes) ) {
+    while( tud_midi_packet_read(package->bytes) ) {
+      if( package_is_padding(package) )
+        continue;
+
       ++mios32_usb_dbg_rxpkt;
       *idx = package->cable; // controller 0, so the cable is the index
       return 0;
@@ -281,7 +296,10 @@ s32 MIOS32_USB_MIDI_PackageReceive(mios32_midi_package_t *package, u8 *idx)
       if( !host_itf[i].in_use )
         continue;
 
-      if( tuh_midi_packet_read_n(host_itf[i].tuh_idx, package->bytes, 4) == 4 ) {
+      while( tuh_midi_packet_read_n(host_itf[i].tuh_idx, package->bytes, 4) == 4 ) {
+        if( package_is_padding(package) )
+          continue;
+
         // Local cable of the attached device -> OS cable, then into the
         // second controller's range.
         ++mios32_usb_dbg_rxhost;

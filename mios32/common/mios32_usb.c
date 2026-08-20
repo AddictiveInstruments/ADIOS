@@ -64,6 +64,18 @@ void tusb_time_delay_ms_api(uint32_t ms)
 static mios32_usb_role_t port_role[MIOS32_USB_NUM_PORTS];
 static u8 initialized;
 
+#if MIOS32_USB_ROLE_DETECTED
+// Debouncing state for ports that DETECT their role. A reading has to repeat
+// itself before it is believed: a plug scrapes its way in, and a role change
+// is not a cheap event - it tears one stack down and builds the other up.
+static mios32_usb_role_t role_seen[MIOS32_USB_NUM_PORTS];
+static u8 role_seen_count[MIOS32_USB_NUM_PORTS];
+
+// Defined further down, where the family layer's entry point lives. Declared
+// here because the pump below calls it, and the pump comes first.
+void MIOS32_USB_RoleChangeNotify(u8 port, mios32_usb_role_t role);
+#endif
+
 static void (*role_change_callback)(u8 port, mios32_usb_role_t role);
 
 
@@ -203,13 +215,31 @@ s32 MIOS32_USB_Init(u32 mode)
     port_role[port] = MIOS32_USB_ROLE_NONE;
 
   // A port whose role nothing can detect has to be told what it is, and the
-  // project says so. A port that CAN detect its role is left idle until it
-  // does - guessing would be worse than waiting.
+  // project says so. A port that CAN detect it is ASKED, now, rather than
+  // left waiting for a change to be signalled: the commonest situation of all
+  // is a cable already in place at start-up, which produces no change at all.
+  //
+  // And on this family it decides more than the role. Coming up is often a
+  // HAND-OVER, with a live device session left running by the stage before
+  // (see port_start below): read the source too late and the port starts from
+  // nothing, which costs exactly the session the adoption exists to keep.
   for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
-    if( MIOS32_USB_LL_RoleSourceGet(port) != MIOS32_USB_ROLE_SRC_FIXED )
-      continue;
+    mios32_usb_role_t role;
 
-    mios32_usb_role_t role = (port == 0) ? MIOS32_USB_P0_ROLE : MIOS32_USB_P1_ROLE;
+#if MIOS32_USB_ROLE_DETECTED
+    role_seen[port] = MIOS32_USB_ROLE_NONE;
+    role_seen_count[port] = 0;
+
+    if( MIOS32_USB_LL_RoleSourceGet(port) != MIOS32_USB_ROLE_SRC_FIXED ) {
+      role = MIOS32_USB_LL_RoleDetect(port);
+
+      // A source with nothing to say yet - no plug, no decision. Leaving the
+      // port idle is right: the pump re-reads it every millisecond.
+      if( role == MIOS32_USB_ROLE_NONE )
+        continue;
+    } else
+#endif
+    role = (port == 0) ? MIOS32_USB_P0_ROLE : MIOS32_USB_P1_ROLE;
 
     // Asking for a role whose stack was never compiled in is a configuration
     // mistake, not a runtime condition - so it is worth reporting rather than
@@ -303,6 +333,37 @@ s32 MIOS32_USB_Handler(void)
   if( busy )
     return -2;
   busy = 1;
+
+#if MIOS32_USB_ROLE_DETECTED
+  // A port that detects its role is RE-READ here rather than waited on as an
+  // interrupt. Plugging a cable is a human gesture, so a reading every time
+  // round the pump is a thousand times quicker than it needs to be - and it
+  // brings the debouncing an edge would not have brought at all. Contacts
+  // scrape on the way in, and acting on the scrape would tear a stack down
+  // and build it back up several times over.
+  for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
+    mios32_usb_role_t seen;
+
+    if( MIOS32_USB_LL_RoleSourceGet(port) == MIOS32_USB_ROLE_SRC_FIXED )
+      continue;
+
+    seen = MIOS32_USB_LL_RoleDetect(port);
+
+    // Nothing to say, or nothing new to say: forget any part-formed reading.
+    if( seen == MIOS32_USB_ROLE_NONE || seen == port_role[port] ) {
+      role_seen_count[port] = 0;
+      continue;
+    }
+
+    if( seen != role_seen[port] ) {
+      role_seen[port] = seen;
+      role_seen_count[port] = 0;
+    } else if( ++role_seen_count[port] >= MIOS32_USB_ROLE_SETTLE ) {
+      role_seen_count[port] = 0;
+      MIOS32_USB_RoleChangeNotify(port, seen);
+    }
+  }
+#endif /* MIOS32_USB_ROLE_DETECTED */
 
   // Both tasks are global rather than per-port in TinyUSB, so each is called
   // at most once however many ports play that role.

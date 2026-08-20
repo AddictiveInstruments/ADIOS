@@ -111,11 +111,17 @@ typedef enum {
 
 // How a port learns its role. Which of these a family can offer is a fact of
 // the silicon and not a choice.
-typedef enum {
-  MIOS32_USB_ROLE_SRC_FIXED = 0, // the connector decides; nothing to detect
-  MIOS32_USB_ROLE_SRC_ID    = 1, // OTG ID pin
-  MIOS32_USB_ROLE_SRC_CC    = 2  // Type-C CC lines
-} mios32_usb_role_source_t;
+//
+// Plain macros rather than an enumeration, and for a reason worth knowing:
+// THE PREPROCESSOR CANNOT SEE ENUMERATORS. An unknown identifier in an #if is
+// silently taken as 0, so a build asking "does any port detect its role?" -
+// which is how the whole detection machinery is compiled in or left out -
+// would answer "no" every time, and do it without a word of complaint.
+#define MIOS32_USB_ROLE_SRC_FIXED   0  // the connector decides; nothing to detect
+#define MIOS32_USB_ROLE_SRC_ID      1  // OTG ID pin
+#define MIOS32_USB_ROLE_SRC_CC      2  // Type-C CC lines
+
+typedef u8 mios32_usb_role_source_t;
 
 #ifndef MIOS32_USB_NUM_PORTS
 # define MIOS32_USB_NUM_PORTS       1
@@ -130,6 +136,40 @@ typedef enum {
 #endif
 #ifndef MIOS32_USB_P1_ROLE
 # define MIOS32_USB_P1_ROLE         MIOS32_USB_ROLE_HOST
+#endif
+
+// How a port learns its role. The DEFAULT IS FIXED, because a board that
+// gives each port its own dedicated connector has already decided in its
+// mechanics: a type-A receptacle is a host socket, a type-B one is a device
+// socket. A board that really detects says so, and says which way:
+//   #define MIOS32_USB_P0_ROLE_SOURCE  MIOS32_USB_ROLE_SRC_ID
+// Which sources a family can offer is a fact of the silicon, not a choice -
+// but WHETHER a board uses one is a fact of the board, so it is declared
+// here, where every layer can see it, and not buried in a family.
+#ifndef MIOS32_USB_P0_ROLE_SOURCE
+# define MIOS32_USB_P0_ROLE_SOURCE  MIOS32_USB_ROLE_SRC_FIXED
+#endif
+#ifndef MIOS32_USB_P1_ROLE_SOURCE
+# define MIOS32_USB_P1_ROLE_SOURCE  MIOS32_USB_ROLE_SRC_FIXED
+#endif
+
+// Derived, and the reason the detection machinery costs nothing to a build
+// that cannot use it: no port detecting means no reading, no debouncing and
+// no pin claimed anywhere. A bootloader, whose socket is whatever the board
+// wired and never changes while it runs, compiles none of it.
+#if MIOS32_USB_P0_ROLE_SOURCE != MIOS32_USB_ROLE_SRC_FIXED || MIOS32_USB_P1_ROLE_SOURCE != MIOS32_USB_ROLE_SRC_FIXED
+# define MIOS32_USB_ROLE_DETECTED 1
+#else
+# define MIOS32_USB_ROLE_DETECTED 0
+#endif
+
+// How many identical readings a DETECTED role must give before it is acted
+// on, counted in turns of MIOS32_USB_Handler - about a millisecond each, so
+// the default is roughly 20 ms. It exists because contacts scrape on the way
+// in and a role change is expensive: one stack down, the other up. Raise it
+// on a connector that chatters; there is no hurry, a plug is a human gesture.
+#ifndef MIOS32_USB_ROLE_SETTLE
+# define MIOS32_USB_ROLE_SETTLE     20
 #endif
 
 
@@ -164,6 +204,18 @@ extern s32 MIOS32_USB_HandoffPrepare(void);
 
 extern s32 MIOS32_USB_LL_Init(u8 port, mios32_usb_role_t role);
 extern mios32_usb_role_source_t MIOS32_USB_LL_RoleSourceGet(u8 port);
+
+// What the port's role source is asking for AT THIS INSTANT - raw, with no
+// debouncing and no memory of the last answer: deciding what a change means
+// is the common layer's job, so that every family gets the same policy from
+// one place. A port that detects nothing answers MIOS32_USB_ROLE_NONE, which
+// is the fixed case saying "the project decides, not me".
+extern mios32_usb_role_t MIOS32_USB_LL_RoleDetect(u8 port);
+
+// Is the port's power switch reporting over-current? The switch protects the
+// board by itself; this only makes the fact readable.
+// Returns 1 asserted, 0 clear, -1 if the port has no flag wired.
+extern s32 MIOS32_USB_LL_OverCurrent(u8 port);
 
 // Does this port hold a live device session from a previous life? Read from
 // the silicon, never from RAM - a core-only reset wipes the RAM and leaves

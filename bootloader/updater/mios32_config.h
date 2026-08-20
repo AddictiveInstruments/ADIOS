@@ -161,4 +161,17 @@
 #endif
 
 
+
+// AND IT DEBUGS WHERE IT TALKS, unless the project said otherwise itself.
+// The transport comes from the relay block; a debug port pointing anywhere
+// else would drag a second driver into a binary that has room for none, and
+// would speak into a socket this board may not even have wired. Placed after
+// both family branches, so it sees whatever the relay declared - a project
+// that relays its own debug port keeps it. The application is free to debug
+// somewhere else entirely: it declares that OUTSIDE the relay block, which is
+// precisely why it cannot reach this file.
+#if !defined(MIOS32_MIDI_DEBUG_PORT) && defined(MIOS32_MIDI_DEFAULT_PORT)
+# define MIOS32_MIDI_DEBUG_PORT MIOS32_MIDI_DEFAULT_PORT
+#endif
+
 #endif /* _MIOS32_CONFIG_H */

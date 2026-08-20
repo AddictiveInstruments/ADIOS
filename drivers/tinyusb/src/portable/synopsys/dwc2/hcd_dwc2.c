@@ -17,6 +17,19 @@
 #include "host/usbh.h"
 #include "dwc2_common.h"
 
+// LOCAL PATCH (bench probe, not upstream) - WHY a slave-mode transfer
+// failed, which the FAILED result erases. Separate counters for the SETUP/OUT
+// path and the IN path: a SETUP nobody ACKs and a data stage that dies are
+// different diseases. Volatile so the optimizer cannot elide them; read over
+// SWD.
+volatile uint32_t hcd_dbg_xacterr_out;
+volatile uint32_t hcd_dbg_xacterr_in;
+volatile uint32_t hcd_dbg_babble;
+volatile uint32_t hcd_dbg_last_hcint;
+volatile uint32_t hcd_dbg_closing_refused; // xfer refused: endpoint stuck in closing
+volatile uint32_t hcd_dbg_post_count;      // completions actually posted to usbh
+volatile uint32_t hcd_dbg_post_last;       // and the last result they carried
+
   // Debug level for DWC2
   #define DWC2_DEBUG 2
 
@@ -710,6 +723,7 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
   uint8_t ep_id = edpt_find_opened(dev_addr, ep_num, ep_dir);
   TU_ASSERT(ep_id < CFG_TUH_DWC2_ENDPOINT_MAX);
   hcd_endpoint_t *edpt = &_hcd_data.edpt[ep_id];
+  if (edpt->closing) { ++hcd_dbg_closing_refused; } // LOCAL PATCH (bench probe)
   TU_VERIFY(edpt->closing == 0); // skip if endpoint is closing
 
   edpt->buffer = buffer;
@@ -950,8 +964,10 @@ static bool handle_channel_in_slave(dwc2_regs_t* dwc2, uint8_t ch_id, uint32_t h
     if (hcint & HCINT_STALL) {
       xfer->result = XFER_RESULT_STALLED;
     } else if (hcint & HCINT_BABBLE_ERR) {
+      ++hcd_dbg_babble; hcd_dbg_last_hcint = hcint; // LOCAL PATCH (bench probe)
       xfer->result = XFER_RESULT_FAILED;
     } else if (hcint & HCINT_XACT_ERR) {
+      ++hcd_dbg_xacterr_in; hcd_dbg_last_hcint = hcint; // LOCAL PATCH (bench probe)
       xfer->err_count++;
       channel->hcintmsk |= HCINT_ACK;
     } else {
@@ -1139,6 +1155,7 @@ static bool handle_channel_in_dma(dwc2_regs_t* dwc2, uint8_t ch_id, uint32_t hci
       if (hcint & HCINT_STALL) {
         xfer->result = XFER_RESULT_STALLED;
       } else if (hcint & HCINT_BABBLE_ERR) {
+        ++hcd_dbg_babble; hcd_dbg_last_hcint = hcint; // LOCAL PATCH (bench probe)
         xfer->result = XFER_RESULT_FAILED;
       } else if (hcsplt.split_en && remain_packets && actual_len == hcchar.ep_size) {
         // Split can only complete 1 transaction (up to 1 packet) at a time, schedule more
@@ -1156,6 +1173,7 @@ static bool handle_channel_in_dma(dwc2_regs_t* dwc2, uint8_t ch_id, uint32_t hci
       xfer->err_count = 0;
       channel->hcintmsk &= ~HCINT_ACK;
     } else if (hcint & HCINT_XACT_ERR) {
+      ++hcd_dbg_xacterr_out; hcd_dbg_last_hcint = hcint; // LOCAL PATCH (bench probe)
       xfer->err_count++;
       if (xfer->err_count >=  HCD_XFER_ERROR_MAX) {
         is_done = true;
@@ -1351,6 +1369,7 @@ static void handle_channel_irq(uint8_t rhport, bool in_isr) {
           edpt_dealloc(edpt);
         } else {
           const uint8_t ep_addr = tu_edpt_addr(hcchar.ep_num, hcchar.ep_dir);
+          ++hcd_dbg_post_count; hcd_dbg_post_last = xfer->result; // LOCAL PATCH (bench probe)
           hcd_event_xfer_complete(hcchar.dev_addr, ep_addr, xfer->xferred_bytes, (xfer_result_t)xfer->result, in_isr);
         }
         channel_dealloc(dwc2, ch_id);
@@ -1473,7 +1492,21 @@ static void handle_hprt_irq(uint8_t rhport, bool in_isr) {
       const tusb_speed_t speed = hprt_speed_get(dwc2);
       port0_enable(dwc2, speed);
     } else {
-      // TU_ASSERT(false, );
+      // LOCAL PATCH (not upstream; replaces a commented-out assert) - the
+      // core DISABLES the port by itself on a bus error (babble, transaction
+      // error bursts), and this event was acknowledged then thrown away.
+      // Everything downstream then waits forever: the armed channel never
+      // completes and never fails, SOF generation stops, and the stack still
+      // believes the device is present because PCSTS stays set. Measured on
+      // real hardware - a low-speed keyboard behind a hub, port disabled in
+      // the middle of its enumeration, channel left with CHENA set and hcint
+      // at zero for good.
+      //
+      // Treating it as a disconnect is the honest reading: the BUS is gone
+      // even though the plug is not. The stack tears the device tree down,
+      // pending transfers fail visibly instead of silently, and the next
+      // attach edge starts clean instead of finding a wedged controller.
+      hcd_event_device_remove(rhport, in_isr);
     }
   }
 
