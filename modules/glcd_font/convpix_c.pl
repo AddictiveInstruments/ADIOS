@@ -1,6 +1,5 @@
 #!/usr/bin/perl -w
 #
-# convpix_c.pl by Thorsten Klose (initial version 8/95, C output version 9/2008)
 # converts graphic to asm-data for graphic display
 #
 

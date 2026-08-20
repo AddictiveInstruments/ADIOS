@@ -1,6 +1,5 @@
 #!/usr/bin/perl -w
 #
-# original is convpix_c.pl by Thorsten Klose (initial version 8/95, C output version 9/2008)
 # this version is used to convert 8bit grayscale graphic to asm-data for 4bit depth pixel graphic display
 # notes: there's 2 pixels by byte, first pixel is in MSB nibble, second in LSB
 #

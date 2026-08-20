@@ -1,7 +1,7 @@
 # MIOS32 (trunk_dyn_bsl)
 
 Firmware "OS" for STM32-based instrument retrofits - MIDI-centric, derived
-from [MIOS32](http://www.ucapps.de/mios32.html) by Thorsten Klose, heavily
+from [MIOS32](http://www.ucapps.de/mios32.html), heavily
 reworked: STM32G0xx + STM32F4xx families, LL-driver based, dynamic
 bootloader/app flash boundary, opt-in peripheral model, bare-metal or
 FreeRTOS scheduling tiers.

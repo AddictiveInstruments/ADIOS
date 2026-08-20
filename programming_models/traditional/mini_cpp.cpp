@@ -17,7 +17,6 @@
 // in a demo-application for a Cortex-M3 (thumb2, CS G++ lite Q1/2009).
 // Further information can be found in the documents from Quantum Leaps.
 //////////////////////////////////////////////////////////////////////////////
-// another very minor modification by Thorsten Klose (2010-01)
 // just added comments to new() and delete(), that the versions of
 // freertos_heap.cpp are used
 //////////////////////////////////////////////////////////////////////////////

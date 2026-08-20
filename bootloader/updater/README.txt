@@ -1,9 +1,9 @@
 
 Bootloader Update V1.018
 ===============================================================================
-Copyright (C) 2014 Thorsten Klose (tk@midibox.org)
-Licensed for personal non-commercial use only.
-All other rights reserved.
+Copyright (C) 2026 Bruno Dupeyron (addictive.instruments@gmail.com)
+Licensed under MIT License.
+See the LICENSE file in the project root for full licence information.
 ===============================================================================
 
 Required tools:
