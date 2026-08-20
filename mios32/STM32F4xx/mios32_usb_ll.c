@@ -12,9 +12,9 @@
  *
  * ==========================================================================
  *
- *  Copyright (C) 2026 Bruno Dupeyron
- *  Licensed for personal non-commercial use only.
- *  All other rights reserved.
+ *  Copyright (C) 2026 Bruno Dupeyron (addictive.instruments@gmail.com)
+ *  Licensed under MIT License.
+ *  See the LICENSE file in the project root for full licence information.
  *
  * ==========================================================================
  */
@@ -177,13 +177,17 @@
 // Each helper below is compiled only for a build that DECLARED the pins it
 // serves: a bootloader, or a board whose single socket takes its 5 V from the
 // cable, carries none of them.
-#if defined(MIOS32_USB_P0_VBUS_PIN)  || (MIOS32_USB_NUM_PORTS > 1 && defined(MIOS32_USB_P1_VBUS_PIN))
+#if defined(MIOS32_USB_P0_VBUS_PIN) \
+ || (MIOS32_USB_NUM_PORTS > 1 && defined(MIOS32_USB_P1_VBUS_PIN))
 # define USB_VBUS_SWITCHED 1
 #else
 # define USB_VBUS_SWITCHED 0
 #endif
 
-#if defined(MIOS32_USB_P0_OC_PIN)  || MIOS32_USB_P0_ROLE_SOURCE != MIOS32_USB_ROLE_SRC_FIXED  || (MIOS32_USB_NUM_PORTS > 1 && (defined(MIOS32_USB_P1_OC_PIN)      || MIOS32_USB_P1_ROLE_SOURCE != MIOS32_USB_ROLE_SRC_FIXED))
+#if defined(MIOS32_USB_P0_OC_PIN) \
+ || MIOS32_USB_P0_ROLE_SOURCE != MIOS32_USB_ROLE_SRC_FIXED \
+ || (MIOS32_USB_NUM_PORTS > 1 && (defined(MIOS32_USB_P1_OC_PIN) \
+     || MIOS32_USB_P1_ROLE_SOURCE != MIOS32_USB_ROLE_SRC_FIXED))
 # define USB_PIN_SENSED 1
 #else
 # define USB_PIN_SENSED 0
