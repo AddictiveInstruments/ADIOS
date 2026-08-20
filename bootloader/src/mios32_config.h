@@ -1,4 +1,3 @@
-// $Id: mios32_config.h 194 2008-12-18 01:47:21Z tk $
 /*
  * Local MIOS32 configuration file
  *

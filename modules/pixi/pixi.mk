@@ -1,4 +1,3 @@
-# $Id: pixi.mk
 # defines additional rules for integrating the PIXI modules
 
 # enhance include path

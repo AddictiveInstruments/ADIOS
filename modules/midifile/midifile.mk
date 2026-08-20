@@ -1,4 +1,3 @@
-# $Id: midifile.mk 188 2008-12-16 23:46:09Z tk $
 # defines additional rules for integrating the midifile modules
 
 # enhance include path

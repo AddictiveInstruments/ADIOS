@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup M16
 //!
 //! Driver for the M16 - an FPGA interface deploying 16 MIDI I/O over one

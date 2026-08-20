@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Shared transfer engine for the I2C v2 peripheral.
  *

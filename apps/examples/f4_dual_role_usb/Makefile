@@ -1,4 +1,3 @@
-# $Id: Makefile 1820 2013-09-01 15:44:33Z tk $
 
 ################################################################################
 # f4_dual_role_usb - EXAMPLE. ONE micro-AB socket that is a device socket and a

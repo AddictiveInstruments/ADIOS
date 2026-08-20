@@ -1,4 +1,3 @@
-# $Id: md5.mk 1584 2012-12-08 17:38:25Z tk $
 # defines additional rules for integrating the md5 modules
 
 # enhance include path

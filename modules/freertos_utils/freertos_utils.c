@@ -1,4 +1,3 @@
-// $Id: freertos_utils.c 2425 2016-11-03 00:44:22Z tk $
 //! \defgroup FREERTOS_UTILS
 //!
 //! Utility functions for FreeRTOS

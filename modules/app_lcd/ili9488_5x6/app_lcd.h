@@ -1,4 +1,3 @@
-// $Id: app_lcd.h 1222 2011-06-23 21:12:04Z tk $
 /*
  * Header file for application specific LCD Driver
  *

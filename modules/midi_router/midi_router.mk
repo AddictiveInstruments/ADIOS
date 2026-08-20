@@ -1,4 +1,3 @@
-# $Id: midi_router.mk 1489 2012-07-29 20:40:48Z tk $
 # defines additional rules for integrating the midi_router modules
 
 # enhance include path

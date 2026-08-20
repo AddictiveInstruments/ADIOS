@@ -1,9 +1,7 @@
-// $Id: glcd_font_knob_icons.c 43 2008-09-30 23:30:38Z tk $
 // converted with 'convpix_c.pl glcd_font_knob_icons.xpm -icons 12 -height 24'
 
 #include <mios32.h>
 
-  // $Id: glcd_font_tiny.c 43 2008-09-30 23:30:38Z tk $
   // converted with 'convpix_c.pl glcd_font_small.xpm'
   const u8 GLCD_FONT_1BIT_PIX[] = {
     12, 12, 0, 12, // width, height, X0 offset, char offset

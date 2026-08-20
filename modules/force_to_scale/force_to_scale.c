@@ -1,4 +1,3 @@
-// $Id: scale.c 1221 2011-06-15 17:47:17Z tk $
 /*
  * Force-to-Scale Functions
  *

@@ -1,4 +1,3 @@
-// $Id: seq_bpm.c 1710 2013-03-10 16:30:57Z tk $
 //! \defgroup SEQ_BPM
 //!
 //! Some comments to the way how the bpm_tick is generated:

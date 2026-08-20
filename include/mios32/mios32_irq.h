@@ -1,4 +1,3 @@
-// $Id$
 /*
  * This file collects all interrupt priorities and provides prototypes to
  * MIOS32_IRQ_* functions

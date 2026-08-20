@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_ADC
 //!
 //! ADC driver for MIOS32 - STM32G0xx

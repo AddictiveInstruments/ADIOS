@@ -1,4 +1,3 @@
-// $Id: mid_parser.h 1526 2012-10-29 21:26:00Z tk $
 /*
  * Header file for MIDI file parser
  *

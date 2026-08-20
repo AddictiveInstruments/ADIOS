@@ -1,4 +1,3 @@
-# $Id: STR91x_upload.script 50 2008-10-03 21:51:17Z tk $
 
 wait_halt
 str9x flash_config 0 4 2 0 0x80000

@@ -1,4 +1,3 @@
-// $Id: seq_midi_out.h 2206 2015-09-22 11:56:51Z tk $
 /*
  * Header file for MIDI output routines
  *

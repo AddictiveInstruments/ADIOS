@@ -1,4 +1,3 @@
-// $Id: mid_parser.c 1942 2014-01-26 21:25:53Z tk $
 /*
  * MIDI file player
  *

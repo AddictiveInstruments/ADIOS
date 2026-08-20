@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_UART
 //!
 //! U(S)ART functions for MIOS32 - STM32G0xx

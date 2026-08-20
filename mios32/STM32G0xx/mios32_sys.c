@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_SYS
 //!
 //! System Initialisation for MIOS32

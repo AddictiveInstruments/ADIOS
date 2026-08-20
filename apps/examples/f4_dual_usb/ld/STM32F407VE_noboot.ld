@@ -1,4 +1,4 @@
-/* $Id: STM32F407VE.ld custom $
+/*
 Linker script for STM32F407VE (Waveshare board, Device ID 0x413 read via
 SWD confirmed 512K flash - not the 1024K "VG" variant)
 Based on scripts from Raisonance

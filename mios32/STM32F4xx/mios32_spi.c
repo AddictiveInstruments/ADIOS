@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_SPI
 //!
 //! Hardware Abstraction Layer for the SPI ports of the STM32F4

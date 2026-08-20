@@ -1,4 +1,3 @@
-# $Id: programming_model.mk 2424 2016-11-03 00:44:05Z tk $
 # defines rules building the programming model
 
 # where is FreeRTOS located

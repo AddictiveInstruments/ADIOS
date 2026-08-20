@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Traditional Programming Model
  * Provides similar hooks like PIC based MIOS8 to the application

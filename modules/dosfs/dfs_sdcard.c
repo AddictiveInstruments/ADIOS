@@ -1,4 +1,3 @@
-// $Id: dfs_sdcard.c 754 2009-10-17 16:50:40Z tk $
 /*
  * Access layer between DOSFS and MIOS32
  * See README_1st.txt for details

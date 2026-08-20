@@ -1,4 +1,3 @@
-# $Id$
 
 ################################################################################
 # 5x6 ROM one-shot migration tool - see app.c for what it does and why it is a

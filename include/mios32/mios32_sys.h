@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Header file for MIOS32 System Initialisation
  *

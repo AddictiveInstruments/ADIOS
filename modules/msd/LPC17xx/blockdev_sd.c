@@ -1,4 +1,3 @@
-// $Id: blockdev_sd.c 1236 2011-07-04 21:28:25Z tk $
 //!
 //! Reduced version of SD Card Block device
 //! most functions already handled by MIOS32, therefore only block read/write

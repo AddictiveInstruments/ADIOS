@@ -1,4 +1,3 @@
-// $Id: dpot.c $
 //! \defgroup DPOT
 //!
 //! DPOT module driver

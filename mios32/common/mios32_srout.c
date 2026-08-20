@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_SROUT
 //!
 //! SROUT functions for MIOS32

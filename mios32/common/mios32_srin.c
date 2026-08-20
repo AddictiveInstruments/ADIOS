@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_SRIN
 //!
 //! SRIN functions for MIOS32

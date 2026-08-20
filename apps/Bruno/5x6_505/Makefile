@@ -1,4 +1,3 @@
-# $Id: Makefile 1820 2013-09-01 15:44:33Z tk $
 
 ################################################################################
 # This app is permanently pinned to one specific board (2026-08-01): unlike a

@@ -1,4 +1,3 @@
-// $Id: app.h 1919 2014-01-08 19:13:48Z tk $
 /*
  * Header file of application
  *

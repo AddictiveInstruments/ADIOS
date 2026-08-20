@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Header file for Rotary Encoder Driver
  *

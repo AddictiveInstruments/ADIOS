@@ -1,4 +1,3 @@
-// $Id: app_lcd.c 2179 2015-06-10 18:36:14Z hawkeye $
 /*
  * Application specific OLED driver for up to 1 * SSD1322 (more toDo)
  * Referenced from MIOS32_LCD routines

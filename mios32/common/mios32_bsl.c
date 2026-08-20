@@ -1,4 +1,3 @@
-// $Id$
 //
 // Includes the bootloader code into the project
 // If no bootloader is provided for the board, reserve the BSL range instead

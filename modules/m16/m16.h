@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Header file for the M16 - an FPGA interface deploying 16 MIDI I/O.
  *

@@ -1,4 +1,3 @@
-// $Id: dpot.h $
 /*
  * Header file for DPOT API functions
  *

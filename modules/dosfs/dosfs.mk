@@ -1,4 +1,3 @@
-# $Id: dosfs.mk 202 2008-12-18 20:24:05Z tk $
 # defines additional rules for integrating DOSFS
 
 # enhance include path

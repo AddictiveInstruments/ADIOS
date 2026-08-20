@@ -1,4 +1,3 @@
-// $Id: glcd_font_meter_icons_v.c 43 2008-09-30 23:30:38Z tk $
 // converted with 'convpix_c.pl glcd_font_meter_icons_v.xpm -icons 28 -height 32'
 
 #include <mios32.h>

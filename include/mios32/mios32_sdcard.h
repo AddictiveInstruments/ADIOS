@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Header file for MMC/SD Card Driver
  *

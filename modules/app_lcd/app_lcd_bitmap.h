@@ -1,4 +1,3 @@
-// $Id$
 /*
  * A rectangle of pixels, as passed between an application and a display
  * driver.

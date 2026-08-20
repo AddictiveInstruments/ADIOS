@@ -1,4 +1,3 @@
-// $Id: file.h 2617 2018-12-20 00:02:42Z tk $
 /*
  * Header for file functions
  *

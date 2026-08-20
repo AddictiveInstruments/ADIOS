@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_SPI_MIDI
 //!
 //! SPI MIDI layer for MIOS32

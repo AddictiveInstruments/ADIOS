@@ -1,4 +1,3 @@
-# $Id: common.mk 2422 2016-11-02 21:44:39Z tk $
 #
 # following variables should be set before including this file:
 #   - PROCESSOR e.g.: STM32G070CB

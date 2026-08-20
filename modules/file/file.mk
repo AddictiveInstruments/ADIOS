@@ -1,4 +1,3 @@
-# $Id: file.mk 1261 2011-07-17 18:21:45Z tk $
 # defines additional rules for integrating the module
 
 # enhance include path

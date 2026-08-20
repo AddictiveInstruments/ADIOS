@@ -1,4 +1,3 @@
-// $Id: msd.h 1236 2011-07-04 21:28:25Z tk $
 /*
  * Header file for MSD Driver
  *

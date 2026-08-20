@@ -1,4 +1,3 @@
-# $Id: sequencer.mk 189 2008-12-16 23:53:15Z tk $
 # defines additional rules for integrating the sequencer modules
 
 # enhance include path

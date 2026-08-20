@@ -1,4 +1,3 @@
-# $Id: Makefile 1820 2013-09-01 15:44:33Z tk $
 
 ################################################################################
 # f4_dual_usb - EXAMPLE. A board with TWO USB sockets: the type-B receptacle is

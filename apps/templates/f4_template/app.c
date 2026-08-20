@@ -1,4 +1,3 @@
-// $Id: app.c 1920 2014-01-08 19:29:35Z tk $
 /*
  * MIOS32 Application Template
  *

@@ -1,4 +1,3 @@
-// $Id: seq_bpm.h 1421 2012-02-11 23:44:23Z tk $
 /*
  * Header file for BPM generator routines
  *

@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_I2C
 //!
 //! I2C driver for STM32G0xx - peripheral generation v2.

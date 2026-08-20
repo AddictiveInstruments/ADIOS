@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Header file for the I2C driver
  *

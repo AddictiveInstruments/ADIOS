@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_DAC
 //!
 //! DAC driver for MIOS32 - STM32G0xx

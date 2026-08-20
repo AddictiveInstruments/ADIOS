@@ -1,4 +1,3 @@
-// $Id: scale.h 1221 2011-06-15 17:47:17Z tk $
 /*
  * Header file for scale routines
  *

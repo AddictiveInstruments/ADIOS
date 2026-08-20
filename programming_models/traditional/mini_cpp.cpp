@@ -1,4 +1,3 @@
-// $Id: mini_cpp.cpp 847 2010-01-23 00:42:42Z tk $
 //////////////////////////////////////////////////////////////////////////////
 // Minimal Embedded C++ support, no exception handling, no RTTI
 // Date of the Last Update:  Jun 15, 2007

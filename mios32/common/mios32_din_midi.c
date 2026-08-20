@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_DIN_MIDI
 //!
 //! UART MIDI layer for MIOS32

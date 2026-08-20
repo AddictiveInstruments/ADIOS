@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_IRQ
 //!
 //! System Specific IRQ Enable/Disable routines

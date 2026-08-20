@@ -1,4 +1,3 @@
-# $Id: convpix_c.pl 43 2008-09-30 23:30:38Z tk $
 #!/usr/bin/perl -w
 #
 # convpix_c.pl by Thorsten Klose (initial version 8/95, C output version 9/2008)

@@ -1,4 +1,3 @@
-// $Id: glcd_font.h 1849 2013-11-09 23:02:03Z tk $
 /*
  * Header File for GLCD Fonts
  *

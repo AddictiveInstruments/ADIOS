@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Local MIOS32 configuration file - 5x6 ROM one-shot migration tool
  *

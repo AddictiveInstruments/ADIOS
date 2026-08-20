@@ -1,4 +1,3 @@
-# $Id: Makefile 1820 2013-09-01 15:44:33Z tk $
 
 ################################################################################
 # f4_template - STARTING POINT for an STM32F4 application. Copy this directory,

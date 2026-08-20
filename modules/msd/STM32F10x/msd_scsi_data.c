@@ -1,4 +1,3 @@
-// $Id: msd_scsi_data.c 1236 2011-07-04 21:28:25Z tk $
 /******************** (C) COPYRIGHT 2009 STMicroelectronics ********************
 * File Name          : scsi_data.c
 * Author             : MCD Application Team

@@ -1,4 +1,3 @@
-# $Id: mios32.mk 1921 2014-01-10 21:22:37Z tk $
 # defines additional rules for MIOS32
 
 # enhance include path

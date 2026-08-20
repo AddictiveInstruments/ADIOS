@@ -1,4 +1,3 @@
-// $Id: glcd_font_knob_icons.c 43 2008-09-30 23:30:38Z tk $
 // converted with 'convpix_c.pl glcd_font_knob_icons.xpm -icons 12 -height 24'
 
 #include <mios32.h>

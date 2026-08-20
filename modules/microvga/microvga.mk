@@ -1,4 +1,3 @@
-# $Id: sid.mk 838 2010-01-20 23:32:53Z tk $
 # defines additional rules for integrating the button/LED matrix
 
 # enhance include path

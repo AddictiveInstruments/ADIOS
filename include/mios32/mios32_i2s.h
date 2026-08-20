@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Header file for I2S functions
  *

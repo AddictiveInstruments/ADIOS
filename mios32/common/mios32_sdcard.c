@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_SDCARD
 //!
 //! The card is reached over an SPI port, named by MIOS32_SDCARD_SPI.

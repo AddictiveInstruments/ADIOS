@@ -1,4 +1,3 @@
-// $Id: msd.c 1799 2013-06-02 13:46:01Z tk $
 // Dummy
 
 #include <mios32.h>

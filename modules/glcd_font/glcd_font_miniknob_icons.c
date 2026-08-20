@@ -1,4 +1,3 @@
-// $Id: glcd_font_miniknob_icons.c 43 2008-09-30 23:30:38Z tk $
 // converted with 'convpix_c.pl glcd_font_miniknob_icons.xpm -icons 32 -height 16'
 
 #include <mios32.h>

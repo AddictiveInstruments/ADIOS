@@ -1,4 +1,3 @@
-# $Id: ws2812.mk 2223 2015-10-17 20:07:36Z tk $
 
 # enhance include path
 C_INCLUDE += -I $(MIOS32_PATH)/modules/ws2812

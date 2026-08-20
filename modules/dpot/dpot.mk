@@ -1,4 +1,3 @@
-# $Id: dpot.mk $
 
 # enhance include path
 C_INCLUDE += -I $(MIOS32_PATH)/modules/dpot

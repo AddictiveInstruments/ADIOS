@@ -1,4 +1,3 @@
-// $Id: $
 //! \defgroup APP_LCD
 //!
 //! Null display driver - satisfies the app_lcd contract without driving any

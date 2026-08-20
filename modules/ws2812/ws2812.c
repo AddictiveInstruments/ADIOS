@@ -1,4 +1,3 @@
-// $Id: ws2812.c 2555 2018-01-05 19:52:01Z tk $
 //! \defgroup WS2812
 //!
 //! WS2812 LED strip driver

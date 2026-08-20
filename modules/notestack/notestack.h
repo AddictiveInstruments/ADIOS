@@ -1,4 +1,3 @@
-// $Id: notestack.h 850 2010-01-24 22:31:41Z tk $
 /*
  * Header file for Notestack module
  *

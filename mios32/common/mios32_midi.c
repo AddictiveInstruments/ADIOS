@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_MIDI
 //!
 //! MIDI layer functions for MIOS32

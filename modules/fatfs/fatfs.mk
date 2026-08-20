@@ -1,4 +1,3 @@
-# $Id: fatfs.mk 954 2010-03-08 22:33:22Z tk $
 # defines additional rules for integrating FATFS
 
 # enhance include path

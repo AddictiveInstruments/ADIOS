@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_TIMESTAMP
 //!
 //! mS accurate Timestamp for MIOS32

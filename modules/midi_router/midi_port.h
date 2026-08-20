@@ -1,4 +1,3 @@
-// $Id: midi_port.h 2095 2014-11-30 18:26:36Z tk $
 /*
  * MIDI Port functions
  *

@@ -1,4 +1,3 @@
-# $Id: app_lcd.mk 1222 2011-06-23 21:12:04Z tk $
 # defines additional rules for application specific LCD driver
 
 # enhance include path

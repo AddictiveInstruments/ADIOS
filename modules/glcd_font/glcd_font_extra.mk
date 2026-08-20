@@ -1,4 +1,3 @@
-# $Id: glcd_font.mk 1849 2013-11-09 23:02:03Z tk $
 # defines the rule for creating the glcd_font_*.o objects,
 
 # enhance include path

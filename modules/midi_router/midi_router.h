@@ -1,4 +1,3 @@
-// $Id: midi_router.h 1584 2012-12-08 17:38:25Z tk $
 /*
  * Generic MIDI Router functions
  *

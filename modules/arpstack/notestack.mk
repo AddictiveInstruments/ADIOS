@@ -1,4 +1,3 @@
-# $Id: notestack.mk 683 2009-08-01 14:29:36Z tk $
 
 # enhance include path
 C_INCLUDE += -I $(MIOS32_PATH)/modules/notestack

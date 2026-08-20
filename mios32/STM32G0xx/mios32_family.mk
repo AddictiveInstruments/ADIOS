@@ -1,4 +1,3 @@
-# $Id: mios32_family.mk 2029 2014-08-09 20:13:05Z tk $
 # defines additional rules for MIOS32 family
 
 # select driver library

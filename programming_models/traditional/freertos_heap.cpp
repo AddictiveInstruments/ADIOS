@@ -1,4 +1,3 @@
-// $Id: freertos_heap.cpp 2480 2017-02-03 04:20:54Z Sauraen $
 //////////////////////////////////////////////////////////////////////////////
 // as proposed by http://www.state-machine.com/arm/AN_QP_and_ARM7_ARM9-GNU.pdf
 //

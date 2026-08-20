@@ -1,4 +1,3 @@
-# $Id$
 # defines additional rules for the M16 FPGA interface
 
 # enhance include path

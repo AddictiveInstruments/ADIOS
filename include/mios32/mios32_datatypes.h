@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Defines data types for 32bit processors
  * compatible with stm32f10x.h

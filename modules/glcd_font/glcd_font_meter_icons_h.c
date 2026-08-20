@@ -1,4 +1,3 @@
-// $Id: glcd_font_meter_icons_h.c 52 2008-10-03 23:14:12Z tk $
 // converted with 'convpix_c.pl glcd_font_meter_icons_h.xpm -icons 1 -height 8'
 // (28 icons, one icon per line)
 

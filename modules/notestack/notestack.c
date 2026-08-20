@@ -1,4 +1,3 @@
-// $Id: notestack.c 801 2009-12-31 03:10:21Z tk $
 //! \defgroup NOTESTACK
 //!
 //! Generic Notestack Module

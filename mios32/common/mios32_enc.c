@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_ENC
 //!
 //! Rotary Encoder functions for MIOS32

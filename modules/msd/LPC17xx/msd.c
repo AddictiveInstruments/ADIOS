@@ -1,4 +1,3 @@
-// $Id: msd.c 1236 2011-07-04 21:28:25Z tk $
 //!
 //! MSD Driver for MIOS32 running on a LPC17xx derivative
 //! Based on Code from Bertrik Sikken (bertrik@sikken.nl)

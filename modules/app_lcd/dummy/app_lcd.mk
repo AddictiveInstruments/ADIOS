@@ -1,4 +1,3 @@
-# $Id: $
 # defines additional rules for the null display driver
 
 # enhance include path

@@ -1,4 +1,3 @@
-// $Id: $
 //! \defgroup APP_LCD
 //!
 //! Null display driver - see app_lcd.h. Exactly the entry points MIOS32_LCD

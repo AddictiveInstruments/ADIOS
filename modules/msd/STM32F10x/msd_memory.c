@@ -1,4 +1,3 @@
-// $Id: msd_memory.c 1236 2011-07-04 21:28:25Z tk $
 //
 // USB Mass Storage Device Driver
 // Mainly based on STM32 example code and adapted to MIOS32.

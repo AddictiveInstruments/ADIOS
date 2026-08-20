@@ -1,4 +1,3 @@
-// $Id: sysex.h 78 2008-10-12 22:09:23Z tk $
 /*
  * BSL SysEx Header
  *

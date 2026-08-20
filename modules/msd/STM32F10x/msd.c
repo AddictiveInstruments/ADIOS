@@ -1,4 +1,3 @@
-// $Id: msd.c 1236 2011-07-04 21:28:25Z tk $
 //! \defgroup MSD
 //!
 //! USB Mass Storage Device Driver

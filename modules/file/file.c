@@ -1,4 +1,3 @@
-// $Id: file.c 2621 2018-12-20 15:53:13Z tk $
 //! \defgroup FILE
 //!
 //! File access layer for FatFS

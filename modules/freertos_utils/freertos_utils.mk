@@ -1,4 +1,3 @@
-# $Id: freertos_utils.mk 736 2009-10-06 18:09:13Z tk $
 
 # enhance include path
 C_INCLUDE += -I $(MIOS32_PATH)/modules/freertos_utils

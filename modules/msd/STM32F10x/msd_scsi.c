@@ -1,4 +1,3 @@
-// $Id: msd_scsi.c 1236 2011-07-04 21:28:25Z tk $
 /******************** (C) COPYRIGHT 2009 STMicroelectronics ********************
 * File Name          : usb_scsi.c
 * Author             : MCD Application Team

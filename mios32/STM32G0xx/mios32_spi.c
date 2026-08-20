@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_SPI
 //!
 //! Hardware Abstraction Layer for SPI ports of STM32G0xx

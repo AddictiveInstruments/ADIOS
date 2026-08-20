@@ -1,4 +1,3 @@
-# $Id: msd.mk 1799 2013-06-02 13:46:01Z tk $
 # defines additional rules for integrating the Mass Storage Device Driver
 
 

@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_SRIO
 //!
 //! SRIO Driver for MIOS32

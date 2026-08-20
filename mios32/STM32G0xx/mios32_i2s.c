@@ -1,4 +1,3 @@
-// $Id$
 //! \defgroup MIOS32_I2S
 //!
 //! I2S Functions

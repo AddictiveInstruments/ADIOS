@@ -1,4 +1,3 @@
-// $Id: dpot_mcp41xxx.c $
 /* ==========================================================================
  *
  *  Copyright (C) 2010 Jonathan Farmer (JRFarmer.com@gmail.com)

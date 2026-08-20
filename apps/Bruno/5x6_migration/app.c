@@ -1,4 +1,3 @@
-// $Id$
 /*
  * 5x6 ROM one-shot migration tool
  *

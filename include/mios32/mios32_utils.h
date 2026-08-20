@@ -1,4 +1,3 @@
-// $Id$
 /*
  * Header file for MIOS32_UTILS - delay, timers, stopwatch, sign-of-life.
  *

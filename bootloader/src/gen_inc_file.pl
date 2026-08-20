@@ -1,6 +1,5 @@
 #!/usr/bin/perl
 ##################################################################################################
-# $Id: gen_inc_file.pl 1191 2011-04-25 19:06:07Z tk $
 # This perl script generates an include file which contains the BSL code
 # Usage:   perl gen_inc_file.pl <bin-file> <inc-file> <array-name>
 # Example: perl gen_inc_file.pl project.bin mios32_bsl_test.inc mios32_bsl_test_image
@@ -43,7 +42,6 @@ close(IN);
 print "Writing out to '${inc_file}'\n";
 open(OUT, ">${inc_file}") || die "ERROR: cannot open '${inc_file}'!\n";
 
-printf OUT "// \$Id: \$\n";
 printf OUT "// generated with '$0 " . join(" ", @ARGV) . "'\n\n";
 printf OUT "${array_declaration} ${array_name}[${dump_size}] = {\n", $len;
 my $line = "";

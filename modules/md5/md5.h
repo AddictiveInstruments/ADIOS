@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, see <http://www.gnu.org/licenses/>.  */
 
-// $Id: md5.h 1584 2012-12-08 17:38:25Z tk $
 // modified by TK for MIOS32 integration
 // original source code can be found under http://ftp.gnu.org/gnu/coreutils/
 

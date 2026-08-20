@@ -1,4 +1,3 @@
-// $Id: msd.h 1888 2013-12-15 20:00:21Z tk $
 // Dummy
 
 #ifndef _MSD_H

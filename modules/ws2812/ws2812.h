@@ -1,4 +1,3 @@
-// $Id: ws2812.h 2223 2015-10-17 20:07:36Z tk $
 /*
  * Header file for WS2812 functions
  *

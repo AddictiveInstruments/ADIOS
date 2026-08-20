@@ -1,4 +1,3 @@
-// $Id: midio_sysex.c 1299 2011-08-17 22:31:32Z tk $
 /*
  * SysEx Parser for MIDIO128 V3
  *

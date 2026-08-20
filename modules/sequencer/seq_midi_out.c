@@ -1,4 +1,3 @@
-// $Id: seq_midi_out.c 2206 2015-09-22 11:56:51Z tk $
 //! \defgroup SEQ_MIDI_OUT
 //!
 //! Functions for schedules MIDI output

@@ -1,4 +1,4 @@
-/* $Id: STM32F103RB.ld 1599 2012-12-13 00:18:38Z tk $
+/*
 Linker script for STM32F103RE
 Based on scripts from Raisonance
 */
