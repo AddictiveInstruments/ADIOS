@@ -51,14 +51,6 @@
 
 // TEMPORARY diagnostics, read over SWD. Declared here rather than beside
 // their uses because the send path comes first in this file.
-u32 mios32_usb_dbg_rxpoll;   // PackageReceive called
-u32 mios32_usb_dbg_mounted;  // tud_midi_mounted() was true
-u32 mios32_usb_dbg_rxpkt;    // a device packet was actually returned
-u32 mios32_usb_dbg_txok;     // device packet written
-u32 mios32_usb_dbg_txfull;   // device write refused (buffer full)
-u32 mios32_usb_dbg_txna;   // send refused: cable not available
-u32 mios32_usb_dbg_txna_idx; // TEMPORARY: the index it was refused for
-u32 mios32_usb_dbg_rxhost;   // packet received from an attached device (host side)
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -193,16 +185,14 @@ s32 MIOS32_USB_MIDI_PackageSend_NonBlocking(u8 idx, mios32_midi_package_t packag
   u8 cable      = idx % CABLES_PER_CONTROLLER;
 
   if( !MIOS32_USB_MIDI_CheckAvailable(idx) ) {
-    ++mios32_usb_dbg_txna;
-    mios32_usb_dbg_txna_idx = idx;   // TEMPORARY: which port keeps being refused
     return -1;
   }
 
   if( controller == 0 ) {
 #if CFG_TUD_MIDI
     package.cable = cable;
-    if( tud_midi_packet_write(package.bytes) ) { ++mios32_usb_dbg_txok; return 0; }
-    ++mios32_usb_dbg_txfull;
+    if( tud_midi_packet_write(package.bytes) )
+      return 0;
     return -2;
 #else
     return -1;
@@ -273,16 +263,13 @@ static u8 package_is_padding(const mios32_midi_package_t *package)
 /////////////////////////////////////////////////////////////////////////////
 s32 MIOS32_USB_MIDI_PackageReceive(mios32_midi_package_t *package, u8 *idx)
 {
-  ++mios32_usb_dbg_rxpoll;
 
 #if CFG_TUD_MIDI
   if( tud_midi_mounted() ) {
-    ++mios32_usb_dbg_mounted;
     while( tud_midi_packet_read(package->bytes) ) {
       if( package_is_padding(package) )
         continue;
 
-      ++mios32_usb_dbg_rxpkt;
       *idx = package->cable; // controller 0, so the cable is the index
       return 0;
     }
@@ -302,7 +289,6 @@ s32 MIOS32_USB_MIDI_PackageReceive(mios32_midi_package_t *package, u8 *idx)
 
         // Local cable of the attached device -> OS cable, then into the
         // second controller's range.
-        ++mios32_usb_dbg_rxhost;
         u8 cable = host_itf[i].first_cable + package->cable;
         *idx = CABLES_PER_CONTROLLER + cable;
         return 0;

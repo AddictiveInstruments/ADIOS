@@ -20,13 +20,6 @@
 #include "app.h"
 u32 count = 0;
 
-// TEMPORARY diagnostic - the stage above it is mios32_usb_dbg_hid_reports.
-// Together they say whether a key that produces no note was never reported,
-// was reported but not decoded, or was decoded and then refused by the
-// transport.
-u32 app_dbg_keys;      // decoded key events that reached the application
-u32 app_dbg_send_fail; // sends the transport refused
-s32 app_dbg_last_err;  // and what it said the last time
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -253,7 +246,6 @@ void APP_ADC_NotifyChange(u32 port, u32 chn, u32 value)
 static void APP_HID_Keyboard(u8 keycode, u8 modifiers, u8 pressed)
 {
   mios32_midi_package_t p;
-  s32 status;
 
   (void)modifiers;
 
@@ -264,15 +256,10 @@ static void APP_HID_Keyboard(u8 keycode, u8 modifiers, u8 pressed)
   p.note  = (keycode + 56) & 0x7f;
   p.velocity = pressed ? 100 : 0;
 
-  ++app_dbg_keys;
 
   // DIN1 for the same reason as the MIDI mirror above: while this socket
   // hosts the keyboard, there is no device port to send anything to.
-  status = MIOS32_MIDI_SendPackage_NonBlocking(DIN1, p);
-  if( status < 0 ) {
-    ++app_dbg_send_fail;
-    app_dbg_last_err = status;
-  }
+  MIOS32_MIDI_SendPackage_NonBlocking(DIN1, p);
 }
 
 

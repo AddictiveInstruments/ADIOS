@@ -72,8 +72,6 @@ static struct {
 // the retry then placed it. Read over SWD - it is what distinguishes "the fix
 // works" from "the failure did not happen this time". Remove with the rest of
 // the bench scaffolding.
-u32 mios32_usb_dbg_hid_deferred;
-u32 mios32_usb_dbg_hid_recovered;
 
 // Arrivals and departures, held until the periodic call can report them.
 //
@@ -106,20 +104,14 @@ static void event_add(u8 connected, u8 dev, u8 itf, mios32_usb_hid_type_t type)
 
 static void request_report(u8 dev_addr, u8 idx)
 {
-  u8 was_pending;
 
   if( idx >= CFG_TUH_HID )
     return;
 
-  was_pending = arm[idx].pending;
 
   arm[idx].dev = dev_addr;
   arm[idx].pending = tuh_hid_receive_report(dev_addr, idx) ? 0 : 1;
 
-  if( arm[idx].pending )
-    ++mios32_usb_dbg_hid_deferred;
-  else if( was_pending )
-    ++mios32_usb_dbg_hid_recovered;
 }
 
 
@@ -385,14 +377,9 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t idx)
 }
 
 
-// TEMPORARY diagnostic: how many reports actually arrived. Compared against
-// the application's own count, it says whether a key that produces no note
-// was never reported, or was reported and lost further down.
-u32 mios32_usb_dbg_hid_reports;
 
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t idx, const uint8_t *report, uint16_t len)
 {
-  ++mios32_usb_dbg_hid_reports;
 
   if( report_callback != NULL )
     report_callback(dev_addr, idx, report, len);

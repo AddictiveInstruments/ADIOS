@@ -275,11 +275,6 @@ s32 MIOS32_USB_Init(u32 mode)
 /////////////////////////////////////////////////////////////////////////////
 // TEMPORARY diagnostic - tells whether this is reached at all, and how often.
 // Read over SWD; remove once the host/device interaction is understood.
-u32 mios32_usb_dbg_handler;
-u32 mios32_usb_dbg_tud;      // before tud_task()
-u32 mios32_usb_dbg_tud_post; // after
-u32 mios32_usb_dbg_tuh;      // before tuh_task()
-u32 mios32_usb_dbg_tuh_post; // after
 
 // TEMPORARY: RAM ring buffer for TinyUSB's own debug narration (CFG_TUSB_DEBUG,
 // see tusb_config.h). Read over SWD: the write head first, then the text - the
@@ -319,7 +314,6 @@ s32 MIOS32_USB_Handler(void)
   static u8 busy;
   u8 port;
 
-  ++mios32_usb_dbg_handler;
 
   if( !initialized )
     return -1;
@@ -370,7 +364,7 @@ s32 MIOS32_USB_Handler(void)
 #if CFG_TUD_ENABLED
   for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
     if( port_role[port] == MIOS32_USB_ROLE_DEVICE ) {
-      ++mios32_usb_dbg_tud; tud_task(); ++mios32_usb_dbg_tud_post;
+      tud_task();
       break;
     }
   }
@@ -379,7 +373,7 @@ s32 MIOS32_USB_Handler(void)
 #if CFG_TUH_ENABLED
   for(port=0; port<MIOS32_USB_NUM_PORTS; ++port) {
     if( port_role[port] == MIOS32_USB_ROLE_HOST ) {
-      ++mios32_usb_dbg_tuh; tuh_task(); ++mios32_usb_dbg_tuh_post;
+      tuh_task();
       break;
     }
   }

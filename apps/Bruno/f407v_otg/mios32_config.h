@@ -254,11 +254,6 @@
 #define MIOS32_USE_USB_HOST_HID
 #define MIOS32_USE_USB_HOST_MSC
 
-// BENCH INSTRUMENT, temporary: TinyUSB's own narration into the RAM ring
-// (mios32_usb_dbg_log, read over SWD). Level 2 = errors + enumeration
-// steps. Runs inside USB callbacks, so it costs cycles: remove the
-// moment the hub question is answered.
-#define CFG_TUSB_DEBUG             2
 
 /////////////////////////////////////////////////////////////////////////////
 // Debug output on the wire, because the socket is the thing under test

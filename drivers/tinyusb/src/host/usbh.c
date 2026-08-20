@@ -217,11 +217,6 @@ typedef struct {
 
 static uint8_t _usbh_controller_id = TUSB_INDEX_INVALID_8;
 
-// LOCAL PATCH (bench probe, not upstream) - who fabricates a FAILED that no
-// bus error produced: a device closed with a control transfer in flight, or a
-// setup the hcd refused to kick off.
-volatile uint32_t usbh_dbg_fail_on_close;
-volatile uint32_t usbh_dbg_fail_on_kickoff;
 static usbh_data_t _usbh_data;
 
 typedef struct {
@@ -406,7 +401,6 @@ TU_ATTR_ALWAYS_INLINE static inline void usbh_device_close(uint8_t rhport, uint8
   // If this device has in-flight control xfer, complete as FAILED
   usbh_ctrl_xfer_info_t* ctrl_info = &_usbh_data.ctrl_xfer_info;
   if (daddr == ctrl_info->daddr && ctrl_info->stage != CONTROL_STAGE_IDLE) {
-    ++usbh_dbg_fail_on_close; // LOCAL PATCH (bench probe)
     control_xfer_complete(daddr, XFER_RESULT_FAILED);
   }
 
@@ -1042,7 +1036,6 @@ static void control_xfer_dispatch_pending(void) {
     }
 
     // complete callback as FAILED and continue with next pending xfer
-    ++usbh_dbg_fail_on_kickoff; // LOCAL PATCH (bench probe)
     control_xfer_complete(xfer.daddr, XFER_RESULT_FAILED);
   }
 }
