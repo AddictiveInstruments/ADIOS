@@ -30,6 +30,10 @@
 #endif    
 //#define REDUCED_APP_LCD
 #define MIOS32_MIDI_DEFAULT_PORT UART0
+
+// The MIDI activity indicator on this machine's screen. Opt-in: without it
+// the engine carries no activity table and no marking at all.
+#define MIOS32_USE_MIDI_ACT
 #define MIOS32_MIDI_DEBUG_PORT UART0
 // disable code modules
 //#define MIOS32_DONT_USE_SYS

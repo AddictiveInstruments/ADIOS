@@ -54,6 +54,24 @@
 // default), overridden to "BSL" by the bootloader build and "UPDATER" by the
 // BSL-update tool (see bootloader/). MIOS Studio bases its upload-range
 // protection on this answer.
+// Line activity, for an indicator. OPT-IN: define MIOS32_USE_MIDI_ACT in a
+// project's mios32_config.h to compile it at all - without it there is no
+// storage, no marking and no accessor, which is how a bootloader carries none
+// of it.
+//
+// The marking happens inside the MIDI engine itself, so EVERY port reports:
+// USB, DIN and SPI alike, in both directions, and whether the traffic arrives
+// as packages or byte by byte.
+#ifndef MIOS32_MIDI_ACT_MS
+# define MIOS32_MIDI_ACT_MS 50
+#endif
+
+// Flags returned by MIOS32_MIDI_ActGet(), the same values for every port. RX
+// is bit 0 and TX bit 1 ON PURPOSE: that is also how the pair is stored, so
+// the accessor hands back the stored bits without translating anything.
+#define MIOS32_MIDI_ACT_RX 0x01
+#define MIOS32_MIDI_ACT_TX 0x02
+
 #ifndef MIOS32_MIDI_CORE_TYPE_STR
 #define MIOS32_MIDI_CORE_TYPE_STR "APP"
 #endif
@@ -337,6 +355,12 @@ extern s32 MIOS32_MIDI_ReceivePackage(mios32_midi_port_t port, mios32_midi_packa
 extern s32 MIOS32_MIDI_Receive_Handler(void *callback_event);
 
 extern s32 MIOS32_MIDI_Periodic_mS(void);
+
+// Line activity of ONE port, READ AND CLEAR. Flags also expire on their own
+// after MIOS32_MIDI_ACT_MS, so an indicator that stops being polled goes out
+// instead of staying lit for ever.
+//   if( MIOS32_MIDI_ActGet(DIN2) & MIOS32_MIDI_ACT_RX ) // something came in
+extern s32 MIOS32_MIDI_ActGet(mios32_midi_port_t port);
 
 extern s32 MIOS32_MIDI_DirectTxCallback_Init(s32 (*callback_tx)(mios32_midi_port_t port, mios32_midi_package_t package));
 extern s32 MIOS32_MIDI_DirectRxCallback_Init(s32 (*callback_rx)(mios32_midi_port_t port, u8 midi_byte));

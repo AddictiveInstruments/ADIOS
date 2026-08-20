@@ -584,21 +584,6 @@
 // Local variables
 /////////////////////////////////////////////////////////////////////////////
 
-// Line-activity flags for an optional indicator, two bits per port in port
-// order - see MIOS32_UART_ActGet(). u32, so all MIOS32_UART_MAX_PORTS slots
-// fit (16 ports would, should a family ever need them); the previous u8
-// covered only ports 0..3 and left the higher ones silently unreported.
-#define UART_ACT_RX(n)  (1UL << (2*(n)))
-#define UART_ACT_TX(n)  (1UL << (2*(n)+1))
-
-// Marking a byte as activity, from the RX/TX interrupts. MIDI clock (0xf8)
-// is deliberately excluded: a synced setup sends it 24 times per beat and
-// would hold the indicator permanently lit, showing nothing. The rule lives
-// here, once, rather than as an inline "if(b!=0xf8)" repeated at all 18
-// capture sites, where it read as an unexplained magic value.
-#define UART_ACT_MARK_RX(n, b)  { if( (b) != 0xf8 ) uart_midi_act |= UART_ACT_RX(n); }
-#define UART_ACT_MARK_TX(n, b)  { if( (b) != 0xf8 ) uart_midi_act |= UART_ACT_TX(n); }
-static u32 uart_midi_act=0;
 static u8  uart_assigned_to_midi;
 static u32 uart_baudrate[MIOS32_UART_MAX_PORTS];
 static mios32_pin_mode_t  uart_tx_pin_mode[MIOS32_UART_MAX_PORTS];
@@ -1670,7 +1655,6 @@ MIOS32_UART1_IRQHANDLER_FUNC
 {
   if( MIOS32_UART1->ISR & (1 << 5) ) { // check if RXNE flag is set
     u8 b = MIOS32_UART1->RDR;
-    UART_ACT_MARK_RX(1, b);
     s32 status = MIOS32_UART_IsAssignedToMIDI(1) ? MIOS32_MIDI_SendByteToRxCallback(DIN1, b) : 0;
 
     if( status == 0 && MIOS32_UART_RxBufferPut(1, b) < 0 ) {
@@ -1685,7 +1669,6 @@ MIOS32_UART1_IRQHANDLER_FUNC
 	MIOS32_UART1->TDR = 0xff;
       } else {
 	MIOS32_UART1->TDR = b;
-	UART_ACT_MARK_TX(1, b);
       }
     } else {
       MIOS32_UART1->CR1 &= ~(1 << 7); // disable TXE interrupt (TXEIE=0)
@@ -1710,7 +1693,6 @@ MIOS32_UART2_IRQHANDLER_FUNC
 #if defined(MIOS32_USE_UART2)
   if( MIOS32_UART2->ISR & (1 << 5) ) { // check if RXNE flag is set
     u8 b = MIOS32_UART2->RDR;
-    UART_ACT_MARK_RX(2, b);
     s32 status = MIOS32_UART_IsAssignedToMIDI(2) ? MIOS32_MIDI_SendByteToRxCallback(DIN2, b) : 0;
 
     if( status == 0 && MIOS32_UART_RxBufferPut(2, b) < 0 ) {
@@ -1725,7 +1707,6 @@ MIOS32_UART2_IRQHANDLER_FUNC
 	MIOS32_UART2->TDR = 0xff;
       } else {
 	MIOS32_UART2->TDR = b;
-	UART_ACT_MARK_TX(2, b);
       }
     } else {
       MIOS32_UART2->CR1 &= ~(1 << 7); // disable TXE interrupt (TXEIE=0)
@@ -1736,7 +1717,6 @@ MIOS32_UART2_IRQHANDLER_FUNC
 #if defined(MIOS32_USE_UART7)
   if( MIOS32_UART7->ISR & (1 << 5) ) { // check if RXNE flag is set
     u8 b = MIOS32_UART7->RDR;
-    UART_ACT_MARK_RX(7, b);
     s32 status = MIOS32_UART_IsAssignedToMIDI(7) ? MIOS32_MIDI_SendByteToRxCallback(DIN7, b) : 0;
 
     if( status == 0 && MIOS32_UART_RxBufferPut(7, b) < 0 ) {
@@ -1751,7 +1731,6 @@ MIOS32_UART2_IRQHANDLER_FUNC
 	MIOS32_UART7->TDR = 0xff;
       } else {
 	MIOS32_UART7->TDR = b;
-	UART_ACT_MARK_TX(7, b);
       }
     } else {
       MIOS32_UART7->CR1 &= ~(1 << 7); // disable TXE interrupt (TXEIE=0)
@@ -1774,17 +1753,12 @@ MIOS32_UART2_IRQHANDLER_FUNC
 // unconditionally here since the vector/handler name is shared regardless
 // of which subset is active (on the plain 4-USART tier, UART4/UART5 are
 // always force-undef'd, so those blocks simply never compile in there).
-// uart_midi_act (line-activity flags for an optional indicator) now covers
-// every port uniformly via UART_ACT_RX/TX(n) - it was a u8 with bits for
-// ports 0..3 only, which left the higher ports silently unreported.
-/////////////////////////////////////////////////////////////////////////////
 #if defined(MIOS32_USE_UART0) || defined(MIOS32_USE_UART3) || defined(MIOS32_USE_UART4) || defined(MIOS32_USE_UART5) || (defined(MIOS32_USE_UART6) && defined(MIOS32_G0_LPUART1_SHARED))
 MIOS32_UART0_IRQHANDLER_FUNC
 {
 #if defined(MIOS32_USE_UART0)
   if( MIOS32_UART0->ISR & (1 << 5) ) { // check if RXNE flag is set
     u8 b = MIOS32_UART0->RDR;
-    UART_ACT_MARK_RX(0, b);
     s32 status = MIOS32_UART_IsAssignedToMIDI(0) ? MIOS32_MIDI_SendByteToRxCallback(DIN0, b) : 0;
 
     if( status == 0 && MIOS32_UART_RxBufferPut(0, b) < 0 ) {
@@ -1799,7 +1773,6 @@ MIOS32_UART0_IRQHANDLER_FUNC
 	MIOS32_UART0->TDR = 0xff;
       } else {
 	MIOS32_UART0->TDR = b;
-	UART_ACT_MARK_TX(0, b);
       }
     } else {
       MIOS32_UART0->CR1 &= ~(1 << 7); // disable TXE interrupt (TXEIE=0)
@@ -1810,7 +1783,6 @@ MIOS32_UART0_IRQHANDLER_FUNC
 #if defined(MIOS32_USE_UART3)
   if( MIOS32_UART3->ISR & (1 << 5) ) { // check if RXNE flag is set
     u8 b = MIOS32_UART3->RDR;
-    UART_ACT_MARK_RX(3, b);
     s32 status = MIOS32_UART_IsAssignedToMIDI(3) ? MIOS32_MIDI_SendByteToRxCallback(DIN3, b) : 0;
 
     if( status == 0 && MIOS32_UART_RxBufferPut(3, b) < 0 ) {
@@ -1825,7 +1797,6 @@ MIOS32_UART0_IRQHANDLER_FUNC
 	MIOS32_UART3->TDR = 0xff;
       } else {
 	MIOS32_UART3->TDR = b;
-	UART_ACT_MARK_TX(3, b);
       }
     } else {
       MIOS32_UART3->CR1 &= ~(1 << 7); // disable TXE interrupt (TXEIE=0)
@@ -1836,7 +1807,6 @@ MIOS32_UART0_IRQHANDLER_FUNC
 #if defined(MIOS32_USE_UART4)
   if( MIOS32_UART4->ISR & (1 << 5) ) { // check if RXNE flag is set
     u8 b = MIOS32_UART4->RDR;
-    UART_ACT_MARK_RX(4, b);
     s32 status = MIOS32_UART_IsAssignedToMIDI(4) ? MIOS32_MIDI_SendByteToRxCallback(DIN4, b) : 0;
 
     if( status == 0 && MIOS32_UART_RxBufferPut(4, b) < 0 ) {
@@ -1851,7 +1821,6 @@ MIOS32_UART0_IRQHANDLER_FUNC
 	MIOS32_UART4->TDR = 0xff;
       } else {
 	MIOS32_UART4->TDR = b;
-	UART_ACT_MARK_TX(4, b);
       }
     } else {
       MIOS32_UART4->CR1 &= ~(1 << 7); // disable TXE interrupt (TXEIE=0)
@@ -1862,7 +1831,6 @@ MIOS32_UART0_IRQHANDLER_FUNC
 #if defined(MIOS32_USE_UART5)
   if( MIOS32_UART5->ISR & (1 << 5) ) { // check if RXNE flag is set
     u8 b = MIOS32_UART5->RDR;
-    UART_ACT_MARK_RX(5, b);
     s32 status = MIOS32_UART_IsAssignedToMIDI(5) ? MIOS32_MIDI_SendByteToRxCallback(DIN5, b) : 0;
 
     if( status == 0 && MIOS32_UART_RxBufferPut(5, b) < 0 ) {
@@ -1877,7 +1845,6 @@ MIOS32_UART0_IRQHANDLER_FUNC
 	MIOS32_UART5->TDR = 0xff;
       } else {
 	MIOS32_UART5->TDR = b;
-	UART_ACT_MARK_TX(5, b);
       }
     } else {
       MIOS32_UART5->CR1 &= ~(1 << 7); // disable TXE interrupt (TXEIE=0)
@@ -1888,7 +1855,6 @@ MIOS32_UART0_IRQHANDLER_FUNC
 #if defined(MIOS32_USE_UART6) && defined(MIOS32_G0_LPUART1_SHARED)
   if( MIOS32_UART6->ISR & (1 << 5) ) { // check if RXNE flag is set
     u8 b = MIOS32_UART6->RDR;
-    UART_ACT_MARK_RX(6, b);
     s32 status = MIOS32_UART_IsAssignedToMIDI(6) ? MIOS32_MIDI_SendByteToRxCallback(DIN6, b) : 0;
 
     if( status == 0 && MIOS32_UART_RxBufferPut(6, b) < 0 ) {
@@ -1903,7 +1869,6 @@ MIOS32_UART0_IRQHANDLER_FUNC
 	MIOS32_UART6->TDR = 0xff;
       } else {
 	MIOS32_UART6->TDR = b;
-	UART_ACT_MARK_TX(6, b);
       }
     } else {
       MIOS32_UART6->CR1 &= ~(1 << 7); // disable TXE interrupt (TXEIE=0)
@@ -1924,7 +1889,6 @@ MIOS32_UART6_IRQHANDLER_FUNC
 {
   if( MIOS32_UART6->ISR & (1 << 5) ) { // check if RXNE flag is set
     u8 b = MIOS32_UART6->RDR;
-    UART_ACT_MARK_RX(6, b);
     s32 status = MIOS32_UART_IsAssignedToMIDI(6) ? MIOS32_MIDI_SendByteToRxCallback(DIN6, b) : 0;
 
     if( status == 0 && MIOS32_UART_RxBufferPut(6, b) < 0 ) {
@@ -1939,7 +1903,6 @@ MIOS32_UART6_IRQHANDLER_FUNC
 	MIOS32_UART6->TDR = 0xff;
       } else {
 	MIOS32_UART6->TDR = b;
-	UART_ACT_MARK_TX(6, b);
       }
     } else {
       MIOS32_UART6->CR1 &= ~(1 << 7); // disable TXE interrupt (TXEIE=0)
@@ -1947,59 +1910,6 @@ MIOS32_UART6_IRQHANDLER_FUNC
   }
 }
 #endif
-
-
-/////////////////////////////////////////////////////////////////////////////
-//! Returns and clears the line-activity flags of every port (used to drive an
-//! activity indicator): two bits per port, in port order - UARTn RX =
-//! 1<<(2*n), TX = 1<<(2*n+1). So UART0 RX=0x01 TX=0x02, UART1 RX=0x04
-//! TX=0x08, UART2 RX=0x10 TX=0x20, UART3 RX=0x40 TX=0x80, and so on up to
-//! UART7 (0x4000/0x8000).
-//! Flags are set on the raw byte as it crosses the wire, inside the RX/TX
-//! interrupt - so they also catch traffic that never reaches the MIDI layer,
-//! such as bytes pushed straight into a TX buffer by an application merging
-//! one port onto another. MIDI clock (0xf8) is excluded, otherwise a synced
-//! setup would light the indicator permanently.
-//! \note Applications shouldn't call this function directly, instead please use \ref MIOS32_MIDI layer functions
-/////////////////////////////////////////////////////////////////////////////
-u32 MIOS32_UART_RXTX_Act(void){
-	MIOS32_IRQ_Disable(); // an RX/TX interrupt may set a bit mid-update
-	u32 status = uart_midi_act;
-	uart_midi_act = 0;
-	MIOS32_IRQ_Enable();
-
-	return status; // no error
-}
-
-
-/////////////////////////////////////////////////////////////////////////////
-//! Returns and clears the line-activity flags of ONE port, normalised to
-//! MIOS32_UART_ACT_RX / MIOS32_UART_ACT_TX whatever the port number - so an
-//! application asks about the port it means and never has to know where that
-//! port's bits sit in the packed word:
-//! \code
-//!   if( MIOS32_UART_ActGet(2) & MIOS32_UART_ACT_RX ) // something came in on UART2
-//! \endcode
-//! Preferred over MIOS32_UART_RXTX_Act(): hardcoded masks over the packed
-//! word silently pointed at the wrong ports the day UART numbering was
-//! realigned, which is exactly the kind of breakage this accessor prevents.
-//! \param[in] uart UART number (0..MIOS32_UART_MAX_PORTS-1)
-//! \return activity flags for that port, 0 if none (or if uart is invalid)
-/////////////////////////////////////////////////////////////////////////////
-u32 MIOS32_UART_ActGet(u8 uart){
-	if( uart >= MIOS32_UART_MAX_PORTS )
-		return 0;
-
-	u32 mask = UART_ACT_RX(uart) | UART_ACT_TX(uart);
-
-	MIOS32_IRQ_Disable(); // read-modify-write against the RX/TX interrupts
-	u32 act = uart_midi_act & mask;
-	uart_midi_act &= ~mask;
-	MIOS32_IRQ_Enable();
-
-	return ((act & UART_ACT_RX(uart)) ? MIOS32_UART_ACT_RX : 0) |
-	       ((act & UART_ACT_TX(uart)) ? MIOS32_UART_ACT_TX : 0);
-}
 
 
 //! \}

@@ -167,6 +167,50 @@ static mios32_midi_port_t last_sysex_port = DEFAULT;
 //
 // If a stronger protection is desired (SysEx parser handles streams of multiple interfaces),
 // it's recommented to implement a separate timeout mechanism at application side.
+#if defined(MIOS32_USE_MIDI_ACT)
+// Two bits per port over the whole port space, which runs contiguously from
+// USB0 up to the last SPIM - so the index is simply "port - USB0", with no
+// lookup table: the port numbering was laid out this way on purpose.
+#define MIDI_ACT_PORTS  (SPIM7 - USB0 + 1)
+#define MIDI_ACT_WORDS  (((2*MIDI_ACT_PORTS) + 31) / 32)
+
+// TWO sets, and that is the whole mechanism. Marks always land in the current
+// set; every MIOS32_MIDI_ACT_MS the current set becomes the previous one and
+// the current is emptied. A read looks at BOTH. So a flag raised an instant
+// before a rotation still survives a full period instead of being wiped a
+// millisecond later: its lifetime is between one and two periods, never less,
+// and it disappears on its own if nobody ever reads it.
+//
+// The alternative - a countdown per port - would cost 112 bytes and a
+// 112-step loop every millisecond, against 32 bytes and two assignments per
+// period here. The second set IS the counter, shared by all ports at once.
+static u32 midi_act[2][MIDI_ACT_WORDS];
+static u16 midi_act_ctr;
+
+static void MIDI_ActMark(mios32_midi_port_t port, u8 tx, u8 evnt0)
+{
+	u16 idx, bit;
+
+	// MIDI clock is excluded: a synced setup sends it 24 times per beat and
+	// would hold the indicator permanently lit, showing nothing.
+	if( evnt0 == 0xf8 )
+		return;
+
+	idx = (u16)port - USB0;
+	if( idx >= MIDI_ACT_PORTS )
+		return; // DEFAULT/MIDI_DEBUG are resolved to a real port before this
+
+	bit = 2*idx + (tx ? 1 : 0);
+
+	MIOS32_IRQ_Disable(); // marks arrive from a task AND from the RX interrupt
+	midi_act[0][bit / 32] |= 1UL << (bit % 32);
+	MIOS32_IRQ_Enable();
+}
+#else
+# define MIDI_ActMark(port, tx, evnt0)  // compiles to nothing at all
+#endif
+
+
 static u16 sysex_timeout_ctr;
 static sysex_timeout_ctr_flags_t sysex_timeout_ctr_flags;
 
@@ -463,6 +507,9 @@ s32 MIOS32_MIDI_SendPackage_NonBlocking(mios32_midi_port_t port, mios32_midi_pac
 		if( (status=direct_tx_callback_func(port, package)) )
 			return status;
 	}
+
+	// every transport goes through this switch, so one mark covers them all
+	MIDI_ActMark(port, 1, package.evnt0);
 
 	// branch depending on selected port
 	switch( port & 0xf0 ) {
@@ -1056,6 +1103,8 @@ s32 MIOS32_MIDI_SendDebugHexDump(const u8 *src, u32 len)
 /////////////////////////////////////////////////////////////////////////////
 s32 MIOS32_MIDI_ReceivePackage(mios32_midi_port_t port, mios32_midi_package_t package, void *_callback_package)
 {
+	MIDI_ActMark(port, 0, package.evnt0);
+
 	void (*callback_package)(mios32_midi_port_t port, mios32_midi_package_t midi_package) = _callback_package;
 
 	// remove cable number from package (MIOS32_MIDI passes it's own port number)
@@ -1353,6 +1402,52 @@ s32 MIOS32_MIDI_Receive_Handler(void *_callback_package)
 
 	return 0;
 }
+/////////////////////////////////////////////////////////////////////////////
+//! Returns the line activity of ONE port and CLEARS it, so each burst is
+//! reported once. Flags also expire on their own after MIOS32_MIDI_ACT_MS, so
+//! an indicator whose reader stops polling goes out instead of staying lit.
+//! \param[in] port a MIDI port; DEFAULT and MIDI_DEBUG resolve like they do
+//!            everywhere else
+//! \return MIOS32_MIDI_ACT_RX and/or MIOS32_MIDI_ACT_TX, 0 if quiet - and 0
+//!         always when MIOS32_USE_MIDI_ACT was not declared
+/////////////////////////////////////////////////////////////////////////////
+s32 MIOS32_MIDI_ActGet(mios32_midi_port_t port)
+{
+#if defined(MIOS32_USE_MIDI_ACT)
+	u16 idx, bit;
+	u8  w;
+	u32 mask, both;
+
+	if( !(port & 0xf0) ) // same resolution as the send path
+		port = (port == MIDI_DEBUG) ? debug_port : default_port;
+
+	idx = (u16)port - USB0;
+	if( idx >= MIDI_ACT_PORTS )
+		return 0;
+
+	// A port's two bits are adjacent and start on an EVEN bit, so the pair can
+	// never straddle two words: one mask, one word, one read.
+	bit  = 2*idx;
+	w    = bit / 32;
+	mask = 3UL << (bit % 32);
+
+	MIOS32_IRQ_Disable();
+	both = (midi_act[0][w] | midi_act[1][w]) & mask;
+	midi_act[0][w] &= ~mask; // read AND clear, both sets
+	midi_act[1][w] &= ~mask;
+	MIOS32_IRQ_Enable();
+
+	// RX is the low bit of the pair and TX the high one - the same order as
+	// MIOS32_MIDI_ACT_RX/_TX, so the stored value IS the returned value.
+	return (both >> (bit % 32)) & (MIOS32_MIDI_ACT_RX | MIOS32_MIDI_ACT_TX);
+#else
+	(void)port;
+	return 0;
+#endif
+}
+
+
+
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1379,6 +1474,21 @@ s32 MIOS32_MIDI_Periodic_mS(void)
 #if defined(MIOS32_USE_SPI_MIDI)
 	status |= MIOS32_SPI_MIDI_Periodic_mS();
 #endif
+
+#if defined(MIOS32_USE_MIDI_ACT)
+	// rotate the activity sets - see MIDI_ActMark() above for why there are two
+	if( ++midi_act_ctr >= MIOS32_MIDI_ACT_MS ) {
+		u8 i;
+		midi_act_ctr = 0;
+		MIOS32_IRQ_Disable();
+		for(i=0; i<MIDI_ACT_WORDS; ++i) {
+			midi_act[1][i] = midi_act[0][i];
+			midi_act[0][i] = 0;
+		}
+		MIOS32_IRQ_Enable();
+	}
+#endif
+
 
 	// increment timeout counter for incoming packages
 	// an incomplete event will be timed out after 1000 ticks (1 second)
@@ -1472,6 +1582,10 @@ s32 MIOS32_MIDI_DirectRxCallback_Init(s32 (*callback_rx)(mios32_midi_port_t port
 /////////////////////////////////////////////////////////////////////////////
 s32 MIOS32_MIDI_SendByteToRxCallback(mios32_midi_port_t port, u8 midi_byte)
 {
+	// byte level too, so SysEx counts as activity even when it never
+	// reaches the package stage
+	MIDI_ActMark(port, 0, midi_byte);
+
 	// note: here we could filter the user hook execution on special situations
 	if( direct_rx_callback_func != NULL )
 		return direct_rx_callback_func(port, midi_byte);

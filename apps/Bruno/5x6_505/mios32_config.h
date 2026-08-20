@@ -146,6 +146,11 @@
 #define MIOS32_UART2_TX_OD 0
 // BSL_RELAY_END
 
+// The MIDI activity indicator on this machine's screen. OUTSIDE the relay
+// block on purpose: the bootloader has no screen and no use for it, and
+// anything inside that block is copied verbatim into its build.
+#define MIOS32_USE_MIDI_ACT
+
 #endif
 
 #define MIOS32_TASK_HOOKS_STACK_SIZE	1000

@@ -277,13 +277,15 @@
 // enable line above. Nothing is wired to PD6; it is pulled up, so it rests at
 // the idle level and stays silent. DIN0 rather than "UART0": the port enum
 // names physical MIDI ports after the connector they classically wear.
+// DIN1 rather than DIN0 since the numbering was aligned on ST's: USART2
+// is the SECOND peripheral, so it is UART1 and its MIDI port is DIN1.
 /////////////////////////////////////////////////////////////////////////////
-#define MIOS32_MIDI_DEBUG_PORT     DIN0
+#define MIOS32_MIDI_DEBUG_PORT     DIN1
 #define MIOS32_USE_DIN_MIDI
-#define MIOS32_USE_UART0
-#define MIOS32_UART0_RX_PORT       GPIOD
-#define MIOS32_UART0_RX_PIN        LL_GPIO_PIN_6
-#define MIOS32_UART0_CLOCK_FUNC    { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOD); }
+#define MIOS32_USE_UART1
+#define MIOS32_UART1_RX_PORT       GPIOD
+#define MIOS32_UART1_RX_PIN        LL_GPIO_PIN_6
+#define MIOS32_UART1_CLOCK_FUNC    { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOD); }
 
 
 // =============================================================================
@@ -376,7 +378,8 @@
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 
-#define MIOS32_USE_UART0
+// Only UART1 here (USART2, PA2 out). UART0 exists and is free - USART1 on
+// PB6/PB7 - but nothing on this board is wired to it.
 #define MIOS32_USE_UART1
 #define MIOS32_USE_DIN_MIDI
 #elif defined(MIOS32_FAMILY_STM32G0xx)

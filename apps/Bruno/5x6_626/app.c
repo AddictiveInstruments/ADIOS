@@ -1081,7 +1081,11 @@ static void TASK_TFT_Periodic(void *pvParameters)
 #endif
 
 			// MIDI activity
-			u8 act=(MIOS32_UART_RXTX_Act() & 0x5) | (MIDIO_SYSEX_Act() & 0x2);
+			// bits 0x01 and 0x04 were UART0-RX and UART1-RX in the packed word;
+			// asked for by name now, so a renumbering cannot move them
+			u8 act=((MIOS32_MIDI_ActGet(DIN0) & MIOS32_MIDI_ACT_RX) ? 0x01 : 0)
+			      |((MIOS32_MIDI_ActGet(DIN1) & MIOS32_MIDI_ACT_RX) ? 0x04 : 0)
+			      |(MIDIO_SYSEX_Act() & 0x2);
 			if(act&0x01)APP_LCD_Rectangle(x_offset+350, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 			else APP_LCD_Rectangle(x_offset+350, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
 			if(act&0x04)APP_LCD_Rectangle(x_offset+446, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);

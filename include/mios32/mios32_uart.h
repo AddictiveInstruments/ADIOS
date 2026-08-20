@@ -45,7 +45,7 @@
 
 // should UART1 Tx pin configured for open drain (default) or push-pull mode?
 #ifndef MIOS32_UART1_TX_OD
-#define MIOS32_UART1_TX_OD 1
+#define MIOS32_UART1_TX_OD 0
 #endif
 
 // Baudrate of UART third interface
@@ -55,7 +55,7 @@
 
 // should UART1 Tx pin configured for open drain (default) or push-pull mode?
 #ifndef MIOS32_UART2_TX_OD
-#define MIOS32_UART2_TX_OD 1
+#define MIOS32_UART2_TX_OD 0
 #endif
 
 // Baudrate of UART fourth interface
@@ -65,7 +65,7 @@
 
 // should UART3 Tx pin configured for open drain (default) or push-pull mode?
 #ifndef MIOS32_UART3_TX_OD
-#define MIOS32_UART3_TX_OD 1
+#define MIOS32_UART3_TX_OD 0
 #endif
 
 // Baudrate/TX_OD for UART4..UART9 - only meaningful on STM32F4xx chips with
@@ -75,37 +75,37 @@
 #define MIOS32_UART4_BAUDRATE 31250
 #endif
 #ifndef MIOS32_UART4_TX_OD
-#define MIOS32_UART4_TX_OD 1
+#define MIOS32_UART4_TX_OD 0
 #endif
 #ifndef MIOS32_UART5_BAUDRATE
 #define MIOS32_UART5_BAUDRATE 31250
 #endif
 #ifndef MIOS32_UART5_TX_OD
-#define MIOS32_UART5_TX_OD 1
+#define MIOS32_UART5_TX_OD 0
 #endif
 #ifndef MIOS32_UART6_BAUDRATE
 #define MIOS32_UART6_BAUDRATE 31250
 #endif
 #ifndef MIOS32_UART6_TX_OD
-#define MIOS32_UART6_TX_OD 1
+#define MIOS32_UART6_TX_OD 0
 #endif
 #ifndef MIOS32_UART7_BAUDRATE
 #define MIOS32_UART7_BAUDRATE 31250
 #endif
 #ifndef MIOS32_UART7_TX_OD
-#define MIOS32_UART7_TX_OD 1
+#define MIOS32_UART7_TX_OD 0
 #endif
 #ifndef MIOS32_UART8_BAUDRATE
 #define MIOS32_UART8_BAUDRATE 31250
 #endif
 #ifndef MIOS32_UART8_TX_OD
-#define MIOS32_UART8_TX_OD 1
+#define MIOS32_UART8_TX_OD 0
 #endif
 #ifndef MIOS32_UART9_BAUDRATE
 #define MIOS32_UART9_BAUDRATE 31250
 #endif
 #ifndef MIOS32_UART9_TX_OD
-#define MIOS32_UART9_TX_OD 1
+#define MIOS32_UART9_TX_OD 0
 #endif
 
 // Interface assignment: 0 = disabled, 1 = MIDI, 2 = COM
@@ -182,23 +182,10 @@ extern s32 MIOS32_UART_TxBufferPut(u8 uart, u8 b);
 extern s32 MIOS32_UART_TxBufferPutMore_NonBlocking(u8 uart, u8 *buffer, u16 len);
 extern s32 MIOS32_UART_TxBufferPutMore(u8 uart, u8 *buffer, u16 len);
 
-// Flags returned by MIOS32_UART_ActGet(), same values whatever the port
-#define MIOS32_UART_ACT_RX 0x01
-#define MIOS32_UART_ACT_TX 0x02
-
-// Line activity of ONE port, read-and-clear, normalised to the two flags
-// above - the accessor to use: it can't drift when ports are renumbered.
-extern u32 MIOS32_UART_ActGet(u8 uart);
-
-// Line activity of EVERY port at once, read-and-clear: two bits per port in
-// port order, RX = 1<<(2*n), TX = 1<<(2*n+1). u32 so the widest family fits
-// (F4xx goes up to UART9, needing 20 bits on its own). Prefer ActGet above
-// unless you really want the whole word - masking this one by hand means
-// hardcoding port positions, which silently broke on the G0 renumbering.
-extern u32 MIOS32_UART_RXTX_Act(void);
-
-// NOTE: both are implemented by STM32G0xx only today; an F4xx project
-// calling either will fail to link - see the F4xx driver.
+// Line activity moved to the MIDI layer: MIOS32_MIDI_ActGet(port), declared
+// in mios32_midi.h. It reports EVERY port - USB, DIN and SPI alike -
+// because the marking now happens inside the MIDI engine, which all of
+// them pass through, instead of in this driver, which only ever saw wires.
 
 /////////////////////////////////////////////////////////////////////////////
 // Export global variables

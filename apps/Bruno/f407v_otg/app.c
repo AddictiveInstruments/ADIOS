@@ -170,11 +170,11 @@ void APP_MIDI_NotifyPackage(mios32_midi_port_t port, mios32_midi_package_t midi_
   // written whole, and a note lands BETWEEN two SysEx messages, never inside
   // one. Notes and a firmware upload do not even share a direction.
   if( port >= USB16 && port <= USB31 ) {
-    // DIN0, not USB0. On a board with ONE socket there is no device port
+    // DIN1, not USB0. On a board with ONE socket there is no device port
     // while that socket is hosting - the mirror had nowhere to land, and
     // said nothing about it. The wire is the output that exists in both
     // roles, which is why the debug port was put there in the first place.
-    MIOS32_MIDI_SendPackage_NonBlocking(DIN0, midi_package);
+    MIOS32_MIDI_SendPackage_NonBlocking(DIN1, midi_package);
     MIOS32_MIDI_SendDebugMessage("host MIDI: port %d  %02x %02x %02x\n",
                                  port, midi_package.evnt0,
                                  midi_package.evnt1, midi_package.evnt2);
@@ -266,9 +266,9 @@ static void APP_HID_Keyboard(u8 keycode, u8 modifiers, u8 pressed)
 
   ++app_dbg_keys;
 
-  // DIN0 for the same reason as the MIDI mirror above: while this socket
+  // DIN1 for the same reason as the MIDI mirror above: while this socket
   // hosts the keyboard, there is no device port to send anything to.
-  status = MIOS32_MIDI_SendPackage_NonBlocking(DIN0, p);
+  status = MIOS32_MIDI_SendPackage_NonBlocking(DIN1, p);
   if( status < 0 ) {
     ++app_dbg_send_fail;
     app_dbg_last_err = status;

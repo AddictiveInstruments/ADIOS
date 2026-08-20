@@ -21,17 +21,17 @@
 //! Default pin/peripheral assignment - override individually
 //! in a local mios32_config.h if your board uses different pins:
 //! \code
-//!   #define MIOS32_UART0_TX_PORT     GPIOA
-//!   #define MIOS32_UART0_TX_PIN      LL_GPIO_PIN_2
+//!   #define MIOS32_UART0_TX_PORT     GPIOB
+//!   #define MIOS32_UART0_TX_PIN      LL_GPIO_PIN_6
 //!   #define MIOS32_UART0_TX_AF       LL_GPIO_AF_7
-//!   #define MIOS32_UART0_RX_PORT     GPIOA
-//!   #define MIOS32_UART0_RX_PIN      LL_GPIO_PIN_3
+//!   #define MIOS32_UART0_RX_PORT     GPIOB
+//!   #define MIOS32_UART0_RX_PIN      LL_GPIO_PIN_7
 //!   #define MIOS32_UART0_RX_AF       LL_GPIO_AF_7
-//!   #define MIOS32_UART0             USART2
-//!   #define MIOS32_UART0_IRQ_CHANNEL USART2_IRQn
-//!   #define MIOS32_UART0_IRQHANDLER_FUNC void USART2_IRQHandler(void)
+//!   #define MIOS32_UART0             USART1
+//!   #define MIOS32_UART0_IRQ_CHANNEL USART1_IRQn
+//!   #define MIOS32_UART0_IRQHANDLER_FUNC void USART1_IRQHandler(void)
 //!   #define MIOS32_UART0_CLOCK_FUNC  { ... }
-//!   #define MIOS32_UART0_APB_FREQ    42000000
+//!   #define MIOS32_UART0_APB_FREQ    84000000
 //! \endcode
 //! (same set of defines exists for MIOS32_UART1..MIOS32_UART9)
 //!
@@ -107,219 +107,225 @@
 // are actually enabled via MIOS32_USE_UARTx, same pattern as mios32_spi.c
 #define MIOS32_UART_MAX_PORTS 10
 
+// UART0 (USART1 peripheral) - APB2 (84 MHz). PB6/PB7, and deliberately NOT
+// the PA9/PA10 this peripheral also offers: on this family those two pins
+// are OTG_FS_VBUS and OTG_FS_ID, so a default sitting there would fight the
+// USB connector on every board that has one. PB6/PB7 is also what the
+// STM32G0xx driver uses for USART1, so the first MIDI port lands on the
+// same pins whichever family a design is built on.
 #ifndef MIOS32_UART0_TX_PORT
-#define MIOS32_UART0_TX_PORT     GPIOA
+#define MIOS32_UART0_TX_PORT     GPIOB
 #endif
 #ifndef MIOS32_UART0_TX_PIN
-#define MIOS32_UART0_TX_PIN      LL_GPIO_PIN_2
+#define MIOS32_UART0_TX_PIN      LL_GPIO_PIN_6
 #endif
 #ifndef MIOS32_UART0_TX_AF
 #define MIOS32_UART0_TX_AF       LL_GPIO_AF_7
 #endif
 #ifndef MIOS32_UART0_RX_PORT
-#define MIOS32_UART0_RX_PORT     GPIOA
+#define MIOS32_UART0_RX_PORT     GPIOB
 #endif
 #ifndef MIOS32_UART0_RX_PIN
-#define MIOS32_UART0_RX_PIN      LL_GPIO_PIN_3
+#define MIOS32_UART0_RX_PIN      LL_GPIO_PIN_7
 #endif
 #ifndef MIOS32_UART0_RX_AF
 #define MIOS32_UART0_RX_AF       LL_GPIO_AF_7
 #endif
 #ifndef MIOS32_UART0
-#define MIOS32_UART0             USART2
+#define MIOS32_UART0             USART1
 #endif
 #ifndef MIOS32_UART0_IRQ_CHANNEL
-#define MIOS32_UART0_IRQ_CHANNEL USART2_IRQn
+#define MIOS32_UART0_IRQ_CHANNEL USART1_IRQn
 #endif
 #ifndef MIOS32_UART0_IRQHANDLER_FUNC
-#define MIOS32_UART0_IRQHANDLER_FUNC void USART2_IRQHandler(void)
+#define MIOS32_UART0_IRQHANDLER_FUNC void USART1_IRQHandler(void)
 #endif
 #ifndef MIOS32_UART0_CLOCK_FUNC
-#define MIOS32_UART0_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA); }
+#define MIOS32_UART0_CLOCK_FUNC  { LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOB); }
 #endif
 #ifndef MIOS32_UART0_APB_FREQ
-#define MIOS32_UART0_APB_FREQ    42000000 // APB1
+#define MIOS32_UART0_APB_FREQ    84000000 // APB2
 #endif
 
 #ifndef MIOS32_UART1_TX_PORT
-#define MIOS32_UART1_TX_PORT     GPIOC
+#define MIOS32_UART1_TX_PORT     GPIOA
 #endif
 #ifndef MIOS32_UART1_TX_PIN
-#define MIOS32_UART1_TX_PIN      LL_GPIO_PIN_10
+#define MIOS32_UART1_TX_PIN      LL_GPIO_PIN_2
 #endif
 #ifndef MIOS32_UART1_TX_AF
-#define MIOS32_UART1_TX_AF       LL_GPIO_AF_8
+#define MIOS32_UART1_TX_AF       LL_GPIO_AF_7
 #endif
 #ifndef MIOS32_UART1_RX_PORT
-#define MIOS32_UART1_RX_PORT     GPIOC
+#define MIOS32_UART1_RX_PORT     GPIOA
 #endif
 #ifndef MIOS32_UART1_RX_PIN
-#define MIOS32_UART1_RX_PIN      LL_GPIO_PIN_11
+#define MIOS32_UART1_RX_PIN      LL_GPIO_PIN_3
 #endif
 #ifndef MIOS32_UART1_RX_AF
-#define MIOS32_UART1_RX_AF       LL_GPIO_AF_8
+#define MIOS32_UART1_RX_AF       LL_GPIO_AF_7
 #endif
 #ifndef MIOS32_UART1
-#define MIOS32_UART1             UART4
+#define MIOS32_UART1             USART2
 #endif
 #ifndef MIOS32_UART1_IRQ_CHANNEL
-#define MIOS32_UART1_IRQ_CHANNEL UART4_IRQn
+#define MIOS32_UART1_IRQ_CHANNEL USART2_IRQn
 #endif
 #ifndef MIOS32_UART1_IRQHANDLER_FUNC
-#define MIOS32_UART1_IRQHANDLER_FUNC void UART4_IRQHandler(void)
+#define MIOS32_UART1_IRQHANDLER_FUNC void USART2_IRQHandler(void)
 #endif
 #ifndef MIOS32_UART1_CLOCK_FUNC
-#define MIOS32_UART1_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART4); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOC); }
+#define MIOS32_UART1_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA); }
 #endif
 #ifndef MIOS32_UART1_APB_FREQ
 #define MIOS32_UART1_APB_FREQ    42000000 // APB1
 #endif
 
-// UART2 (USART1 peripheral) - APB2 (84 MHz default clock, unlike UART0/1).
+// UART2 (USART3 peripheral) - APB1.
 #if defined(MIOS32_USE_UART2)
 #ifndef MIOS32_UART2_TX_PORT
-#define MIOS32_UART2_TX_PORT     GPIOA
+#define MIOS32_UART2_TX_PORT     GPIOB
 #endif
 #ifndef MIOS32_UART2_TX_PIN
-#define MIOS32_UART2_TX_PIN      LL_GPIO_PIN_9
+#define MIOS32_UART2_TX_PIN      LL_GPIO_PIN_10
 #endif
 #ifndef MIOS32_UART2_TX_AF
 #define MIOS32_UART2_TX_AF       LL_GPIO_AF_7
 #endif
 #ifndef MIOS32_UART2_RX_PORT
-#define MIOS32_UART2_RX_PORT     GPIOA
+#define MIOS32_UART2_RX_PORT     GPIOB
 #endif
 #ifndef MIOS32_UART2_RX_PIN
-#define MIOS32_UART2_RX_PIN      LL_GPIO_PIN_10
+#define MIOS32_UART2_RX_PIN      LL_GPIO_PIN_11
 #endif
 #ifndef MIOS32_UART2_RX_AF
 #define MIOS32_UART2_RX_AF       LL_GPIO_AF_7
 #endif
 #ifndef MIOS32_UART2
-#define MIOS32_UART2             USART1
+#define MIOS32_UART2             USART3
 #endif
 #ifndef MIOS32_UART2_IRQ_CHANNEL
-#define MIOS32_UART2_IRQ_CHANNEL USART1_IRQn
+#define MIOS32_UART2_IRQ_CHANNEL USART3_IRQn
 #endif
 #ifndef MIOS32_UART2_IRQHANDLER_FUNC
-#define MIOS32_UART2_IRQHANDLER_FUNC void USART1_IRQHandler(void)
+#define MIOS32_UART2_IRQHANDLER_FUNC void USART3_IRQHandler(void)
 #endif
 #ifndef MIOS32_UART2_CLOCK_FUNC
-#define MIOS32_UART2_CLOCK_FUNC  { LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA); }
+#define MIOS32_UART2_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART3); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOB); }
 #endif
 #ifndef MIOS32_UART2_APB_FREQ
-#define MIOS32_UART2_APB_FREQ    84000000 // APB2
+#define MIOS32_UART2_APB_FREQ    42000000 // APB1
 #endif
 #endif
 
-// UART3 (USART3 peripheral) - APB1.
+// UART3 (UART4 peripheral) - APB1.
 #if defined(MIOS32_USE_UART3)
 #ifndef MIOS32_UART3_TX_PORT
-#define MIOS32_UART3_TX_PORT     GPIOB
+#define MIOS32_UART3_TX_PORT     GPIOC
 #endif
 #ifndef MIOS32_UART3_TX_PIN
 #define MIOS32_UART3_TX_PIN      LL_GPIO_PIN_10
 #endif
 #ifndef MIOS32_UART3_TX_AF
-#define MIOS32_UART3_TX_AF       LL_GPIO_AF_7
+#define MIOS32_UART3_TX_AF       LL_GPIO_AF_8
 #endif
 #ifndef MIOS32_UART3_RX_PORT
-#define MIOS32_UART3_RX_PORT     GPIOB
+#define MIOS32_UART3_RX_PORT     GPIOC
 #endif
 #ifndef MIOS32_UART3_RX_PIN
 #define MIOS32_UART3_RX_PIN      LL_GPIO_PIN_11
 #endif
 #ifndef MIOS32_UART3_RX_AF
-#define MIOS32_UART3_RX_AF       LL_GPIO_AF_7
+#define MIOS32_UART3_RX_AF       LL_GPIO_AF_8
 #endif
 #ifndef MIOS32_UART3
-#define MIOS32_UART3             USART3
+#define MIOS32_UART3             UART4
 #endif
 #ifndef MIOS32_UART3_IRQ_CHANNEL
-#define MIOS32_UART3_IRQ_CHANNEL USART3_IRQn
+#define MIOS32_UART3_IRQ_CHANNEL UART4_IRQn
 #endif
 #ifndef MIOS32_UART3_IRQHANDLER_FUNC
-#define MIOS32_UART3_IRQHANDLER_FUNC void USART3_IRQHandler(void)
+#define MIOS32_UART3_IRQHANDLER_FUNC void UART4_IRQHandler(void)
 #endif
 #ifndef MIOS32_UART3_CLOCK_FUNC
-#define MIOS32_UART3_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART3); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOB); }
+#define MIOS32_UART3_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART4); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOC); }
 #endif
 #ifndef MIOS32_UART3_APB_FREQ
 #define MIOS32_UART3_APB_FREQ    42000000 // APB1
 #endif
 #endif
 
-// UART4 (USART6 peripheral) - APB2.
+// UART4 (UART5 peripheral) - APB1. TX/RX on different ports (PC12/PD2).
 #if defined(MIOS32_USE_UART4)
 #ifndef MIOS32_UART4_TX_PORT
 #define MIOS32_UART4_TX_PORT     GPIOC
 #endif
 #ifndef MIOS32_UART4_TX_PIN
-#define MIOS32_UART4_TX_PIN      LL_GPIO_PIN_6
+#define MIOS32_UART4_TX_PIN      LL_GPIO_PIN_12
 #endif
 #ifndef MIOS32_UART4_TX_AF
 #define MIOS32_UART4_TX_AF       LL_GPIO_AF_8
 #endif
 #ifndef MIOS32_UART4_RX_PORT
-#define MIOS32_UART4_RX_PORT     GPIOC
+#define MIOS32_UART4_RX_PORT     GPIOD
 #endif
 #ifndef MIOS32_UART4_RX_PIN
-#define MIOS32_UART4_RX_PIN      LL_GPIO_PIN_7
+#define MIOS32_UART4_RX_PIN      LL_GPIO_PIN_2
 #endif
 #ifndef MIOS32_UART4_RX_AF
 #define MIOS32_UART4_RX_AF       LL_GPIO_AF_8
 #endif
 #ifndef MIOS32_UART4
-#define MIOS32_UART4             USART6
+#define MIOS32_UART4             UART5
 #endif
 #ifndef MIOS32_UART4_IRQ_CHANNEL
-#define MIOS32_UART4_IRQ_CHANNEL USART6_IRQn
+#define MIOS32_UART4_IRQ_CHANNEL UART5_IRQn
 #endif
 #ifndef MIOS32_UART4_IRQHANDLER_FUNC
-#define MIOS32_UART4_IRQHANDLER_FUNC void USART6_IRQHandler(void)
+#define MIOS32_UART4_IRQHANDLER_FUNC void UART5_IRQHandler(void)
 #endif
 #ifndef MIOS32_UART4_CLOCK_FUNC
-#define MIOS32_UART4_CLOCK_FUNC  { LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART6); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOC); }
+#define MIOS32_UART4_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART5); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOC); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOD); }
 #endif
 #ifndef MIOS32_UART4_APB_FREQ
-#define MIOS32_UART4_APB_FREQ    84000000 // APB2
+#define MIOS32_UART4_APB_FREQ    42000000 // APB1
 #endif
 #endif
 
-// UART5 (UART5 peripheral) - APB1. TX/RX on different ports (PC12/PD2).
+// UART5 (USART6 peripheral) - APB2 (84 MHz default clock, unlike UART1..4).
 #if defined(MIOS32_USE_UART5)
 #ifndef MIOS32_UART5_TX_PORT
 #define MIOS32_UART5_TX_PORT     GPIOC
 #endif
 #ifndef MIOS32_UART5_TX_PIN
-#define MIOS32_UART5_TX_PIN      LL_GPIO_PIN_12
+#define MIOS32_UART5_TX_PIN      LL_GPIO_PIN_6
 #endif
 #ifndef MIOS32_UART5_TX_AF
 #define MIOS32_UART5_TX_AF       LL_GPIO_AF_8
 #endif
 #ifndef MIOS32_UART5_RX_PORT
-#define MIOS32_UART5_RX_PORT     GPIOD
+#define MIOS32_UART5_RX_PORT     GPIOC
 #endif
 #ifndef MIOS32_UART5_RX_PIN
-#define MIOS32_UART5_RX_PIN      LL_GPIO_PIN_2
+#define MIOS32_UART5_RX_PIN      LL_GPIO_PIN_7
 #endif
 #ifndef MIOS32_UART5_RX_AF
 #define MIOS32_UART5_RX_AF       LL_GPIO_AF_8
 #endif
 #ifndef MIOS32_UART5
-#define MIOS32_UART5             UART5
+#define MIOS32_UART5             USART6
 #endif
 #ifndef MIOS32_UART5_IRQ_CHANNEL
-#define MIOS32_UART5_IRQ_CHANNEL UART5_IRQn
+#define MIOS32_UART5_IRQ_CHANNEL USART6_IRQn
 #endif
 #ifndef MIOS32_UART5_IRQHANDLER_FUNC
-#define MIOS32_UART5_IRQHANDLER_FUNC void UART5_IRQHandler(void)
+#define MIOS32_UART5_IRQHANDLER_FUNC void USART6_IRQHandler(void)
 #endif
 #ifndef MIOS32_UART5_CLOCK_FUNC
-#define MIOS32_UART5_CLOCK_FUNC  { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_UART5); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOC); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOD); }
+#define MIOS32_UART5_CLOCK_FUNC  { LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART6); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOC); }
 #endif
 #ifndef MIOS32_UART5_APB_FREQ
-#define MIOS32_UART5_APB_FREQ    42000000 // APB1
+#define MIOS32_UART5_APB_FREQ    84000000 // APB2
 #endif
 #endif
 
