@@ -11,8 +11,8 @@
 #define _MIOS32_CONFIG_H
 
 // How this program identifies itself to a host (see mios32_midi.h)
-#define MIOS32_APP_NAME1 "F407VG bare test"
-#define MIOS32_APP_NAME2 "Waveshare bring-up"
+#define MIOS32_APP_NAME1 "F4 dual role USB"
+#define MIOS32_APP_NAME2 "one micro-AB, ID decides"
 #define MIOS32_APP_VERSION "v1.000"
 
 // ---------------------------------------------------------------------------
@@ -176,26 +176,12 @@
 #define MIOS32_USE_USB_MIDI
 #define MIOS32_USB_MIDI_NUM_PORTS 1
 
-// This board's OTG_FS connector does not bring VBUS to the sensing pin.
-// Saying so is not optional: with sensing left on, the controller never sees
-// a host and the device silently never enumerates.
-#define MIOS32_USB_VBUS_SENSING 0
+// The DIPCORE-era section that used to sit here is gone deliberately: it
+// declared a SECOND port (this board has one socket), which started a
+// phantom host on OTG_HS and drove PC14 - the 32 kHz crystal pin - as
+// its VBUS. The single socket's whole story lives after the relay block.
 
-// Two sockets on this board: the type-B receptacle is on OTG_FS (port 0) and
-// serves as the device, the type-A receptacle is on OTG_HS (port 1) and drives
-// whatever is plugged into it. The mechanics decide the roles, so nothing has
-// to be detected.
-#define MIOS32_USB_NUM_PORTS 2
 
-// The host stack times its enumeration and its deferred work, so it needs the
-// millisecond counter. The device stack does not - it only ever reacts.
-#define MIOS32_USE_TIMESTAMP
-
-// Host classes, opt-in one by one. The hub is what lets all three be present
-// at once on the single socket.
-#define MIOS32_USE_USB_HOST_MIDI
-#define MIOS32_USE_USB_HOST_HID
-#define MIOS32_USE_USB_HOST_MSC
 
 // Identity. The vendor ID and the lab-range product ID come from the OS
 // defaults; only the name is worth setting on a test board.
@@ -208,7 +194,7 @@
 // and gained another one. Whoever was talking to that port then has nothing
 // to reconnect to - which is exactly what breaks an upload, since an upload
 // IS a reset into the bootloader.
-#define MIOS32_USB_PRODUCT_STR  "F407 Test"
+#define MIOS32_USB_PRODUCT_STR  "F4 dual role"
 
 // The connector this board is actually reached on. Both the bootloader and
 // its update tool take their transport from here and declare none of their
@@ -217,7 +203,6 @@
 // answering on a connector that isn't wired.
 #define MIOS32_USE_USB_MIDI
 #define MIOS32_MIDI_DEFAULT_PORT USB0
-#define MIOS32_MIDI_DEBUG_PORT   USB0
 
 // The sign-of-life pin, on this board PC6 - and it MUST travel with the USB
 // identity above, because the OS default for it is PA12, which on this family
@@ -228,6 +213,74 @@
 #define MIOS32_SOL_PORT GPIOC
 #define MIOS32_SOL_PIN  LL_GPIO_PIN_6
 // BSL_RELAY_END
+
+/////////////////////////////////////////////////////////////////////////////
+// The single socket, and how it changes hands
+//
+// This board fits ONE micro-AB receptacle on the full-speed core, so the same
+// connector is a device socket and a host socket at different moments.
+//
+// NONE OF THIS IS RELAYED, and that is the point: the bootloader stays a
+// device on this board whatever is plugged into it. It must not be handed a
+// host stack it has no room for, nor a port that waits to be told what it is -
+// a bootloader that waits is a bootloader that never answers.
+/////////////////////////////////////////////////////////////////////////////
+
+// The fifth contact decides: grounded in an A plug (host), open in a B one.
+// Read as a plain input - mios32_usb_ll.c explains why it is deliberately NOT
+// taken through the controller's own ID logic.
+#define MIOS32_USB_P0_ROLE_SOURCE  MIOS32_USB_ROLE_SRC_ID
+#define MIOS32_USB_P0_ID_PORT      GPIOA
+#define MIOS32_USB_P0_ID_PIN       LL_GPIO_PIN_10
+
+// The power switch that lets it host at all: a MIC2075-2, enable ACTIVE LOW -
+// that is what the -2 suffix means, a -1 enables on a high - and pulled up on
+// the board, so the switch is OFF while nothing drives it: through reset, and
+// through the whole of the bootloader, which never touches this pin.
+//
+// IN HOST MODE THE BOARD MUST BE POWERED EXTERNALLY. Its 5 V selector can take
+// the rail from USB_5V, and this switch feeds USB_5V from that rail - so with
+// the selector the other way the board would be asked to power the bus from
+// the bus.
+#define MIOS32_USB_P0_VBUS_PORT    GPIOA
+#define MIOS32_USB_P0_VBUS_PIN     LL_GPIO_PIN_3
+
+// That switch's over-current flag: open drain, asserted low.
+#define MIOS32_USB_P0_OC_PORT      GPIOA
+#define MIOS32_USB_P0_OC_PIN       LL_GPIO_PIN_5
+
+// What it serves while it is the host.
+#define MIOS32_USE_USB_HOST_MIDI
+#define MIOS32_USE_USB_HOST_HID
+#define MIOS32_USE_USB_HOST_MSC
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Debug output on the wire, because the socket is the thing under test
+//
+// Half the time this connector is a host, with no computer on the other end
+// to listen to anything. So debug output leaves by UART, where it is readable
+// in BOTH roles - while MIOS32_MIDI_DEFAULT_PORT stays USB0 above, so uploads
+// still arrive the usual way when the board is a device again.
+//
+// Outside the relay block deliberately: the bootloader has neither room for a
+// second driver nor any use for one, and its own config makes it debug
+// wherever it talks.
+//
+// RECEPTION MOVES TO PD6 - the second place this peripheral's RX can sit on
+// this silicon - because PA3, where it normally sits, is the power switch's
+// enable line above. Nothing is wired to PD6; it is pulled up, so it rests at
+// the idle level and stays silent. DIN0 rather than "UART0": the port enum
+// names physical MIDI ports after the connector they classically wear.
+// DIN1 rather than DIN0 since the numbering was aligned on ST's: USART2
+// is the SECOND peripheral, so it is UART1 and its MIDI port is DIN1.
+/////////////////////////////////////////////////////////////////////////////
+#define MIOS32_MIDI_DEBUG_PORT     DIN1
+#define MIOS32_USE_DIN_MIDI
+#define MIOS32_USE_UART1
+#define MIOS32_UART1_RX_PORT       GPIOD
+#define MIOS32_UART1_RX_PIN        LL_GPIO_PIN_6
+#define MIOS32_UART1_CLOCK_FUNC    { LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA); LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOD); }
 
 
 // =============================================================================
@@ -320,7 +373,8 @@
 # define MIOS32_SYS_DONT_INIT_RTC
 //# define MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
 
-#define MIOS32_USE_UART0
+// Only UART1 here (USART2, PA2 out). UART0 exists and is free - USART1 on
+// PB6/PB7 - but nothing on this board is wired to it.
 #define MIOS32_USE_UART1
 #define MIOS32_USE_DIN_MIDI
 #elif defined(MIOS32_FAMILY_STM32G0xx)

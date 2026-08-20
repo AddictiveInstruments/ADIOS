@@ -1,16 +1,19 @@
 # $Id: Makefile 1820 2013-09-01 15:44:33Z tk $
 
 ################################################################################
-# f407_test - real dynamic bootloader/app boundary test on a Waveshare
-# STM32F407VE board, on the ST-Link JTAG/SWD. First-ever real F4 hardware
-# validation of etc/gen_bsl_boundary.sh's F4 support (extended 2026-08-04) -
-# same rationale as apps/Bruno/g030k6_test on the G0 side: bring-up alone
-# (bare, no bootloader) only proves the chip/board works, not that the
-# dynamic boundary mechanism itself works on real F4 silicon. Permanently
-# pinned (no env-var indirection) like 5x6_505. BOARD stays MBHP_DIPCOREF4:
-# F4xx never gets its own per-board #ifdef chain in mios32_board.c, one
-# fixed default for all STM32F4xx hardware (see
-# mios32/STM32F4xx/mios32_board.c).
+# f4_template - STARTING POINT for an STM32F4 application. Copy this directory,
+# rename it, and edit. The deliverable filenames follow the directory name on
+# their own (DYNAMIC_BSL_APP_NAME), so there is nothing to rename in here.
+#
+# What to change first:
+#   - PROCESSOR below, and the .ld in ld/ if your part differs
+#   - MIOS32_APP_NAME1/2 and MIOS32_USB_PRODUCT_STR in mios32_config.h
+#   - the BSL_RELAY block in mios32_config.h: the connector this board is
+#     actually reached on, which the bootloader and its updater inherit
+#
+# Working examples of what can be built on top: apps/examples/f4_dual_usb (two
+# sockets, device + host) and apps/examples/f4_dual_role_usb (one socket, role
+# decided by the ID contact).
 ################################################################################
 PROCESSOR =	STM32F407VE
 FAMILY    =	STM32F4xx

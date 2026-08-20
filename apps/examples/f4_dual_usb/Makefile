@@ -1,22 +1,17 @@
 # $Id: Makefile 1820 2013-09-01 15:44:33Z tk $
 
 ################################################################################
-# f407v_otg - ONE micro-AB socket that is a device socket and a host socket at
-# different moments, on a Waveshare Core407V. This is the single-port dual-role
-# case of the USB brief: a processor with one connector must be able to be
-# either, decided by the receptacle's ID contact rather than by a build.
+# f4_dual_usb - EXAMPLE. A board with TWO USB sockets: the type-B receptacle is
+# the device port (OTG_FS) and the type-A one drives whatever is plugged into it
+# (OTG_HS). The mechanics decide the roles, so nothing has to be detected - which
+# is what makes this the simpler of the two USB examples to read first.
 #
-# Kept apart from apps/Bruno/f407_test on purpose: that project is the F4
-# bring-up reference and is validated on different hardware (an F405 DIPCORE
-# with two dedicated sockets), so it must keep working exactly as it does.
+# Shows: USB device MIDI, USB host with the three classes (MIDI, HID, MSC),
+# and the dynamic bootloader/app boundary on real F4 silicon.
+# Built and verified on an MBHP_DIPCOREF4 with an STM32F405.
 #
-# Board wiring this project depends on, all of it declared in mios32_config.h:
-#   PA10  ID contact of the micro-AB      (grounded by an A plug = host)
-#   PA3   enable of the MIC2075-2 power switch, active low, pulled up
-#   PA5   that switch's over-current flag, open drain, active low
-#   PA2   debug MIDI out - readable in BOTH roles, unlike the socket itself
-#   PD6   the peripheral's RX, moved off PA3 which the switch now owns
-# The 5 V selector must be on EXTERNAL supply whenever this board hosts.
+# For the ONE-socket case, where the connector's ID contact decides the role at
+# runtime, see apps/examples/f4_dual_role_usb.
 ################################################################################
 PROCESSOR =	STM32F407VE
 FAMILY    =	STM32F4xx
@@ -29,9 +24,10 @@ LCD       =	dummy
 #
 #   MIOS32_BSL_PADDING = 1024      -> boundary 0x8000 instead of 0x4000
 #
-# The mechanism it exercises - a device sitting at one boundary being sent a
-# bootloader that wants another - was validated on this family in both
-# directions. Left at 0 for normal builds.
+# Used on 2026-08-19 to exercise a boundary MIGRATION on this family for the
+# first time: a device sitting at 0x4000 was sent a bootloader wanting 0x8000,
+# which also forced the entry handover, the tool then being linked above the
+# boundary the device declared. Both worked. Left at 0 for normal builds.
 
 # self-locating repo root: apps live at a fixed depth inside the repo, so a
 # plain `make` works with no environment setup at all (any exported

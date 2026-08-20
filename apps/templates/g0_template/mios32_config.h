@@ -11,8 +11,8 @@
 #define _MIOS32_CONFIG_H
 
 // How this program identifies itself to a host (see mios32_midi.h)
-#define MIOS32_APP_NAME1 "G030K6 bare test"
-#define MIOS32_APP_NAME2 "MIOS32_CORE_USE_FREERTOS"
+#define MIOS32_APP_NAME1 "G0 template"
+#define MIOS32_APP_NAME2 "starting point, edit me"
 #define MIOS32_APP_VERSION "v1.000"
 
 // Nucleo-G030K6 onboard user LED is on PC6 (not the STM32G0xx family

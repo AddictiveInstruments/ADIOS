@@ -1,16 +1,21 @@
 # $Id: Makefile 1820 2013-09-01 15:44:33Z tk $
 
 ################################################################################
-# g030k6_test - real dynamic bootloader/app boundary test on a Nucleo-G030K6
-# (onboard user LED on PC6, see MIOS32_SOL_PORT/PIN override in
-# mios32_config.h). Deliberately the SMALLEST chip in the reference library
-# (32K flash, 8K RAM, "small tier" FreeRTOS-off) - the tightest, most
-# revealing test of etc/gen_bsl_boundary.sh: the bootloader's own minimum
-# boundary (10240 bytes) already eats a third of total flash here, unlike
-# STM32G070CB (5x6_505's chip, 128K flash) where that same minimum is
-# comfortable margin. Permanently pinned (no env-var indirection) like
-# 5x6_505 - this project exists specifically to exercise the mechanism on
-# real hardware, not to be repointed at a different chip.
+# g0_template - STARTING POINT for an STM32G0 application. Copy this directory,
+# rename it, and edit. The deliverable filenames follow the directory name on
+# their own (DYNAMIC_BSL_APP_NAME), so there is nothing to rename in here.
+#
+# Set up here for the SMALLEST part of the family - a Nucleo-G030K6, 32K flash
+# and 8K RAM, FreeRTOS off - because a template that fits there fits anywhere
+# on the family. Larger G0 parts only need PROCESSOR and the .ld changed.
+#
+# What to change first:
+#   - PROCESSOR below, and the .ld in ld/ if your part differs
+#   - MIOS32_APP_NAME1/2 in mios32_config.h
+#   - the BSL_RELAY block in mios32_config.h: the MIDI connector this board is
+#     actually reached on, which the bootloader and its updater inherit
+#
+# NOTE: no USB on this family below G0B1/G0C1 - the transport here is DIN MIDI.
 ################################################################################
 PROCESSOR =	STM32G030K6
 FAMILY    =	STM32G0xx
