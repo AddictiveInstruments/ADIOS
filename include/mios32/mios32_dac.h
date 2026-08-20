@@ -63,7 +63,7 @@
 //
 // Unlike SPI/I2C/ADC there is nothing to auto-derive: a project asking for
 // the DAC writes MIOS32_USE_DAC and that is the whole declaration.
-// programming_models/traditional/main.c tests it to decide whether to call
+// core/main.c tests it to decide whether to call
 // MIOS32_DAC_Init().
 
 

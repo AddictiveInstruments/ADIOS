@@ -80,7 +80,7 @@ _estack = 0x20000000 + ADIOS_RAM_LEN;
 
 /* Reserved stack region. __Stack_Init is the BOTTOM of it, and it is a live
    symbol: the bare-metal canary (MIOS32_CORE_USE_CANARI, see
-   programming_models/traditional/main.c) fills from there up to the current
+   core/main.c) fills from there up to the current
    stack pointer, then checks that first word for corruption.
    Uniform across families since 2026-08-10 - STM32F4xx used to say 128,
    which would have placed __Stack_Init above the stack pointer at startup:

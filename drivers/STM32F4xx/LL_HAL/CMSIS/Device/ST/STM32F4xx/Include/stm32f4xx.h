@@ -55,7 +55,7 @@ extern "C" {
 /* Device selection - NOTHING IS SELECTED HERE ANY MORE.
    The device macro (STM32F407xx, STM32F446xx, STM32F410Rx, ...) is derived
    from PROCESSOR and passed with -D by mios32/mios32.mk, exactly the way
-   the .ld and startup files are derived in programming_model.mk. This
+   the .ld and startup files are derived in core.mk. This
    family is the one with irregular header names - F401/F411 split by
    density, F410/F412 by package - and the derivation rule there covers
    them; see its comment. If no device macro is defined, the #error at the

@@ -49,7 +49,7 @@ into your local mios32_config.h file
 // opt-in on STM32F4xx/STM32G0xx (renamed from MIOS32_DONT_USE_FREERTOS),
 // numeric (0/1, not plain presence) so a project can force it either way
 // regardless of the RAM/FLASH-tiered default in mios32_sys.h - see there,
-// and programming_models/traditional/main.c's MIOS32_CORE_USE_FREERTOS for
+// and core/main.c's MIOS32_CORE_USE_FREERTOS for
 // the separate switch controlling how the application Hooks are scheduled.
 // Other families (STM32F10x, LPC17xx, MIOSJUCE) still use the old opt-out
 // name.
@@ -89,7 +89,7 @@ into your local mios32_config.h file
 #define MIOS32_SRIO_OUTPUTS_OD 1
 
 
-// disables the default SRIO scan routine in programming_models/traditional/main.c
+// disables the default SRIO scan routine in core/main.c
 // allows to implement an own handler
 #define MIOS32_DONT_SERVICE_SRIO_SCAN 1
 

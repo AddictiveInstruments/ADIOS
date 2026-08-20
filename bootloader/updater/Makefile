@@ -58,7 +58,7 @@ ARM_AS_SOURCE   =
 
 # THIS directory first: its mios32_config.h (core type "UPDATER") must win
 # over the bootloader's own copy in ../src
-C_INCLUDE = 	-I . -I $(MIOS32_PATH)/bootloader/src -I $(MIOS32_PATH)/programming_models/traditional
+C_INCLUDE = 	-I . -I $(MIOS32_PATH)/bootloader/src -I $(MIOS32_PATH)/core
 A_INCLUDE = 	-I .
 
 LIBS =

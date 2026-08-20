@@ -138,7 +138,7 @@
 // no need for the project to separately set MIOS32_USE_UART on top of
 // MIOS32_USE_UARTx. Safe to do locally in this .c file only because nothing
 // outside mios32_uart.c ever checks the bare MIOS32_USE_UART macro
-// (verified) - unlike MIOS32_USE_SPI, which programming_models/traditional/
+// (verified) - unlike MIOS32_USE_SPI, which core/
 // main.c also checks directly, so that one is derived from the shared
 // header (mios32_spi.h) instead, not locally in mios32_spi.c.
 // Derived AFTER the tier guards above, deliberately: a port the project

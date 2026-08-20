@@ -49,10 +49,10 @@
 //!   - MIOS32_APP_USE_FREERTOS - is the FreeRTOS kernel itself compiled
 //!     in at all? Consulted by mios32_sys.c (the only FreeRTOS touchpoint
 //!     in the whole mios32/common + family driver tree) and, at the Make
-//!     level, by programming_models/traditional/programming_model.mk
+//!     level, by core/core.mk
 //!     (whether tasks.c/queue.c/etc even get compiled - see that file for
 //!     why the C-side #if alone isn't enough to save the FLASH cost).
-//!   - MIOS32_CORE_USE_FREERTOS - does programming_models/traditional/
+//!   - MIOS32_CORE_USE_FREERTOS - does core/
 //!     main.c schedule the application Hooks via FreeRTOS tasks (=1) or
 //!     via a bare-metal super-loop clocked by SysTick (=0)? See that file
 //!     for the full implication - in bare mode, MIDI processing is no
@@ -92,7 +92,7 @@
 #endif
 
 //! MIOS32_CORE_USE_CANARI - optional stack-overflow canary for the
-//! bare-metal super-loop (programming_models/traditional/main.c). Also
+//! bare-metal super-loop (core/main.c). Also
 //! numeric, also overridable regardless of its default. Defaults to the
 //! opposite of MIOS32_CORE_USE_FREERTOS: active (1) when running bare,
 //! since FreeRTOS's own configCHECK_FOR_STACK_OVERFLOW protection is gone
@@ -151,7 +151,7 @@ typedef enum {
 
 
 // Is there a bootloader at all? Set MIOS32_USE_BOOTLOADER = 0 in a project's
-// Makefile (programming_model.mk relays it as a -D) to build an application
+// Makefile (core.mk relays it as a -D) to build an application
 // linked at the base of flash, with no reserved bootloader region and no
 // embedded bootloader image. Everything that only makes sense WITH one is
 // then compiled out: the persistent info block below, the TAMP request /
@@ -162,7 +162,7 @@ typedef enum {
 #endif
 
 // dynamic bootloader/app flash boundary (opt-in, MIOS32_USE_DYNAMIC_BSL_BOUNDARY
-// in the project's own Makefile - see programming_model.mk and
+// in the project's own Makefile - see core.mk and
 // etc/gen_bsl_boundary.sh): if that mechanism generated a project-local
 // mios32_bsl_boundary.h, pull it in here so MIOS32_APP_FLASH_START_ADDR is
 // defined before it's used below. __has_include makes this a silent no-op
@@ -171,7 +171,7 @@ typedef enum {
 // The MIOS32_USE_BOOTLOADER guard matters: a project that HAS built with the
 // dynamic mechanism keeps that generated header in its directory forever, and
 // without this guard it would silently redefine MIOS32_APP_FLASH_START_ADDR
-// over the 0 that programming_model.mk passes for a bootloader-less build,
+// over the 0 that core.mk passes for a bootloader-less build,
 // reporting a boundary that is not on the chip.
 #if MIOS32_USE_BOOTLOADER
 # if __has_include("mios32_bsl_boundary.h")
@@ -182,7 +182,7 @@ typedef enum {
 
 /////////////////////////////////////////////////////////////////////////////
 // Persistent SysEx device ID (MIOS32_DEVICE_ID_PERSIST, opt-in from the
-// project's Makefile - see programming_models/traditional/programming_model.mk)
+// project's Makefile - see core/core.mk)
 //
 // The record occupies the LAST TWO BYTES of flash: a 0x42 confirm marker
 // followed by the value. Deliberately the very top of memory, because that is

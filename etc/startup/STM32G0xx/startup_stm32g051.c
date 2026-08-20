@@ -12,7 +12,7 @@
  *
  *            Single canonical copy shared by both the bootloader
  *            (bootloader/src) and the traditional programming model
- *            (programming_models/traditional) - see etc/startup/README
+ *            (core) - see etc/startup/README
  *            equivalent note below: don't fork a per-consumer copy, both
  *            need the exact same reset sequence and vector table for this
  *            exact chip.

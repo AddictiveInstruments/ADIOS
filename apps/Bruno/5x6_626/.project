@@ -112,9 +112,9 @@
 			<locationURI>MIOS32_ROOT/modules</locationURI>
 		</link>
 		<link>
-			<name>programming_models</name>
+			<name>core</name>
 			<type>2</type>
-			<locationURI>MIOS32_ROOT/programming_models</locationURI>
+			<locationURI>MIOS32_ROOT/core</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -38,8 +38,8 @@ what follows, and nothing here is a claim over someone else's work.
                              drivers - see the licence headers in those files
                              and in their own LICENSE.txt.
 
-  programming_models/traditional/mini_cpp.cpp,
-  programming_models/traditional/freertos_heap.cpp
+  core/mini_cpp.cpp,
+  core/freertos_heap.cpp
                              Derived from Quantum Leaps material; see the
                              attribution kept in those files.
 

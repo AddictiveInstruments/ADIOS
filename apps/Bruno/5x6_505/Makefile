@@ -19,7 +19,7 @@ LCD       =	ili9488_5x6
 MIOS32_PATH ?= ../../..
 
 # opt into the real dynamic bootloader/app flash boundary mechanism - see
-# programming_model.mk and etc/gen_bsl_boundary.sh for the full explanation.
+# core.mk and etc/gen_bsl_boundary.sh for the full explanation.
 MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
 
 # The SysEx device ID survives a power cycle: MIOS32 keeps it in the last two
@@ -74,7 +74,7 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 ################################################################################
 
 # sources of programming model
-include $(MIOS32_PATH)/programming_models/traditional/programming_model.mk
+include $(MIOS32_PATH)/core/core.mk
 
 # application specific LCD driver (selected via makefile variable)
 include $(MIOS32_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk

@@ -29,7 +29,7 @@ MIOS32_APP_USE_FREERTOS ?= 1
 endif
 
 # extend include path
-C_INCLUDE += 	-I $(MIOS32_PATH)/programming_models/traditional \
+C_INCLUDE += 	-I $(MIOS32_PATH)/core \
 		-I $(FREE_RTOS)/Source/include \
 		-I $(FREE_RTOS)/Source/portable/GCC/ARM_CM3 \
 		-I $(FREE_RTOS)/Source/portable/MemMang \
@@ -76,7 +76,7 @@ ifeq ($(FAMILY),STM32F4xx)
 CFLAGS    +=    -DGCC_ARMCM3
 # add modules to thumb sources
 THUMB_SOURCE += \
-		$(MIOS32_PATH)/programming_models/traditional/main.c
+		$(MIOS32_PATH)/core/main.c
 
 ifneq ($(MIOS32_APP_USE_FREERTOS),0)
 THUMB_SOURCE += \
@@ -98,7 +98,7 @@ ifeq ($(FAMILY),STM32G0xx)
 CFLAGS    +=    -DGCC_ARMCM0
 # add modules to thumb sources
 THUMB_SOURCE += \
-		$(MIOS32_PATH)/programming_models/traditional/main.c
+		$(MIOS32_PATH)/core/main.c
 
 ifneq ($(MIOS32_APP_USE_FREERTOS),0)
 THUMB_SOURCE += \
@@ -259,17 +259,17 @@ LD_FILE = $(CURDIR)/project_build/cpu.ld
 # make's default goal and the build would stop after producing the script.
 endif
 
-THUMB_CPP_SOURCE += $(MIOS32_PATH)/programming_models/traditional/mini_cpp.cpp
+THUMB_CPP_SOURCE += $(MIOS32_PATH)/core/mini_cpp.cpp
 ifneq ($(MIOS32_APP_USE_FREERTOS),0)
 # overrides malloc()/calloc()/realloc()/free() to redirect to FreeRTOS's
 # pvPortMalloc()/vPortFree() - meaningless without the kernel; without this,
 # mini_cpp.cpp's operator new/delete above fall back to newlib's own default
 # malloc(), which is the correct behaviour for a bare-metal build anyway.
-THUMB_CPP_SOURCE += $(MIOS32_PATH)/programming_models/traditional/freertos_heap.cpp
+THUMB_CPP_SOURCE += $(MIOS32_PATH)/core/freertos_heap.cpp
 endif
 
 # add MIOS32 sources
 include $(MIOS32_PATH)/mios32/mios32.mk
 
 # directories and files that should be part of the distribution (release) package
-DIST += $(MIOS32_PATH)/programming_models/traditional
+DIST += $(MIOS32_PATH)/core

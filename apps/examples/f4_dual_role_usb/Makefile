@@ -41,9 +41,9 @@ LCD       =	dummy
 MIOS32_PATH ?= ../../..
 
 # opt into the real dynamic bootloader/app flash boundary mechanism - see
-# programming_model.mk and etc/gen_bsl_boundary.sh for the full explanation.
+# core.mk and etc/gen_bsl_boundary.sh for the full explanation.
 # STM32F407VE has no exact-named .ld template (only the package-less
-# STM32F407xE.ld reference-library one) - programming_model.mk's own
+# STM32F407xE.ld reference-library one) - core.mk's own
 # LD_FILE_EXACT/LD_FILE_FALLBACK derivation already resolves to that file
 # automatically, no override needed here.
 MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
@@ -84,7 +84,7 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 ################################################################################
 
 # sources of programming model
-include $(MIOS32_PATH)/programming_models/traditional/programming_model.mk
+include $(MIOS32_PATH)/core/core.mk
 
 # application specific LCD driver (selected via makefile variable)
 include $(MIOS32_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk

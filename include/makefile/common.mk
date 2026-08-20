@@ -115,7 +115,7 @@ DIST += $(LD_FILE)
 all: dirs cleanhex $(PROJECT).hex $(PROJECT_OUT)/$(PROJECT).bin $(PROJECT_OUT)/$(PROJECT).lss $(PROJECT_OUT)/$(PROJECT).sym projectinfo
 
 # Static-boundary builds resolve their linker script from the per-family
-# template here rather than in programming_model.mk: that file is included
+# template here rather than in core.mk: that file is included
 # BEFORE this one, so a target defined there would silently become make's
 # default goal and the build would stop right after writing the script.
 # (Dynamic-boundary builds get theirs written by gen_bsl_boundary.sh while
@@ -138,7 +138,7 @@ Release: all
 ################################################################################
 # Automatic bootloader/app production deliverables (opt-in - set
 # MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1 in the app's own Makefile before
-# including programming_model.mk, see that file's own comment and
+# including core.mk, see that file's own comment and
 # etc/gen_bsl_boundary.sh for the full mechanism). Two files, named after
 # this app's own directory (not the CPU, not the generic $(PROJECT) name):
 #   1) <app>_full_bsl_app.bin - combined bootloader+app image for one-shot SWD
@@ -213,7 +213,7 @@ dirs:
 
 # rule to create .elf file. $(LD_FILE) is a prerequisite because it is
 # GENERATED now (resolved from the per-family template, see
-# programming_models/traditional/programming_model.mk) - without it, a static
+# core/core.mk) - without it, a static
 # build would try to link before its linker script exists.
 $(PROJECT_OUT)/$(PROJECT).elf: $(ALL_OBJS) $(LD_FILE)
 	@$(CC) $(CFLAGS) $(ALL_OBJS) $(LIBS) $(LDFLAGS) -o$@

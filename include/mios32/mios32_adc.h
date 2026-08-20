@@ -81,7 +81,7 @@
 // Auto-derive the master switch from any individual port actually wanted -
 // no need for the project to set MIOS32_USE_ADC on top of MIOS32_USE_ADC0/1/2.
 // Same reasoning (and same placement) as MIOS32_USE_SPI in mios32_spi.h and
-// MIOS32_USE_I2C in mios32_i2c.h: programming_models/traditional/main.c tests
+// MIOS32_USE_I2C in mios32_i2c.h: core/main.c tests
 // the bare master switch to decide whether to call MIOS32_ADC_Init(), and a
 // #define made inside mios32_adc.c would never reach that translation unit.
 #if !defined(MIOS32_USE_ADC) && (defined(MIOS32_USE_ADC0) || defined(MIOS32_USE_ADC1) || defined(MIOS32_USE_ADC2))

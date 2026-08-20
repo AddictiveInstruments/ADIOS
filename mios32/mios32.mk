@@ -19,7 +19,7 @@ CFLAGS    +=    -DMIOS32_PROCESSOR_$(PROCESSOR) \
 # hand-written #if/#elif table inside each stm32<family>.h, knowing four G0
 # and three F4 parts and stopping the build with an #error for anything else
 # - while the .ld and startup files, derived mechanically right next door in
-# programming_model.mk, already covered every chip in the tree. That table
+# core.mk, already covered every chip in the tree. That table
 # was also where a silent miscompilation had lived (see the comment it left
 # behind in stm32g0xx.h): the wrong device header selected for every G0
 # build, caught only because a G030K6 referenced a timer it does not have.

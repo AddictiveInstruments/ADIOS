@@ -66,7 +66,7 @@
 // no need for the project to separately set MIOS32_USE_UART on top of
 // MIOS32_USE_UARTx. Safe to do locally in this .c file only because nothing
 // outside mios32_uart.c ever checks the bare MIOS32_USE_UART macro
-// (verified) - unlike MIOS32_USE_SPI, which programming_models/traditional/
+// (verified) - unlike MIOS32_USE_SPI, which core/
 // main.c also checks directly, so that one is derived from the shared
 // header (mios32_spi.h) instead, not locally in mios32_spi.c.
 #if !defined(MIOS32_USE_UART) && (defined(MIOS32_USE_UART0) || defined(MIOS32_USE_UART1) || defined(MIOS32_USE_UART2) || defined(MIOS32_USE_UART3) || defined(MIOS32_USE_UART4) || defined(MIOS32_USE_UART5) || defined(MIOS32_USE_UART6) || defined(MIOS32_USE_UART7) || defined(MIOS32_USE_UART8) || defined(MIOS32_USE_UART9))

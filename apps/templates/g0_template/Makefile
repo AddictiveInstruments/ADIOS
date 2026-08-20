@@ -26,7 +26,7 @@ BOARD	  =	STM32G0GENERIC
 MIOS32_PATH ?= ../../..
 
 # opt into the real dynamic bootloader/app flash boundary mechanism - see
-# programming_model.mk and etc/gen_bsl_boundary.sh for the full explanation.
+# core.mk and etc/gen_bsl_boundary.sh for the full explanation.
 MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
 
 
@@ -65,7 +65,7 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 ################################################################################
 
 # sources of programming model
-include $(MIOS32_PATH)/programming_models/traditional/programming_model.mk
+include $(MIOS32_PATH)/core/core.mk
 
 # no application LCD driver: MIOS32_DONT_USE_LCD is set in mios32_config.h,
 # which guards out every APP_LCD_* call inside mios32_lcd.c (see the

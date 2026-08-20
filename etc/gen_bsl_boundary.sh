@@ -506,7 +506,7 @@ if [ "$BOUNDARY" -lt "$MIN_BOUNDARY" ]; then
 fi
 # Pages the application reserves for its own data at the TOP of flash
 # (MIOS32_USERDATA_PAGES, relayed through the environment by
-# programming_model.mk). The linker template already carves them out of its
+# core.mk). The linker template already carves them out of its
 # FLASH region - but the rewrite further down recomputes that length from the
 # chip's TOTAL flash, so the same pages have to come off here too or the
 # reservation would be silently undone on every dynamic-boundary build.

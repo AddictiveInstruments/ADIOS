@@ -24,13 +24,13 @@ ifeq ($(findstring STM32F4,$(PROCESSOR)),STM32F4)
 FAMILY    = 	STM32F4xx
 BOARD	  = 	MBHP_DIPCOREF4
 # single canonical startup shared by the whole F4xx family (see the same
-# rule and rationale in programming_models/traditional/programming_model.mk)
+# rule and rationale in core/core.mk)
 STARTUP_FILE = $(MIOS32_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c
 else
 FAMILY    = 	STM32G0xx
 BOARD	  = 	STM32G0GENERIC
 # per-subfamily startup: startup_<lowercased 9-char line prefix>.c - same
-# derivation as programming_model.mk (every chip in a subfamily shares the
+# derivation as core.mk (every chip in a subfamily shares the
 # exact same vector table, regardless of package/density)
 STARTUP_FILE = $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
 endif
@@ -51,12 +51,12 @@ THUMB_AS_SOURCE =
 ARM_SOURCE      =
 ARM_AS_SOURCE   =
 
-# programming_models/traditional supplies the family conf headers
+# core supplies the family conf headers
 # (stm32g0xx_conf.h / stm32f4xx_conf.h, included via mios32.h) - the
 # bootloader used to carry its own byte-identical copies here (removed
-# 2026-08-09); it deliberately does NOT include programming_model.mk itself
+# 2026-08-09); it deliberately does NOT include core.mk itself
 # (no FreeRTOS, no main.c), only that directory on the include path.
-C_INCLUDE = 	-I . -I $(MIOS32_PATH)/programming_models/traditional
+C_INCLUDE = 	-I . -I $(MIOS32_PATH)/core
 A_INCLUDE = 	-I .
 
 LIBS =

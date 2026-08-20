@@ -66,8 +66,8 @@ build configuration is required:
   run `make` from
 - `mios32/` - the OS core: `common/` (family-independent) + one directory
   per chip family (`STM32G0xx/`, `STM32F4xx/`)
-- `programming_models/traditional/` - `main.c` (FreeRTOS or bare-metal
-  scheduling), shared build logic (`programming_model.mk`)
+- `core/` - `main.c` (FreeRTOS or bare-metal
+  scheduling), shared build logic (`core.mk`)
 - `include/makefile/common.mk` - common make rules
 - `bootloader/src/` - the MIDI bootloader (one generic `Makefile.bsl` for
   every chip)

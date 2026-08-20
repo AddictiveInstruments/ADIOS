@@ -54,7 +54,7 @@
 /* Device selection - NOTHING IS SELECTED HERE ANY MORE.
    The device macro (STM32G030xx, STM32G0B1xx, ...) is derived from
    PROCESSOR and passed with -D by mios32/mios32.mk, exactly the way the
-   .ld and startup files are derived in programming_model.mk. See the long
+   .ld and startup files are derived in core.mk. See the long
    comment there for the naming rule. If none is defined, the #error at the
    end of the include chain below (ST's own) stops the build.
 

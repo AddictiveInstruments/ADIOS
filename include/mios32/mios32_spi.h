@@ -21,7 +21,7 @@
 // no need for the project to separately set MIOS32_USE_SPI on top of
 // MIOS32_USE_SPI0/1/2. Has to live HERE (a shared header, included by every
 // translation unit via mios32.h) rather than locally inside mios32_spi.c:
-// programming_models/traditional/main.c also checks the bare MIOS32_USE_SPI
+// core/main.c also checks the bare MIOS32_USE_SPI
 // macro directly (to decide whether to call MIOS32_SPI_Init()) - a #define
 // added only inside mios32_spi.c's own .c file would never be visible there
 // (separate translation unit, macros don't cross .c file boundaries).

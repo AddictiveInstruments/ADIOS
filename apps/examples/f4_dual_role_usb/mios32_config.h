@@ -295,7 +295,7 @@
 //   MIOS32_APP_USE_FREERTOS  - is the FreeRTOS kernel itself compiled/
 //                              linked in at all? (renamed from the old
 //                              opt-out MIOS32_DONT_USE_FREERTOS)
-//   MIOS32_CORE_USE_FREERTOS - does programming_models/traditional/main.c
+//   MIOS32_CORE_USE_FREERTOS - does core/main.c
 //                              schedule the application Hooks (APP_Tick,
 //                              APP_MIDI_Tick, DIN/ENC/AIN/COM callbacks...)
 //                              via FreeRTOS tasks, or via a bare-metal

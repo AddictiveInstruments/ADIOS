@@ -26,7 +26,7 @@ all: project.elf project.bin
 project.elf: startup_stm32g030.o main.o
 	$(CC) $(LDFLAGS) startup_stm32g030.o main.o -o project.elf
 
-startup_stm32g030.o: $(MIOS32_PATH)/programming_models/traditional/startup_stm32g030.c
+startup_stm32g030.o: $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_stm32g030.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 main.o: main.c
