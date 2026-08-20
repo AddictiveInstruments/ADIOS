@@ -1,7 +1,7 @@
 Module X
 ===============================================================================
-Copyright (C) <year> <author> (<email>)
-Licensed for personal non-commercial use only.
-All other rights reserved.
+Copyright (C) 2026 Bruno Dupeyron (addictive.instruments@gmail.com)
+Licensed under MIT License.
+See the LICENSE file in the project root for full licence information.
 ===============================================================================
 
