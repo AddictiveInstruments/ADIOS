@@ -1,0 +1,85 @@
+/*
+ * Header file for ADIOS_UTILS - delay, timers, stopwatch, sign-of-life.
+ *
+ * ONE header for ONE implementation file: the four APIs below are grouped
+ * rather than merely stacked, because all four are built on the chip's
+ * timers and share adios/<FAMILY>/adios_utils.c.
+ *
+ *   DELAY     - busy-wait a number of microseconds.
+ *   TIMER     - call a function periodically from a hardware timer IRQ.
+ *   STOPWATCH - measure how long something takes, in microseconds.
+ *   SOL       - toggle a GPIO as a sign of life.
+ *
+ * Each section below says what to define to enable it and what to call.
+ *
+ * (ADIOS_TIMESTAMP was considered for inclusion here and deliberately left
+ * out: it is pure software - a u32 incremented by main.c's 1 mS tick - so
+ * it has no business in a file whose reason to exist is the chip's timers,
+ * and it keeps its own header and its own adios/common/adios_timestamp.c.)
+ *
+ * ==========================================================================
+ *
+ *  Copyright (C) 2026 Bruno Dupeyron (addictive.instruments@gmail.com)
+ *  Licensed under MIT License.
+ *  See the LICENSE file in the project root for full licence information.
+ *
+ * ==========================================================================
+ */
+
+#ifndef _ADIOS_UTILS_H
+#define _ADIOS_UTILS_H
+
+/////////////////////////////////////////////////////////////////////////////
+// DELAY - busy waiting with a microsecond resolution
+/////////////////////////////////////////////////////////////////////////////
+
+extern s32 ADIOS_DELAY_Init(u32 mode);
+extern s32 ADIOS_DELAY_Wait_uS(u16 uS);
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TIMER - periodic interrupts for the application
+/////////////////////////////////////////////////////////////////////////////
+
+extern s32 ADIOS_TIMER_Init(u8 timer, u32 period, void (*_irq_handler)(void), u8 irq_priority);
+extern s32 ADIOS_TIMER_ReInit(u8 timer, u32 period);
+extern s32 ADIOS_TIMER_DeInit(u8 timer);
+
+
+/////////////////////////////////////////////////////////////////////////////
+// STOPWATCH - one-shot elapsed-time measurement
+//
+// The counter is 16 bit: at the 100 uS resolution it overflows after 6.55
+// seconds, and ValueGet() then returns 0xffffffff for good until the
+// stopwatch is restarted. Opt-in with ADIOS_USE_STOPWATCH; the timer it
+// takes is STOPWATCH_TIMER_BASE (TIM17 on G0, TIM11 on F4), overridable.
+/////////////////////////////////////////////////////////////////////////////
+
+extern s32 ADIOS_STOPWATCH_Init(u32 resolution);
+extern s32 ADIOS_STOPWATCH_Stop(void);
+extern s32 ADIOS_STOPWATCH_Reset(void);
+extern u32 ADIOS_STOPWATCH_ValueGet(void);
+
+
+/////////////////////////////////////////////////////////////////////////////
+// SOL - sign of life
+//
+// A single GPIO toggled as a heartbeat, to show at a glance that the board
+// is still running.
+//
+//   #define ADIOS_USE_SOL 1
+//   #define ADIOS_SOL_PORT GPIOA          // see adios_utils.c for the
+//   #define ADIOS_SOL_PIN  LL_GPIO_PIN_5  // per-family default
+//
+// The pin is configured for you; call ADIOS_SOL_Tog() from a periodic hook
+// and watch the LED. Set/Clr are there when the state should mean something
+// rather than just blink.
+/////////////////////////////////////////////////////////////////////////////
+
+extern s32 ADIOS_SOL_Init(void);
+extern s32 ADIOS_SOL_Set(void);
+extern s32 ADIOS_SOL_Clr(void);
+extern s32 ADIOS_SOL_Tog(void);
+
+
+#endif /* _ADIOS_UTILS_H */

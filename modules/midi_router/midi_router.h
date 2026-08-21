@@ -21,7 +21,7 @@ extern "C" {
 // global definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// can be overruled from mios32_config.h
+// can be overruled from adios_config.h
 #ifndef MIDI_ROUTER_NUM_NODES
 #define MIDI_ROUTER_NUM_NODES  16
 #endif
@@ -33,7 +33,7 @@ extern "C" {
 #define MIDI_ROUTER_SYSEX_BUFFER_SIZE 1024
 #endif
 
-// enable this define in mios32_defines.h to allow MIDI_ROUTER_SendMIDIClockEvent(u8 evnt0, u32 bpm_tick)
+// enable this define in adios_defines.h to allow MIDI_ROUTER_SendMIDIClockEvent(u8 evnt0, u32 bpm_tick)
 // with bpm_tick > 0
 #ifndef MIDI_ROUTER_COMBINED_WITH_SEQ
 #define MIDI_ROUTER_COMBINED_WITH_SEQ 0
@@ -44,7 +44,7 @@ extern "C" {
 /////////////////////////////////////////////////////////////////////////////
 
 typedef struct {
-  u8 src_port; // don't use mios32_midi_port_t, since data width is important for save/restore function
+  u8 src_port; // don't use adios_midi_port_t, since data width is important for save/restore function
   u8 src_chn;  // 0 == Off, 1..16: specific source channel, 17 == All
   u8 dst_port;
   u8 dst_chn;  // 0 == Off, 1..16: specific source channel, 17 == All
@@ -57,14 +57,14 @@ typedef struct {
 
 extern s32 MIDI_ROUTER_Init(u32 mode);
 
-extern s32 MIDI_ROUTER_Receive(mios32_midi_port_t port, mios32_midi_package_t midi_package);
-extern s32 MIDI_ROUTER_ReceiveSysEx(mios32_midi_port_t port, u8 midi_in);
+extern s32 MIDI_ROUTER_Receive(adios_midi_port_t port, adios_midi_package_t midi_package);
+extern s32 MIDI_ROUTER_ReceiveSysEx(adios_midi_port_t port, u8 midi_in);
 
-extern s32 MIDI_ROUTER_MIDIClockInGet(mios32_midi_port_t port);
-extern s32 MIDI_ROUTER_MIDIClockInSet(mios32_midi_port_t port, u8 enable);
+extern s32 MIDI_ROUTER_MIDIClockInGet(adios_midi_port_t port);
+extern s32 MIDI_ROUTER_MIDIClockInSet(adios_midi_port_t port, u8 enable);
 
-extern s32 MIDI_ROUTER_MIDIClockOutGet(mios32_midi_port_t port);
-extern s32 MIDI_ROUTER_MIDIClockOutSet(mios32_midi_port_t port, u8 enable);
+extern s32 MIDI_ROUTER_MIDIClockOutGet(adios_midi_port_t port);
+extern s32 MIDI_ROUTER_MIDIClockOutSet(adios_midi_port_t port, u8 enable);
 
 extern s32 MIDI_ROUTER_SendMIDIClockEvent(u8 evnt0, u32 bpm_tick);
 

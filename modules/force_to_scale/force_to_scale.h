@@ -33,7 +33,7 @@ extern s32 FTS_Init(u32 mode);
 extern s32 FTS_NumGet(void);
 extern char *FTS_NameGet(u8 scale);
 
-extern s32 FTS_Note(mios32_midi_package_t *p, u8 scale, u8 root);
+extern s32 FTS_Note(adios_midi_package_t *p, u8 scale, u8 root);
 
 
 /////////////////////////////////////////////////////////////////////////////

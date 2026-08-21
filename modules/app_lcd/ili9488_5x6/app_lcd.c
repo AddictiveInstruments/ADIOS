@@ -1,6 +1,6 @@
 /*
  * Application specific OLED driver for up to 1 * SSD1322 (more toDo)
- * Referenced from MIOS32_LCD routines
+ * Referenced from ADIOS_LCD routines
  *
  * ==========================================================================
  *
@@ -15,7 +15,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <glcd_font.h>
 //#include <glcd_font_4bit.h>
 #include "app_lcd.h"
@@ -40,14 +40,14 @@
 #define APP_LCD_LITE 		LL_GPIO_PIN_0
 #define APP_LCD_RST     	LL_GPIO_PIN_12
 
-#define CS_ENA() 		MIOS32_SYS_STM_PINSET_0(APP_LCD_PORT, APP_LCD_CS)
-#define CS_DIS() 		MIOS32_SYS_STM_PINSET_1(APP_LCD_PORT, APP_LCD_CS)
-#define DC_COMMAND() 	MIOS32_SYS_STM_PINSET_0(APP_LCD_PORT, APP_LCD_DC)
-#define DC_DATA() 		MIOS32_SYS_STM_PINSET_1(APP_LCD_PORT, APP_LCD_DC)
-#define RST_IDLE() 			MIOS32_SYS_STM_PINSET_1(APP_LCD_PORT, APP_LCD_RST)
-#define RST_ACT() 			MIOS32_SYS_STM_PINSET_0(APP_LCD_PORT, APP_LCD_RST)
-#define LITE_ON() 			MIOS32_SYS_STM_PINSET_1(APP_LCD_PORT, APP_LCD_LITE)
-#define LITE_OFF() 			MIOS32_SYS_STM_PINSET_0(APP_LCD_PORT, APP_LCD_LITE)
+#define CS_ENA() 		ADIOS_SYS_STM_PINSET_0(APP_LCD_PORT, APP_LCD_CS)
+#define CS_DIS() 		ADIOS_SYS_STM_PINSET_1(APP_LCD_PORT, APP_LCD_CS)
+#define DC_COMMAND() 	ADIOS_SYS_STM_PINSET_0(APP_LCD_PORT, APP_LCD_DC)
+#define DC_DATA() 		ADIOS_SYS_STM_PINSET_1(APP_LCD_PORT, APP_LCD_DC)
+#define RST_IDLE() 			ADIOS_SYS_STM_PINSET_1(APP_LCD_PORT, APP_LCD_RST)
+#define RST_ACT() 			ADIOS_SYS_STM_PINSET_0(APP_LCD_PORT, APP_LCD_RST)
+#define LITE_ON() 			ADIOS_SYS_STM_PINSET_1(APP_LCD_PORT, APP_LCD_LITE)
+#define LITE_OFF() 			ADIOS_SYS_STM_PINSET_0(APP_LCD_PORT, APP_LCD_LITE)
 
 #define swap(a, b) { s16 t = a; a = b; b = t; }
 #define pgm_read_byte(addr) (*(const unsigned char *)(addr))
@@ -206,7 +206,7 @@ static const u16 beat[9] = { 0b0000000011000110,
 //static bool _cp437    = false;
 
 // font bitmap
-static mios32_lcd_bitmap_t font_bmp;
+static adios_lcd_bitmap_t font_bmp;
 
 /////////////////////////////////////////////////////////////////////////////
 // Initializes application specific LCD driver
@@ -232,7 +232,7 @@ s32 APP_LCD_Init(u32 mode)
 
 	// initialize SPI interface
 	// ensure that fast pin drivers are activated, do t before cause MISO pin is used as DC pin
-	MIOS32_SPI_IO_Init(APP_LCD_SPI, MIOS32_SPI_PIN_DRIVER_STRONG);
+	ADIOS_SPI_IO_Init(APP_LCD_SPI, ADIOS_SPI_PIN_DRIVER_STRONG);
 	/**/
 	LL_GPIO_ResetOutputPin(APP_LCD_PORT, APP_LCD_CS | APP_LCD_DC | APP_LCD_LITE);
 	LL_GPIO_SetOutputPin(APP_LCD_PORT, APP_LCD_RST);
@@ -251,19 +251,19 @@ s32 APP_LCD_Init(u32 mode)
 	// initialize SPI interface
 
 	// init SPI port
-	MIOS32_SPI_TransferModeInit(APP_LCD_SPI, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_8);
+	ADIOS_SPI_TransferModeInit(APP_LCD_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_8);
   
 	APP_LCD_FColourSet(APP_LCD_WHITE);		// set default(startup) forecolor to full white
 	APP_LCD_BColourSet(APP_LCD_BLACK);		// set default(startup) forecolor to full black
 
 	// dummy command
 	APP_LCD_Cmd(0x00);
-	for(u16 d=0; d<150; d++)MIOS32_DELAY_Wait_uS(1000);		// wait for 150ms
+	for(u16 d=0; d<150; d++)ADIOS_DELAY_Wait_uS(1000);		// wait for 150ms
 	// wait for some, ili9488 ^startup is very long :/
 	RST_ACT();		// clear RST
-	MIOS32_DELAY_Wait_uS(20000);	// wait for 20ms
+	ADIOS_DELAY_Wait_uS(20000);	// wait for 20ms
 	RST_IDLE();		// clear RST
-	for(u8 d=0; d<150; d++)MIOS32_DELAY_Wait_uS(1000);		// wait for 150ms
+	for(u8 d=0; d<150; d++)ADIOS_DELAY_Wait_uS(1000);		// wait for 150ms
 	APP_LCD_DelayedInit(0);
 return 0;
 }
@@ -271,7 +271,7 @@ return 0;
 /* HOST Mode */
 s32 APP_LCD_SPI_TransferModeInit(void){
 // init SPI port
-	MIOS32_SPI_TransferModeInit(APP_LCD_SPI, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_8);
+	ADIOS_SPI_TransferModeInit(APP_LCD_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_8);
 	return 0;
 }
 /////////////////////////////////////////////////////////////////////////////
@@ -282,11 +282,11 @@ s32 APP_LCD_SPI_TransferModeInit(void){
 s32 APP_LCD_DelayedInit(u32 mode){
 	//************* Start Initial Sequence **********//
 //	RST_ACT();													// starts hardware reset
-//	MIOS32_DELAY_Wait_uS(10000);							// wait for 10ms
+//	ADIOS_DELAY_Wait_uS(10000);							// wait for 10ms
 //	RST_IDLE();													// ends hardware reset
-//	MIOS32_DELAY_Wait_uS(10000);							// wait for 10ms
+//	ADIOS_DELAY_Wait_uS(10000);							// wait for 10ms
 //	APP_LCD_Cmd(APP_LCD_SWRESET);						// software reset
-//	for(u16 d=0; d<120; d++)MIOS32_DELAY_Wait_uS(1000);		// wait for 120ms
+//	for(u16 d=0; d<120; d++)ADIOS_DELAY_Wait_uS(1000);		// wait for 120ms
 
 	APP_LCD_Cmd(APP_LCD_ADJCTR3);
 	APP_LCD_Data(0xA9);
@@ -376,16 +376,16 @@ s32 APP_LCD_DelayedInit(u32 mode){
 	APP_LCD_Data(0x0F);
 
 	APP_LCD_Cmd(APP_LCD_SLPOUT);
-	for(u8 d=0; d<120; d++)MIOS32_DELAY_Wait_uS(1000);		// wait for 120ms
+	for(u8 d=0; d<120; d++)ADIOS_DELAY_Wait_uS(1000);		// wait for 120ms
 
 	APP_LCD_Cmd(0x21); //IPS
 	APP_LCD_Cmd(APP_LCD_DISPON);
-	for(u8 d=0; d<25; d++)MIOS32_DELAY_Wait_uS(1000);		// wait for 25ms
+	for(u8 d=0; d<25; d++)ADIOS_DELAY_Wait_uS(1000);		// wait for 25ms
 	//APP_LCD_Cmd(APP_LCD_ALLPIXON);      					// All pixels on(testing purpose)
 	APP_LCD_SetRotation(1);									// Set orientation
 
 	display_available = 1;
-	//return (display_available & (1 << mios32_lcd_device)) ? 0 : -1; // return -1 if display not available
+	//return (display_available & (1 << adios_lcd_device)) ? 0 : -1; // return -1 if display not available
 	return display_available;
 }
 
@@ -416,7 +416,7 @@ s32 APP_LCD_Data(u8 data)
 
 	DC_DATA();
 	CS_ENA();
-	MIOS32_SPI_TransferByte(APP_LCD_SPI, data);
+	ADIOS_SPI_TransferByte(APP_LCD_SPI, data);
 	CS_DIS();
   
 	return 0; // no error
@@ -432,7 +432,7 @@ s32 APP_LCD_Cmd(u8 cmd)
 {
 	DC_COMMAND();
 	CS_ENA();
-	MIOS32_SPI_TransferByte(APP_LCD_SPI, cmd);
+	ADIOS_SPI_TransferByte(APP_LCD_SPI, cmd);
 	CS_DIS();
 
 	return 0; // no error
@@ -511,8 +511,8 @@ s32 APP_LCD_Data_Multi(u8 *buff, size_t buff_size){
 	while (buff_size > 0){
 		u16 chunk_size = buff_size > 256 ? 256 : buff_size;
 		//HAL_SPI_Transmit(&hspi2, buff, chunk_size, HAL_MAX_DELAY);
-		//MIOS32_SPI_TransferByte(TFT_SPI, *buff);
-		MIOS32_SPI_TransferBlock(APP_LCD_SPI, buff, NULL, chunk_size, NULL);
+		//ADIOS_SPI_TransferByte(TFT_SPI, *buff);
+		ADIOS_SPI_TransferBlock(APP_LCD_SPI, buff, NULL, chunk_size, NULL);
 		buff += chunk_size;
 		buff_size -= chunk_size;
 	}
@@ -553,7 +553,7 @@ s32 APP_LCD_SendFastPixels(u32 n, u16 color)
 	CS_ENA();
 	while(cnt>0)
 	{
-		MIOS32_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, buf_size, NULL);
+		ADIOS_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, buf_size, NULL);
 		cnt -= 255;
 		if(cnt<255)buf_size=cnt;
 	}
@@ -634,7 +634,7 @@ s32 APP_LCD_DrawFastBeat(u16 x, u16 y, u16 color)
 	}
 	DC_DATA();
 	CS_ENA();
-	MIOS32_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, w*h*3, NULL);
+	ADIOS_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, w*h*3, NULL);
 	CS_DIS();
 	return 0; // no error
 }
@@ -675,7 +675,7 @@ s32 APP_LCD_DrawFastBall(u16 x, u16 y, u16 color)
 	}
 	DC_DATA();
 	CS_ENA();
-	MIOS32_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, 432, NULL);
+	ADIOS_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, 432, NULL);
 	CS_DIS();
 	return 0; // no error
 }
@@ -718,7 +718,7 @@ s32 APP_LCD_DrawFastNoire(u16 x, u16 y, u16 color)
 	}
 	DC_DATA();
 	CS_ENA();
-	MIOS32_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, 75, NULL);
+	ADIOS_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, 75, NULL);
 	CS_DIS();
 	return 0; // no error
 }
@@ -760,7 +760,7 @@ s32 APP_LCD_DrawFastCroche(u16 x, u16 y, u16 color)
 	}
 	DC_DATA();
 	CS_ENA();
-	MIOS32_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, 96, NULL);
+	ADIOS_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, 96, NULL);
 	CS_DIS();
 	return 0; // no error
 }
@@ -802,7 +802,7 @@ s32 APP_LCD_DrawFastCorner(u16 x, u16 y, u16 color)
 	}
 	DC_DATA();
 	CS_ENA();
-	MIOS32_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, 192, NULL);
+	ADIOS_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, 192, NULL);
 	CS_DIS();
 	return 0; // no error
 }
@@ -906,7 +906,7 @@ s32 APP_LCD_Digits_draw(int n, unsigned int xLoc, unsigned int yLoc, char cS, un
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_CursorSet(u16 column, u16 line)
 {
-  // app_lcd_x/y set by MIOS32_LCD_CursorSet() function
+  // app_lcd_x/y set by ADIOS_LCD_CursorSet() function
   return APP_LCD_GCursorSet(app_lcd_x, app_lcd_y);
 }
 
@@ -1026,7 +1026,7 @@ s32 APP_LCD_PrintChar(s16 x, s16 y, s16 w_stop, s16 ascii_offset, char c)
   if( !font_bmp.width )
     return -2;  // font not initialized yet!
 
-  mios32_lcd_bitmap_t char_bmp = font_bmp;
+  adios_lcd_bitmap_t char_bmp = font_bmp;
     u8 lines = (char_bmp.height/8) + ((char_bmp.height%8) ? 1 : 0);
     char_bmp.line_offset = char_bmp.width*16;   // font table in ASCII format(16 char by line)
     char_bmp.memory += ((u8)((c+ascii_offset)/16)*char_bmp.line_offset*lines) + (font_bmp.width*((c+ascii_offset)%16));
@@ -1074,7 +1074,7 @@ s32 APP_LCD_PrintString(s16 x, s16 y, s16 w_stop, u8 alignment, s16 ascii_offset
 	  str++;
   }
   if((w_stop!=0)&&(w_stop>offset)){
-	  mios32_lcd_bitmap_t char_bmp = font_bmp;
+	  adios_lcd_bitmap_t char_bmp = font_bmp;
 	  if(alignment==APP_LCD_STRING_ALIGN_LEFT){
 		  APP_LCD_Rectangle(x+offset, y, w_stop-offset, char_bmp.height, 0, 0, 2, app_lcd_back_color);
 	  }else   if(alignment==APP_LCD_STRING_ALIGN_RIGHT){
@@ -1107,7 +1107,7 @@ s32 APP_LCD_PrintFormattedString(s16 x, s16 y, s16 w_stop, u8 alignment, s16 asc
 }
 
 
-s32 APP_LCD_PrintProgress(mios32_lcd_bitmap_t bitmap, u32 progress_color, s16 x, s16 y, s16 w_stop, s16 height, s16 progress)
+s32 APP_LCD_PrintProgress(adios_lcd_bitmap_t bitmap, u32 progress_color, s16 x, s16 y, s16 w_stop, s16 height, s16 progress)
 {
 
   s32 status = 0;
@@ -1122,7 +1122,7 @@ s32 APP_LCD_PrintProgress(mios32_lcd_bitmap_t bitmap, u32 progress_color, s16 x,
 
 
   // Initialisation:
-  mios32_lcd_bitmap_t bmp = APP_LCD_BitmapInit((u8*)bitmap_array, width, height, width, Is1BIT);
+  adios_lcd_bitmap_t bmp = APP_LCD_BitmapInit((u8*)bitmap_array, width, height, width, Is1BIT);
   u8* bmp_mem_ptr = bmp.memory;
   //clear mem
   for(int l =0; l<lines; l++)for (int i=0; i<width;i++)*bmp_mem_ptr++ =0x00;
@@ -1136,7 +1136,7 @@ s32 APP_LCD_PrintProgress(mios32_lcd_bitmap_t bitmap, u32 progress_color, s16 x,
   for (int w=0; w<w_stop;w++){
 	  if(w>progress)APP_LCD_BColourSet(APP_LCD_BLACK);
 	  u8* bmp_mem_ptr = bitmap.memory +w;
-	  mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, height, w_stop, Is1BIT);
+	  adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, height, w_stop, Is1BIT);
 	  APP_LCD_SendBitmap(bmp2print, x+w, y);
   }
   APP_LCD_BColourSet(APP_LCD_BLACK);
@@ -1219,7 +1219,7 @@ s32 APP_LCD_FColourSetRGB(u32 rgb)
 //!   u8 bitmap_array[APP_OLED_BITMAP_SIZE];
 //!
 //!   // Initialisation:
-//!   mios32_lcd_bitmap_t bitmap = BM_LCD_BitmapClear(bitmap_array,
+//!   adios_lcd_bitmap_t bitmap = BM_LCD_BitmapClear(bitmap_array,
 //!   						    APP_LCD_NUM_X*APP_OLED_WIDTH,
 //!   						    APP_LCD_NUM_Y*APP_OLED_HEIGHT,
 //!   						    APP_LCD_NUM_X*APP_OLED_WIDTH.
@@ -1231,11 +1231,11 @@ s32 APP_LCD_FColourSetRGB(u32 rgb)
 //! \param[in] app_lcd_height app_lcd_height of the bitmap (usually APP_LCD_NUM_Y*APP_LCD_HEIGHT)
 //! \param[in] line_offset byte offset between each line (usually same value as app_lcd_width)
 //! \param[in] colour_depth how many bits are allocated by each pixel (usually APP_LCD_COLOUR_DEPTH)
-//! \return a configured bitmap as mios32_lcd_bitmap_t
+//! \return a configured bitmap as adios_lcd_bitmap_t
 /////////////////////////////////////////////////////////////////////////////
-mios32_lcd_bitmap_t APP_LCD_BitmapInit(u8 *memory, u16 app_lcd_width, u16 app_lcd_height, u16 line_offset, app_lcd_color_depth_t colour_depth)
+adios_lcd_bitmap_t APP_LCD_BitmapInit(u8 *memory, u16 app_lcd_width, u16 app_lcd_height, u16 line_offset, app_lcd_color_depth_t colour_depth)
 {
-  mios32_lcd_bitmap_t bitmap;
+  adios_lcd_bitmap_t bitmap;
   
   bitmap.memory = memory;
   bitmap.width = app_lcd_width;
@@ -1279,7 +1279,7 @@ s32 APP_LCD_PixelSet(u16 x, u16 y, u32 colour)
 // app_lcd_fore_color>0 is a white pixel for legacy 1Bit bimap
 // OUT: returns < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_BitmapPixelSet(mios32_lcd_bitmap_t bitmap, u16 x, u16 y, u32 colour)
+s32 APP_LCD_BitmapPixelSet(adios_lcd_bitmap_t bitmap, u16 x, u16 y, u32 colour)
 {
   if( x >= bitmap.width || y >= bitmap.height )
     return -1; // pixel is outside bitmap
@@ -1422,13 +1422,13 @@ return 1; // ok
 //! \param[in] destination bitmap, x/y position, fusion mod, character to be print
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_BitmapPrintChar(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, s16 ascii_offset, char c)
+s32 APP_LCD_BitmapPrintChar(adios_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, s16 ascii_offset, char c)
 {
   if( !font_bmp.width )
     return -2;  // font not initialized yet!
 
 #if 0
-    mios32_lcd_bitmap_t char_bmp = font_bmp;
+    adios_lcd_bitmap_t char_bmp = font_bmp;
     u8 lines = (char_bmp.height/8) + ((char_bmp.height%8) ? 1 : 0);
     char_bmp.line_offset = char_bmp.width*16;   // font table in ASCII format(16 char by line)
     char_bmp.memory += ((u8)((c+ascii_offset)/16)*char_bmp.line_offset*lines) + (font_bmp.width*((c+ascii_offset)%16));
@@ -1441,7 +1441,7 @@ s32 APP_LCD_BitmapPrintChar(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y
 
   // legacy 1bit to 1bit
   //if((bitmap.colour_depth == font_bmp.colour_depth) && (font_bmp.colour_depth == Is1BIT)) {
-    mios32_lcd_bitmap_t char_bmp = font_bmp;
+    adios_lcd_bitmap_t char_bmp = font_bmp;
     u8 height = (char_bmp.height/8) + ((char_bmp.height%8) ? 1 : 0);
     char_bmp.line_offset = char_bmp.width*16;   // font table in ASCII format(16 char by line)
     char_bmp.memory += ((u8)((c+ascii_offset)/16)*char_bmp.line_offset*height) + (font_bmp.width*((c+ascii_offset)%16));
@@ -1456,7 +1456,7 @@ s32 APP_LCD_BitmapPrintChar(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y
   else if((bitmap.colour_depth == font_bmp.colour_depth) && (font_bmp.colour_depth == Is16BIT)) {
 
 
-    mios32_lcd_bitmap_t char_bmp = font_bmp;
+    adios_lcd_bitmap_t char_bmp = font_bmp;
     char_bmp.line_offset = char_bmp.width*16;   // font table in ASCII format(16 char by line)
     char_bmp.memory += (char_bmp.width*char_bmp.height*((size_t)c & 0xf0)*2 + ((((size_t)c %16)*char_bmp.width)*2));
     APP_LCD_BitmapFusion(char_bmp, luma, bitmap, x, y, fusion);
@@ -1464,7 +1464,7 @@ s32 APP_LCD_BitmapPrintChar(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y
     // legacy 1bit to '16bit' depth
   }else if((bitmap.colour_depth == Is16BIT) && (font_bmp.colour_depth == Is1BIT)) {
 
-    mios32_lcd_bitmap_t char_bmp = font_bmp;
+    adios_lcd_bitmap_t char_bmp = font_bmp;
     u8 lines = (char_bmp.height/8) + ((char_bmp.height%8) ? 1 : 0);
     char_bmp.line_offset = char_bmp.width*16;   // font table in ASCII format(16 char by line)
     char_bmp.memory += ((u8)(c/16)*char_bmp.line_offset*lines) + (font_bmp.width*(c%16));
@@ -1524,10 +1524,10 @@ s32 APP_LCD_BitmapPrintChar(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y
 			memory_ptr = bitmap.memory + (line * bitmap.width);
 
 		}
-		//if(line==1)MIOS32_BOARD_LED_Set(1, 1);
+		//if(line==1)ADIOS_BOARD_LED_Set(1, 1);
 		DC_DATA();
 		CS_ENA();
-		MIOS32_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, buf_size, NULL);
+		ADIOS_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, buf_size, NULL);
 		CS_DIS();
 #endif
     //APP_LCD_BitmapFusion(char_bmp, luma, bitmap, x, y, fusion);
@@ -1548,7 +1548,7 @@ s32 APP_LCD_BitmapPrintChar(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y
 //! \param[in]
 //! \return < 0 on errors, or string length in pixels
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_BitmapPrintString(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, u8 alignment, s16 ascii_offset, const char *str)
+s32 APP_LCD_BitmapPrintString(adios_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, u8 alignment, s16 ascii_offset, const char *str)
 {
   s32 status = 0;
   u16 offset = 0;
@@ -1581,7 +1581,7 @@ s32 APP_LCD_BitmapPrintString(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16
 //! \param ... additional arguments
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_BitmapPrintFormattedString(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, u8 alignment, s16 ascii_offset, const char *format, ...)
+s32 APP_LCD_BitmapPrintFormattedString(adios_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, u8 alignment, s16 ascii_offset, const char *format, ...)
 {
 #if 1
   char buffer[64]; // TODO: tmp!!! Provide a streamed COM method later!
@@ -1600,7 +1600,7 @@ s32 APP_LCD_BitmapPrintFormattedString(mios32_lcd_bitmap_t bitmap, float luma, s
 // IN: x1/y1 first point, x2/y2 second point, border(e.g. 0x55 is dot line) and fill 0=none 1=empty 2=fill
 // OUT: returns < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_BitmapRectangle(mios32_lcd_bitmap_t bitmap, s16 x, s16 y, u16 app_lcd_width, u16 app_lcd_height, u8 border, u32 bd_color, u8 fill, u32 back_color)
+s32 APP_LCD_BitmapRectangle(adios_lcd_bitmap_t bitmap, s16 x, s16 y, u16 app_lcd_width, u16 app_lcd_height, u8 border, u32 bd_color, u8 fill, u32 back_color)
 {
   if( (x >= bitmap.width) || (y >= bitmap.height) || ((x + app_lcd_width) < 0) || ((y + app_lcd_height) < 0) )return -1; // pixel is outside bm_cs_lcd_screen_bmp
 #if 1
@@ -1660,7 +1660,7 @@ s32 APP_LCD_BitmapRectangle(mios32_lcd_bitmap_t bitmap, s16 x, s16 y, u16 app_lc
 // IN: bm_cs_lcd_screen_bmp, x/y position and colour value (value range depends on APP_LCD_COLOUR_DEPTH)
 // OUT: returns < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_BitmapByteSet(mios32_lcd_bitmap_t bitmap, s16 x, s16 y, u8 value)
+s32 APP_LCD_BitmapByteSet(adios_lcd_bitmap_t bitmap, s16 x, s16 y, u8 value)
 {
   if( x >= bitmap.width || y >= bitmap.height || x < 0 || ((y + 8) < 0))
     return -1; // pixel is outside bm_cs_lcd_screen_bmp
@@ -1716,7 +1716,7 @@ u16 APP_LCD_HelpPixelLuma(u16 pix_mem, float luma)
 //!
 //! OUT: returns < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_Bitmap16BitLuma(mios32_lcd_bitmap_t bitmap, s16 x, s16 y, u16 app_lcd_width, u16 app_lcd_height, float luma)
+s32 APP_LCD_Bitmap16BitLuma(adios_lcd_bitmap_t bitmap, s16 x, s16 y, u16 app_lcd_width, u16 app_lcd_height, float luma)
 {
   if( (x >= bitmap.width) || (y >= bitmap.height) || ((x+app_lcd_width) < 0) || ((y+app_lcd_height) < 0))
     return -2;  // bitmap is outside screen
@@ -1828,7 +1828,7 @@ u16 APP_LCD_PixelFusion(u16 fore_pix, float fore_luma, u16 back_pix, float back_
 //!   XOR, xor bit or nibble (pixels)
 //! \return < 0 on errors, resulting bimap is in destination bitmap
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_BitmapFusion(mios32_lcd_bitmap_t top_bmp, float top_luma, mios32_lcd_bitmap_t bmp, s16 top_pos_x, s16 top_pos_y, app_lcd_fusion_t fusion)
+s32 APP_LCD_BitmapFusion(adios_lcd_bitmap_t top_bmp, float top_luma, adios_lcd_bitmap_t bmp, s16 top_pos_x, s16 top_pos_y, app_lcd_fusion_t fusion)
 {
   //if( (top_pos_x >= bmp.width) || (top_pos_y >= bmp.height) || ((top_pos_x+top_bmp.width) < 0) || ((top_pos_y+top_bmp.height) < 0))
     //return -2;  // bitmap is outside screen
@@ -1853,7 +1853,7 @@ s32 APP_LCD_BitmapFusion(mios32_lcd_bitmap_t top_bmp, float top_luma, mios32_lcd
 // IN: bitmap
 // OUT: returns < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_SendBitmap(mios32_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
+s32 APP_LCD_SendBitmap(adios_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
 {
 
 	if( x_pos >= app_lcd_width || y_pos >= app_lcd_height )
@@ -1864,11 +1864,11 @@ s32 APP_LCD_SendBitmap(mios32_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
 		bitmap.height = app_lcd_height - y_pos;
 
 #if 0
-	//if( !MIOS32_LCD_TypeIsGLCD() )
+	//if( !ADIOS_LCD_TypeIsGLCD() )
 	//return -1; // no GLCD
 
 	// abort if max. app_lcd_width reached
-	//if( app_lcd_x >= mios32_lcd_parameters.app_lcd_width )
+	//if( app_lcd_x >= adios_lcd_parameters.app_lcd_width )
 	//return -2;
 
 	/* native 16bit depth. r(15:11), g(10:5), b(4:0)   */
@@ -1942,7 +1942,7 @@ s32 APP_LCD_SendBitmap(mios32_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
 
 			DC_DATA();
 			CS_ENA();
-			MIOS32_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, buf_size, NULL);
+			ADIOS_SPI_TransferBlock(APP_LCD_SPI, frm_buf, NULL, buf_size, NULL);
 			CS_DIS();
 
 
@@ -1963,14 +1963,14 @@ s32 APP_LCD_SendBitmap(mios32_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
 // IN: bitmap
 // OUT: returns < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_BitmapHBoundaryPrint(mios32_lcd_bitmap_t bitmap, u16 b_x, u16 b_width)
+s32 APP_LCD_BitmapHBoundaryPrint(adios_lcd_bitmap_t bitmap, u16 b_x, u16 b_width)
 {
 #if 0
-  //if( !MIOS32_LCD_TypeIsGLCD() )
+  //if( !ADIOS_LCD_TypeIsGLCD() )
   //return -1; // no GLCD
   
   // abort if max. app_lcd_width reached
-  //if( app_lcd_x >= mios32_lcd_parameters.app_lcd_width )
+  //if( app_lcd_x >= adios_lcd_parameters.app_lcd_width )
   //return -2;
   
   /* native 16bit depth. r(15:11), g(10:5), b(4:0)   */
@@ -2045,14 +2045,14 @@ s32 APP_LCD_BitmapHBoundaryPrint(mios32_lcd_bitmap_t bitmap, u16 b_x, u16 b_widt
 // IN: bitmap
 // OUT: returns < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap)
+s32 APP_LCD_BitmapPrint(adios_lcd_bitmap_t bitmap)
 {
 #if 0
-  //if( !MIOS32_LCD_TypeIsGLCD() )
+  //if( !ADIOS_LCD_TypeIsGLCD() )
   //return -1; // no GLCD
   
   // abort if max. app_lcd_width reached
-  //if( app_lcd_x >= mios32_lcd_parameters.app_lcd_width )
+  //if( app_lcd_x >= adios_lcd_parameters.app_lcd_width )
   //return -2;
   
   /* native 16bit depth. r(15:11), g(10:5), b(4:0)   */

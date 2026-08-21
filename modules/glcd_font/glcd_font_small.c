@@ -1,6 +1,6 @@
 // converted with 'convpix_c.pl glcd_font_small.xpm'
 
-#include <mios32.h>
+#include <adios.h>
 
 const u8 GLCD_FONT_SMALL[] = {
 4, 1*8, 0, 4, // width, height, X0 offset, char offset

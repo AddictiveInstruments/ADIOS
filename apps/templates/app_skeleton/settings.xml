@@ -9,15 +9,15 @@
   <section name="org.eclipse.cdt.internal.ui.wizards.settingswizards.Macros">
     <language id="org.eclipse.cdt.core.gcc" name="C Source File">
       <macro>
-        <name>MIOS32_PROCESSOR_STM32F405RG</name>
+        <name>ADIOS_PROCESSOR_STM32F405RG</name>
         <value>1</value>
       </macro>
       <macro>
-        <name>MIOS32_BOARD_MBHP_DIPCOREF4</name>
+        <name>ADIOS_BOARD_MBHP_DIPCOREF4</name>
         <value>1</value>
       </macro>
       <macro>
-        <name>MIOS32_FAMILY_STM32F4xx</name>
+        <name>ADIOS_FAMILY_STM32F4xx</name>
         <value>1</value>
       </macro>
       <macro>

@@ -3,10 +3,10 @@
 //! Generic Notestack Module
 //!
 //! Usage Examples:
-//!   $MIOS32_PATH/apps/tutorial/016_aout
-//!   $MIOS32_PATH/apps/tutorial/017_sequencer
-//!   $MIOS32_PATH/apps/tutorial/018_arpeggiator
-//!   $MIOS32_PATH/apps/sequencers/midibox_seq_v4/core/seq_midi_in.c
+//!   $ADIOS_PATH/apps/tutorial/016_aout
+//!   $ADIOS_PATH/apps/tutorial/017_sequencer
+//!   $ADIOS_PATH/apps/tutorial/018_arpeggiator
+//!   $ADIOS_PATH/apps/sequencers/midibox_seq_v4/core/seq_midi_in.c
 //!
 //! \{
 /* ==========================================================================
@@ -22,7 +22,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include "notestack.h"
 
 
@@ -269,9 +269,9 @@ s32 NOTESTACK_SendDebugMessage(notestack_t *n)
   const char note_name[12][3] = { "C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-" };
   int i;
   
-  MIOS32_MIDI_SendDebugMessage("Notestack Content (len=%d, size=%d)\n", n->len, n->size);
+  ADIOS_MIDI_SendDebugMessage("Notestack Content (len=%d, size=%d)\n", n->len, n->size);
   for(i=0; i<n->len; ++i) {
-    MIOS32_MIDI_SendDebugMessage("%02d: %s%-3d (0x%02x) %s tag:0x%02x\n",
+    ADIOS_MIDI_SendDebugMessage("%02d: %s%-3d (0x%02x) %s tag:0x%02x\n",
                                  i,
                                  note_name[n->note_items[i].note%12], (int)(n->note_items[i].note/12)-2,
                                  n->note_items[i].note,

@@ -1,7 +1,7 @@
 //
 // converted with 'convpix glcd_font_normal_inv2.xpm'
 
-#include <mios32.h>
+#include <adios.h>
 
 const u8 GLCD_FONT_NORMAL_INV[] = {
 6, 1*8, 0, 6, // width, height, X0 offset, char offset

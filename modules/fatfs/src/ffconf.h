@@ -12,7 +12,7 @@
 
 // TK: include application specific configuration
 // search for FATFS_* defines
-#include "mios32_config.h"
+#include "adios_config.h"
 
 /*---------------------------------------------------------------------------/
 / Function and Buffer Configurations
@@ -90,7 +90,7 @@
 */
 
 
-// TK: options can be enabled in mios32_config.h
+// TK: options can be enabled in adios_config.h
 #ifdef FATFS_USE_LFN
 # define _USE_LFN FATFS_USE_LFN
 #else

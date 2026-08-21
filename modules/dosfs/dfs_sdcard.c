@@ -1,5 +1,5 @@
 /*
- * Access layer between DOSFS and MIOS32
+ * Access layer between DOSFS and ADIOS
  * See README_1st.txt for details
  *
  */
@@ -8,13 +8,13 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 
 #include <sys/types.h>
 #include "dosfs.h"
 
 /////////////////////////////////////////////////////////////////////////////
-// for optional debugging messages via DEBUG_MSG (defined in mios32_config.h)
+// for optional debugging messages via DEBUG_MSG (defined in adios_config.h)
 /////////////////////////////////////////////////////////////////////////////
 
 // Note: verbose level 1 is default - it prints error messages
@@ -91,9 +91,9 @@ uint32_t DFS_ReadSector(uint8_t unit, uint8_t *buffer, uint32_t sector, uint32_t
 
   // forward to MIOS
   s32 status;
-  if( (status=MIOS32_SDCARD_SectorRead(sector, buffer)) < 0 ) {
+  if( (status=ADIOS_SDCARD_SectorRead(sector, buffer)) < 0 ) {
 #if DEBUG_VERBOSE_LEVEL >= 1
-    MIOS32_MIDI_SendDebugMessage("[DFS_ReadSector] Error during reading sector %u, status %d\n", sector, status);
+    ADIOS_MIDI_SendDebugMessage("[DFS_ReadSector] Error during reading sector %u, status %d\n", sector, status);
 #endif
     return 3; // cannot access SD Card
   }
@@ -121,9 +121,9 @@ uint32_t DFS_WriteSector(uint8_t unit, uint8_t *buffer, uint32_t sector, uint32_
 
   // forward to MIOS
   s32 status;
-  if( (status=MIOS32_SDCARD_SectorWrite(sector, buffer)) < 0 ) {
+  if( (status=ADIOS_SDCARD_SectorWrite(sector, buffer)) < 0 ) {
 #if DEBUG_VERBOSE_LEVEL >= 1
-    MIOS32_MIDI_SendDebugMessage("[DFS_WriteSector] Error during writing sector %u, status %d\n", sector, status);
+    ADIOS_MIDI_SendDebugMessage("[DFS_WriteSector] Error during writing sector %u, status %d\n", sector, status);
 #endif
     return 3; // cannot access SD Card
   }

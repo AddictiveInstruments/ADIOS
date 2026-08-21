@@ -21,9 +21,9 @@ extern "C" {
 // Global definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// MIOS32 timer used by BPM generator (0..2)
-#ifndef SEQ_BPM_MIOS32_TIMER_NUM
-#define SEQ_BPM_MIOS32_TIMER_NUM 0
+// ADIOS timer used by BPM generator (0..2)
+#ifndef SEQ_BPM_ADIOS_TIMER_NUM
+#define SEQ_BPM_ADIOS_TIMER_NUM 0
 #endif
 
 

@@ -33,7 +33,7 @@
 	and performs data transfer according to the BOT protocol.
 */
 
-#include <mios32.h>
+#include <adios.h>
 #include <string.h>
 
 #include "usbdebug.h"

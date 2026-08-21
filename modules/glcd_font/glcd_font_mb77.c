@@ -1,6 +1,6 @@
 // converted with 'convpix_c.pl glcd_font_small.xpm'
 
-#include <mios32.h>
+#include <adios.h>
 
 const u8 GLCD_FONT_DOG_HBAR[] = {
 1, 1*8, 0, 1, // width, height, X0 offset, char offset

@@ -6,7 +6,7 @@
 #define _5X6_DECOD_H_
 
 /* Includes ------------------------------------------------------------------*/
-#include <mios32.h>
+#include <adios.h>
 
 /* Structures ----------------------------------------------------------------*/
 typedef union {
@@ -16,12 +16,12 @@ typedef union {
   struct {
     u16 measure:1;
     u16 tempo:1;
-    u16 pitch:1; // mios32_midi_event_t
+    u16 pitch:1; // adios_midi_event_t
     u16 level:1;
     u16 shuffle:1;
     u16 flam:1;
     u16 accent:1;
-    u16 grp_pat:1; // mios32_midi_chn_t
+    u16 grp_pat:1; // adios_midi_chn_t
     u16 chain:1;
     u16 block:1;
     u16 sync:1;

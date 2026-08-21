@@ -9,7 +9,7 @@
 # (device ID, fastboot...) across the update, and resets into the fresh
 # bootloader on MIOS Studio's final 0x7f. See the BSL_UPDATER sections in
 # ../src/bsl_sysex.c and ../src/main.c - this build reuses the bootloader's
-# own sources, only mios32_config.h (in THIS directory) and the -DBSL_UPDATER
+# own sources, only adios_config.h (in THIS directory) and the -DBSL_UPDATER
 # switch differ.
 #
 # The output hex carries BOTH stages in disjoint address ranges: the tool
@@ -23,19 +23,19 @@
 PROCESSOR ?= STM32G070CB
 
 # self-locating repo root (this directory is 2 levels below it) - an exported
-# MIOS32_PATH still overrides, same convention as the app Makefiles
-MIOS32_PATH ?= ../..
+# ADIOS_PATH still overrides, same convention as the app Makefiles
+ADIOS_PATH ?= ../..
 
 # same family/board/startup derivations as ../src/Makefile.bsl - one default
 # board per family, never per-chip conditionals
 ifeq ($(findstring STM32F4,$(PROCESSOR)),STM32F4)
 FAMILY    = 	STM32F4xx
 BOARD	  = 	MBHP_DIPCOREF4
-STARTUP_FILE = $(MIOS32_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c
+STARTUP_FILE = $(ADIOS_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c
 else
 FAMILY    = 	STM32G0xx
 BOARD	  = 	STM32G0GENERIC
-STARTUP_FILE = $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
+STARTUP_FILE = $(ADIOS_PATH)/etc/startup/STM32G0xx/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
 endif
 
 LCD       =     dummy
@@ -46,19 +46,19 @@ LCD       =     dummy
 ################################################################################
 
 # the bootloader's own sources, reused as-is (BSL_UPDATER sections included
-# via the define below). Spelled with $(MIOS32_PATH)/ so common.mk's object
+# via the define below). Spelled with $(ADIOS_PATH)/ so common.mk's object
 # rule rebases them into project_build/ (a literal "../src/" would walk out).
 THUMB_SOURCE    = $(STARTUP_FILE) \
-				$(MIOS32_PATH)/bootloader/src/main.c \
-				$(MIOS32_PATH)/bootloader/src/bsl_sysex.c
+				$(ADIOS_PATH)/bootloader/src/main.c \
+				$(ADIOS_PATH)/bootloader/src/bsl_sysex.c
 
 THUMB_AS_SOURCE =
 ARM_SOURCE      =
 ARM_AS_SOURCE   =
 
-# THIS directory first: its mios32_config.h (core type "UPDATER") must win
+# THIS directory first: its adios_config.h (core type "UPDATER") must win
 # over the bootloader's own copy in ../src
-C_INCLUDE = 	-I . -I $(MIOS32_PATH)/bootloader/src -I $(MIOS32_PATH)/core
+C_INCLUDE = 	-I . -I $(ADIOS_PATH)/bootloader/src -I $(ADIOS_PATH)/core
 A_INCLUDE = 	-I .
 
 LIBS =
@@ -97,25 +97,25 @@ endif
 # Updater layout generation - the same two-pass boundary mechanism as every
 # app build, switched to updater mode: measures the CURRENT bootloader,
 # derives the boundary, and generates project_build/cpu_updater.ld (this
-# build's own window) + mios32_bsl_boundary.h (boundary + updater origin).
+# build's own window) + adios_bsl_boundary.h (boundary + updater origin).
 ################################################################################
-LD_TEMPLATE = $(MIOS32_PATH)/etc/ld/$(FAMILY).ld.S
+LD_TEMPLATE = $(ADIOS_PATH)/etc/ld/$(FAMILY).ld.S
 
 # BSL_RELAY_SRC (passed by the app's common.mk) names the directory whose
-# mios32_config.h carries this board's MIDI wiring - THIS directory holds
+# adios_config.h carries this board's MIDI wiring - THIS directory holds
 # none, deliberately: the updater talks on the same connector as the
 # bootloader it installs, which is a fact about the instrument, not about
 # the tool. Without it the build stops on the "no board MIDI wiring" guard
-# in mios32_config.h rather than producing a tool that never answers.
-# MIOS32_DEVICE_ID_PERSIST arrives from the same place and for a sharper
+# in adios_config.h rather than producing a tool that never answers.
+# ADIOS_DEVICE_ID_PERSIST arrives from the same place and for a sharper
 # reason: this script rebuilds bootloader/src and regenerates the embedded
 # .inc the application links, so a bootloader built here WITHOUT the switch
 # overwrites the one the application's own pass built WITH it.
-# MIOS32_USERDATA_PAGES arrives the same way: this tool is linked over
+# ADIOS_USERDATA_PAGES arrives the same way: this tool is linked over
 # application space up to the top of flash, so it has to know which pages up
 # there are the application's own data and must stay out of its region -
 # the same reservation the application's linker script already honours.
-GEN_BSL_BOUNDARY_STATUS := $(shell BSL_BOUNDARY_MODE=updater MIOS32_PATH=$(MIOS32_PATH) ADIOS_BSL_PADDING=$(MIOS32_BSL_PADDING) BSL_RELAY_SRC=$(BSL_RELAY_SRC) MIOS32_DEVICE_ID_PERSIST=$(MIOS32_DEVICE_ID_PERSIST) ADIOS_USERDATA_PAGES=$(MIOS32_USERDATA_PAGES) $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
+GEN_BSL_BOUNDARY_STATUS := $(shell BSL_BOUNDARY_MODE=updater ADIOS_PATH=$(ADIOS_PATH) ADIOS_BSL_PADDING=$(ADIOS_BSL_PADDING) BSL_RELAY_SRC=$(BSL_RELAY_SRC) ADIOS_DEVICE_ID_PERSIST=$(ADIOS_DEVICE_ID_PERSIST) ADIOS_USERDATA_PAGES=$(ADIOS_USERDATA_PAGES) $(ADIOS_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
 ifneq ($(GEN_BSL_BOUNDARY_STATUS),0)
 $(error gen_bsl_boundary.sh failed (exit $(GEN_BSL_BOUNDARY_STATUS)) - see its messages above)
 endif
@@ -125,11 +125,11 @@ endif
 # Include source modules via additional makefiles
 ################################################################################
 
-# add MIOS32 sources
-include $(MIOS32_PATH)/mios32/mios32.mk
+# add ADIOS sources
+include $(ADIOS_PATH)/adios/adios.mk
 
 # common make rules
-include $(MIOS32_PATH)/include/makefile/common.mk
+include $(ADIOS_PATH)/include/makefile/common.mk
 
 
 ################################################################################
@@ -148,7 +148,7 @@ all: updater_$(PROCESSOR).hex
 
 updater_$(PROCESSOR).hex: project_build/$(PROJECT).elf
 	$(OBJCOPY) -O ihex $< $@.tool
-	$(OBJCOPY) -O ihex $(MIOS32_PATH)/bootloader/src/project_build/$(PROJECT).elf $@.payload
+	$(OBJCOPY) -O ihex $(ADIOS_PATH)/bootloader/src/project_build/$(PROJECT).elf $@.payload
 	grep -v '^:00000001FF' $@.tool > $@
 	cat $@.payload >> $@
 	rm -f $@.tool $@.payload

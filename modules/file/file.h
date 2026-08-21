@@ -131,7 +131,7 @@ extern s32 FILE_FindPreviousDir(char *path, char *dirname, char *prev_dirname);
 extern s32 FILE_FindNextFile(char *path, char *filename, char *ext_filter, char *next_filename);
 extern s32 FILE_FindPreviousFile(char *path, char *filename, char *ext_filter, char *prev_filename);
 
-extern s32 FILE_SendSyxDump(char *path, mios32_midi_port_t port, u32 ms_delay_between_dumps);
+extern s32 FILE_SendSyxDump(char *path, adios_midi_port_t port, u32 ms_delay_between_dumps);
 
   extern s32 FILE_CreateTar(char *filename, char *src_path, u8 exclude_tar_files, u8 max_depth);
 extern s32 FILE_BackupDiskAutoName(u8 max_depth);
@@ -140,7 +140,7 @@ extern s32 FILE_PrintSDCardInfos(void);
 
 extern s32 FILE_SendErrorMessage(s32 error_status);
 
-extern s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command);
+extern s32 FILE_BrowserHandler(adios_midi_port_t port, char *command);
 extern s32 FILE_BrowserUploadCallback_Init(s32 (*callback_upload)(char *filename));
 
 

@@ -2,34 +2,34 @@
 
 # where is FreeRTOS located
 
-FREE_RTOS      =    $(MIOS32_PATH)/FreeRTOS
+FREE_RTOS      =    $(ADIOS_PATH)/FreeRTOS
 
-# Make-level mirror of the MIOS32_APP_USE_FREERTOS opt-in switch
-# (include/mios32/mios32_sys.h) - decides whether the FreeRTOS kernel
+# Make-level mirror of the ADIOS_APP_USE_FREERTOS opt-in switch
+# (include/adios/adios_sys.h) - decides whether the FreeRTOS kernel
 # sources below are even compiled/linked. Needed here, at the Make level,
 # because the C-side #ifdef alone isn't enough: tasks.c/port.c/etc are
 # always-referenced-by-each-other units with their own undefined external
 # symbols (e.g. tasks.c unconditionally needs vApplicationStackOverflowHook,
 # port.c defines SysTick_Handler) - the linker can't --gc-sections its way
 # out of an unresolved reference or a symbol collision, only genuinely dead
-# code. Same tiered default as mios32_sys.h (RAM<=8K or FLASH<=32K -> off) -
+# code. Same tiered default as adios_sys.h (RAM<=8K or FLASH<=32K -> off) -
 # keep both lists in sync if you add a processor to either one. A project
 # can override this Make variable directly (on the command line or its own
 # Makefile) - but if it does, it must also override the matching
-# MIOS32_APP_USE_FREERTOS #define in its mios32_config.h to match, there's
+# ADIOS_APP_USE_FREERTOS #define in its adios_config.h to match, there's
 # no automatic link between the two.
-ifndef MIOS32_APP_USE_FREERTOS
+ifndef ADIOS_APP_USE_FREERTOS
 ifeq ($(PROCESSOR),STM32G030K6)
-MIOS32_APP_USE_FREERTOS = 0
+ADIOS_APP_USE_FREERTOS = 0
 endif
 ifeq ($(PROCESSOR),STM32G031K8)
-MIOS32_APP_USE_FREERTOS = 0
+ADIOS_APP_USE_FREERTOS = 0
 endif
-MIOS32_APP_USE_FREERTOS ?= 1
+ADIOS_APP_USE_FREERTOS ?= 1
 endif
 
 # extend include path
-C_INCLUDE += 	-I $(MIOS32_PATH)/core \
+C_INCLUDE += 	-I $(ADIOS_PATH)/core \
 		-I $(FREE_RTOS)/Source/include \
 		-I $(FREE_RTOS)/Source/portable/GCC/ARM_CM3 \
 		-I $(FREE_RTOS)/Source/portable/MemMang \
@@ -67,18 +67,18 @@ C_INCLUDE += 	-I $(MIOS32_PATH)/core \
 # table matches whichever it carries, reproducing the old exact-then-
 # fallback filename lookup with no logic on this side. Verified that no chip
 # has both of its forms in the table, so the two can never collide.
-LD_TEMPLATE_S    = $(MIOS32_PATH)/etc/ld/$(FAMILY).ld.S
+LD_TEMPLATE_S    = $(ADIOS_PATH)/etc/ld/$(FAMILY).ld.S
 LD_CHIP_DEFS     = -DADIOS_LD_CHIP_$(PROCESSOR) -DADIOS_LD_CHIP_$(shell echo $(PROCESSOR) | sed -E 's/^(.{9}).(.)$$/\1x\2/')
-LD_PREPROCESS    = $(CC) -E -x assembler-with-cpp -P -I $(MIOS32_PATH)/etc/ld $(LD_CHIP_DEFS)
-STARTUP_FILE     = $(MIOS32_PATH)/etc/startup/$(FAMILY)/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
+LD_PREPROCESS    = $(CC) -E -x assembler-with-cpp -P -I $(ADIOS_PATH)/etc/ld $(LD_CHIP_DEFS)
+STARTUP_FILE     = $(ADIOS_PATH)/etc/startup/$(FAMILY)/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
 
 ifeq ($(FAMILY),STM32F4xx)
 CFLAGS    +=    -DGCC_ARMCM3
 # add modules to thumb sources
 THUMB_SOURCE += \
-		$(MIOS32_PATH)/core/main.c
+		$(ADIOS_PATH)/core/main.c
 
-ifneq ($(MIOS32_APP_USE_FREERTOS),0)
+ifneq ($(ADIOS_APP_USE_FREERTOS),0)
 THUMB_SOURCE += \
 		$(FREE_RTOS)/Source/tasks.c \
 		$(FREE_RTOS)/Source/list.c \
@@ -92,15 +92,15 @@ endif
 # below) - the Cortex-M4 vector table layout doesn't vary by subfamily the
 # way G0's does, confirmed against ST's own CMSIS gcc templates (only one
 # GCC startup .s exists anywhere in ST's F4xx device pack).
-THUMB_SOURCE += $(MIOS32_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c
+THUMB_SOURCE += $(ADIOS_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c
 endif
 ifeq ($(FAMILY),STM32G0xx)
 CFLAGS    +=    -DGCC_ARMCM0
 # add modules to thumb sources
 THUMB_SOURCE += \
-		$(MIOS32_PATH)/core/main.c
+		$(ADIOS_PATH)/core/main.c
 
-ifneq ($(MIOS32_APP_USE_FREERTOS),0)
+ifneq ($(ADIOS_APP_USE_FREERTOS),0)
 THUMB_SOURCE += \
 		$(FREE_RTOS)/Source/tasks.c \
 		$(FREE_RTOS)/Source/list.c \
@@ -116,12 +116,12 @@ endif
 
 ################################################################################
 # Automatic bootloader/app flash boundary (opt-in): a project sets
-#   MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
+#   ADIOS_USE_DYNAMIC_BSL_BOUNDARY = 1
 # in its own Makefile BEFORE including this file to get a real, measured
 # bootloader/app split (etc/gen_bsl_boundary.sh) instead of a project-local
 # noboot .ld. Builds the bootloader for $(PROCESSOR), measures its real size,
 # and generates a project-local linker script (project_build/cpu_app.ld) + C
-# header (mios32_bsl_boundary.h, picked up automatically by mios32_sys.h) with
+# header (adios_bsl_boundary.h, picked up automatically by adios_sys.h) with
 # the boundary rounded to a flash page/sector - instead of a hand-picked
 # hardcoded constant. This also regenerates the bootloader's own linker
 # script and embedded-image .inc file, so the bootloader and app always agree
@@ -136,25 +136,25 @@ endif
 #               measured boundary. LD_FILE becomes the generated cpu_app.ld.
 #   static   -> a plain rule below preprocesses it into project_build/cpu.ld,
 #               the bootloader region reserved at a FIXED size.
-# A third mode sits on the other axis: MIOS32_USE_BOOTLOADER = 0 means there
+# A third mode sits on the other axis: ADIOS_USE_BOOTLOADER = 0 means there
 # is no bootloader at all - the application is linked at the base of flash and
 # owns all of it. The boundary question then has no meaning, hence the guard
 # just below.
 # PROJECT_DIR is $(CURDIR) - the directory make was invoked from, i.e. the
 # app's own folder - so this generalizes to any project without hardcoding it.
 ################################################################################
-MIOS32_USE_BOOTLOADER ?= 1
-ifeq ($(MIOS32_USE_BOOTLOADER),0)
-ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
-$(error MIOS32_USE_BOOTLOADER = 0 and MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1 contradict each other: a boundary cannot be measured against a bootloader this project does not have. Drop one of the two.)
+ADIOS_USE_BOOTLOADER ?= 1
+ifeq ($(ADIOS_USE_BOOTLOADER),0)
+ifeq ($(ADIOS_USE_DYNAMIC_BSL_BOUNDARY),1)
+$(error ADIOS_USE_BOOTLOADER = 0 and ADIOS_USE_DYNAMIC_BSL_BOUNDARY = 1 contradict each other: a boundary cannot be measured against a bootloader this project does not have. Drop one of the two.)
 endif
 # no bootloader: no reserved region in the linker script, no embedded image,
 # and the application starts at the base of flash. The C side needs to agree,
-# hence MIOS32_APP_FLASH_START_ADDR = 0 - it is what the SysEx query 0x0a
-# answers, and it also keeps MIOS32_SYS_ADDR_BSL_INFO_BEGIN out of existence
-# (see include/mios32/mios32_sys.h).
+# hence ADIOS_APP_FLASH_START_ADDR = 0 - it is what the SysEx query 0x0a
+# answers, and it also keeps ADIOS_SYS_ADDR_BSL_INFO_BEGIN out of existence
+# (see include/adios/adios_sys.h).
 LD_CHIP_DEFS += -DADIOS_LD_NO_BOOTLOADER
-C_DEFINES    += -DMIOS32_USE_BOOTLOADER=0 -DMIOS32_DONT_INCLUDE_BSL -DMIOS32_APP_FLASH_START_ADDR=0
+C_DEFINES    += -DADIOS_USE_BOOTLOADER=0 -DADIOS_DONT_INCLUDE_BSL -DADIOS_APP_FLASH_START_ADDR=0
 endif
 
 
@@ -171,24 +171,24 @@ endif
 # already keeps data up there declares the real count instead and the record
 # lands in its last page, needing no extra page at all.
 #
-# NOTE: this block MUST come before the MIOS32_USERDATA_PAGES one below - the
+# NOTE: this block MUST come before the ADIOS_USERDATA_PAGES one below - the
 # ?= default has to be in place before that block tests whether the variable is
 # defined, or the page would be silently missing from the linker script and the
 # record would be written into the application's own code.
 ################################################################################
-MIOS32_DEVICE_ID_PERSIST ?= 0
+ADIOS_DEVICE_ID_PERSIST ?= 0
 
-ifeq ($(MIOS32_DEVICE_ID_PERSIST),1)
-MIOS32_USERDATA_PAGES ?= 1
-ifeq ($(MIOS32_USERDATA_PAGES),0)
-$(error MIOS32_DEVICE_ID_PERSIST = 1 needs somewhere to write, but MIOS32_USERDATA_PAGES is explicitly 0. Reserve at least one page, or drop the persistence.)
+ifeq ($(ADIOS_DEVICE_ID_PERSIST),1)
+ADIOS_USERDATA_PAGES ?= 1
+ifeq ($(ADIOS_USERDATA_PAGES),0)
+$(error ADIOS_DEVICE_ID_PERSIST = 1 needs somewhere to write, but ADIOS_USERDATA_PAGES is explicitly 0. Reserve at least one page, or drop the persistence.)
 endif
-C_DEFINES += -DMIOS32_DEVICE_ID_PERSIST=1
+C_DEFINES += -DADIOS_DEVICE_ID_PERSIST=1
 endif
 
 
 ################################################################################
-# MIOS32_USERDATA_PAGES: flash pages at the TOP of memory that belong to the
+# ADIOS_USERDATA_PAGES: flash pages at the TOP of memory that belong to the
 # application but not to its image - sound banks, settings, the device-ID
 # record above.
 #
@@ -204,20 +204,20 @@ endif
 # region placed elsewhere entirely - its linker template deliberately declares
 # no page size and the build stops if this is set (see adios_body.ld.inc).
 ################################################################################
-ifdef MIOS32_USERDATA_PAGES
-C_DEFINES    += -DMIOS32_USERDATA_PAGES=$(MIOS32_USERDATA_PAGES)
-LD_CHIP_DEFS += -DADIOS_LD_USERDATA_PAGES=$(MIOS32_USERDATA_PAGES)
+ifdef ADIOS_USERDATA_PAGES
+C_DEFINES    += -DADIOS_USERDATA_PAGES=$(ADIOS_USERDATA_PAGES)
+LD_CHIP_DEFS += -DADIOS_LD_USERDATA_PAGES=$(ADIOS_USERDATA_PAGES)
 endif
 
-ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
+ifeq ($(ADIOS_USE_DYNAMIC_BSL_BOUNDARY),1)
 LD_TEMPLATE := $(LD_TEMPLATE_S)
 # capture the script's exit status and STOP make right here if it failed -
 # $(shell ...) alone silently discards the status, letting the build plow on
 # for minutes and die at link time on the missing generated cpu_app.ld with a
 # misleading "cannot open linker script" error instead of the script's own
 # diagnostic (observed 2026-08-09 in a CubeIDE build console).
-# MIOS32_PATH is passed explicitly into the script's environment: when the
-# self-locating "MIOS32_PATH ?= ../../.." Makefile default applies (nothing
+# ADIOS_PATH is passed explicitly into the script's environment: when the
+# self-locating "ADIOS_PATH ?= ../../.." Makefile default applies (nothing
 # exported by the caller), $(shell ...) would not see it otherwise - GNU make
 # only forwards `export`ed Makefile variables to $(shell) since 4.4, and
 # macOS still ships 3.81.
@@ -226,19 +226,19 @@ LD_TEMPLATE := $(LD_TEMPLATE_S)
 # boundary, recomputing the application length from the chip's total flash -
 # so the reservation the template carved out would be silently undone. It
 # subtracts the same pages itself; the page size it already knows.
-GEN_BSL_BOUNDARY_STATUS := $(shell MIOS32_PATH=$(MIOS32_PATH) ADIOS_USERDATA_PAGES=$(MIOS32_USERDATA_PAGES) ADIOS_BSL_PADDING=$(MIOS32_BSL_PADDING) MIOS32_DEVICE_ID_PERSIST=$(MIOS32_DEVICE_ID_PERSIST) $(MIOS32_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
+GEN_BSL_BOUNDARY_STATUS := $(shell ADIOS_PATH=$(ADIOS_PATH) ADIOS_USERDATA_PAGES=$(ADIOS_USERDATA_PAGES) ADIOS_BSL_PADDING=$(ADIOS_BSL_PADDING) ADIOS_DEVICE_ID_PERSIST=$(ADIOS_DEVICE_ID_PERSIST) $(ADIOS_PATH)/etc/gen_bsl_boundary.sh $(PROCESSOR) $(LD_TEMPLATE) $(CURDIR) >&2; echo $$?)
 ifneq ($(GEN_BSL_BOUNDARY_STATUS),0)
 $(error gen_bsl_boundary.sh failed (exit $(GEN_BSL_BOUNDARY_STATUS)) - see its messages above, and bootloader/src/gen_bsl_boundary_build.log for the bootloader sub-make output)
 endif
 LD_FILE = $(CURDIR)/$(PROJECT_OUT)/cpu_app.ld
 else
 # STATIC path: there is still a bootloader, its boundary is just FIXED rather
-# than measured - the historical MIOS32 layout, FLASH_BSL reserved from
+# than measured - the historical ADIOS layout, FLASH_BSL reserved from
 # 0x08000000 and the application starting right after it. The boundary is a
 # single define, ADIOS_LD_BSL_BOUNDARY_K, defaulted per family to the same
 # value the old per-chip scripts carried (10K on G0, 16K on F4) and
 # overridable by a project that reserves more.
-# (Building with NO bootloader at all is the separate MIOS32_USE_BOOTLOADER
+# (Building with NO bootloader at all is the separate ADIOS_USE_BOOTLOADER
 # switch handled above, not a boundary of 0.)
 # The target is spelled literally rather than through $(PROJECT_OUT): that
 # variable comes from common.mk, included AFTER this file, and a rule's
@@ -246,12 +246,12 @@ else
 ADIOS_LD_BSL_BOUNDARY_K ?= $(if $(filter STM32F4xx,$(FAMILY)),16,10)
 LD_CHIP_DEFS += -DADIOS_LD_BSL_BOUNDARY_K=$(ADIOS_LD_BSL_BOUNDARY_K)
 # ...and tell the C side the SAME boundary. Only the dynamic path used to
-# define MIOS32_APP_FLASH_START_ADDR (through the generated header), so on a
-# static build it was simply absent - leaving MIOS32_SYS_ADDR_BSL_INFO_BEGIN
+# define ADIOS_APP_FLASH_START_ADDR (through the generated header), so on a
+# static build it was simply absent - leaving ADIOS_SYS_ADDR_BSL_INFO_BEGIN
 # as an expression referring to an undefined macro, valid only as long as
 # nothing used it. Now all three modes state it.
-ifneq ($(MIOS32_USE_BOOTLOADER),0)
-C_DEFINES += -DMIOS32_APP_FLASH_START_ADDR=$(shell echo $$(( $(ADIOS_LD_BSL_BOUNDARY_K) * 1024 )))
+ifneq ($(ADIOS_USE_BOOTLOADER),0)
+C_DEFINES += -DADIOS_APP_FLASH_START_ADDR=$(shell echo $$(( $(ADIOS_LD_BSL_BOUNDARY_K) * 1024 )))
 endif
 LD_FILE = $(CURDIR)/project_build/cpu.ld
 # the RULE that builds it lives in include/makefile/common.mk, not here: this
@@ -259,17 +259,17 @@ LD_FILE = $(CURDIR)/project_build/cpu.ld
 # make's default goal and the build would stop after producing the script.
 endif
 
-THUMB_CPP_SOURCE += $(MIOS32_PATH)/core/mini_cpp.cpp
-ifneq ($(MIOS32_APP_USE_FREERTOS),0)
+THUMB_CPP_SOURCE += $(ADIOS_PATH)/core/mini_cpp.cpp
+ifneq ($(ADIOS_APP_USE_FREERTOS),0)
 # overrides malloc()/calloc()/realloc()/free() to redirect to FreeRTOS's
 # pvPortMalloc()/vPortFree() - meaningless without the kernel; without this,
 # mini_cpp.cpp's operator new/delete above fall back to newlib's own default
 # malloc(), which is the correct behaviour for a bare-metal build anyway.
-THUMB_CPP_SOURCE += $(MIOS32_PATH)/core/freertos_heap.cpp
+THUMB_CPP_SOURCE += $(ADIOS_PATH)/core/freertos_heap.cpp
 endif
 
-# add MIOS32 sources
-include $(MIOS32_PATH)/mios32/mios32.mk
+# add ADIOS sources
+include $(ADIOS_PATH)/adios/adios.mk
 
 # directories and files that should be part of the distribution (release) package
-DIST += $(MIOS32_PATH)/core
+DIST += $(ADIOS_PATH)/core

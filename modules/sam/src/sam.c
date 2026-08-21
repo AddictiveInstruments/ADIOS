@@ -1,4 +1,4 @@
-#include <mios32.h>
+#include <adios.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

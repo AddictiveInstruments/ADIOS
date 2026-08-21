@@ -14,7 +14,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 
 #include "app.h"
 #include "midio_sysex.h"
@@ -129,7 +129,7 @@ static sysex_state_t sysex_state;
 static u8 sysex_cmd;
 static u8 sysex_last_cmd;
 
-static mios32_midi_port_t sysex_port = DEFAULT;
+static adios_midi_port_t sysex_port = DEFAULT;
 static u8 sysex_checksum;
 static u8 sysex_bank;
 static u8 sysex_slot;
@@ -170,7 +170,7 @@ s32 MIDIO_SYSEX_Init(u32 mode)
 
 	tr5x6_xfer_state.ALL=0;
 	// install SysEx parser
-	//MIOS32_MIDI_SysExCallback_Init(MIDIO_SYSEX_Parser);
+	//ADIOS_MIDI_SysExCallback_Init(MIDIO_SYSEX_Parser);
 	// parser called from APP_SYSEX_Parser
 
 	return 0; // no error
@@ -179,7 +179,7 @@ s32 MIDIO_SYSEX_Init(u32 mode)
 /////////////////////////////////////////////////////////////////////////////
 // This function sends a SysEx dump of the slot info
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDIO_SYSEX_Send_Info(mios32_midi_port_t port)
+s32 MIDIO_SYSEX_Send_Info(adios_midi_port_t port)
 {
 	int i;
 	int sysex_buffer_ix = 0;
@@ -191,7 +191,7 @@ s32 MIDIO_SYSEX_Send_Info(mios32_midi_port_t port)
 		sysex_buffer[sysex_buffer_ix++] = sysex_header[i];
 
 	// send device id
-	sysex_buffer[sysex_buffer_ix++] = MIOS32_MIDI_DeviceIDGet();
+	sysex_buffer[sysex_buffer_ix++] = ADIOS_MIDI_DeviceIDGet();
 
 	// "write block" command (so that dump could be sent back to overwrite EEPROM w/o modifications)
 	sysex_buffer[sysex_buffer_ix++] = sysex_cmd;
@@ -276,14 +276,14 @@ s32 MIDIO_SYSEX_Send_Info(mios32_midi_port_t port)
 
 	// finally send SysEx stream and return error status
 	sysex_act = 2;
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)sysex_buffer, sysex_buffer_ix);
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, sysex_buffer_ix);
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
 // This function sends a SysEx dump of a patch block
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDIO_SYSEX_Send_Block(mios32_midi_port_t port)
+s32 MIDIO_SYSEX_Send_Block(adios_midi_port_t port)
 {
 	int i;
 	int sysex_buffer_ix = 0;
@@ -294,7 +294,7 @@ s32 MIDIO_SYSEX_Send_Block(mios32_midi_port_t port)
 		sysex_buffer[sysex_buffer_ix++] = sysex_header[i];
 
 	// send device id
-	sysex_buffer[sysex_buffer_ix++] = MIOS32_MIDI_DeviceIDGet();
+	sysex_buffer[sysex_buffer_ix++] = ADIOS_MIDI_DeviceIDGet();
 
 	// "write block" command (so that dump could be sent back to overwrite EEPROM w/o modifications)
 	sysex_buffer[sysex_buffer_ix++] = sysex_cmd;
@@ -363,7 +363,7 @@ s32 MIDIO_SYSEX_Send_Block(mios32_midi_port_t port)
 	TR5X6_ROM_HOST();
 	// finally send SysEx stream and return error status
 	sysex_act = 2;
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)sysex_buffer, sysex_buffer_ix);
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, sysex_buffer_ix);
 }
 
 
@@ -371,7 +371,7 @@ s32 MIDIO_SYSEX_Send_Block(mios32_midi_port_t port)
 // This function sends a SysEx acknowledge to notify the user about the received command
 // expects acknowledge code (e.g. 0x0f for good, 0x0e for error) and additional argument
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDIO_SYSEX_Send_Ack(mios32_midi_port_t port, u8 ack_code, u8 ack_arg)
+s32 MIDIO_SYSEX_Send_Ack(adios_midi_port_t port, u8 ack_code, u8 ack_arg)
 {
 	int i;
 	u8 buffer[10]; // should be enough?
@@ -382,7 +382,7 @@ s32 MIDIO_SYSEX_Send_Ack(mios32_midi_port_t port, u8 ack_code, u8 ack_arg)
 		buffer[buffer_ix++] = sysex_header[i];
 
 	// send device id
-	buffer[buffer_ix++] = MIOS32_MIDI_DeviceIDGet();
+	buffer[buffer_ix++] = ADIOS_MIDI_DeviceIDGet();
 	// send ack code and argument
 	buffer[buffer_ix++] = ack_code;
 	buffer[buffer_ix++] = ack_arg;
@@ -392,7 +392,7 @@ s32 MIDIO_SYSEX_Send_Ack(mios32_midi_port_t port, u8 ack_code, u8 ack_arg)
 
 	// finally send SysEx stream and return error status
 	sysex_act = 2;
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)buffer, buffer_ix);
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)buffer, buffer_ix);
 }
 
 
@@ -400,7 +400,7 @@ s32 MIDIO_SYSEX_Send_Ack(mios32_midi_port_t port, u8 ack_code, u8 ack_arg)
 // This function is called from NOTIFY_MIDI_TimeOut() in app.c if the 
 // MIDI parser runs into timeout
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDIO_SYSEX_TimeOut(mios32_midi_port_t port)
+s32 MIDIO_SYSEX_TimeOut(adios_midi_port_t port)
 {
 	// if we receive a SysEx command (MY_SYSEX flag set), abort parser if port matches
 	if( sysex_state.MY_SYSEX && port == sysex_port )
@@ -413,14 +413,14 @@ s32 MIDIO_SYSEX_TimeOut(mios32_midi_port_t port)
 /////////////////////////////////////////////////////////////////////////////
 // This function parses an incoming sysex stream for SysEx messages
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDIO_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
+s32 MIDIO_SYSEX_Parser(adios_midi_port_t port, u8 midi_in)
 {
 	// TODO: here we could send an error notification, that multiple devices are trying to access the device
 	if( sysex_state.MY_SYSEX && port != sysex_port )
 		return 1; // don't forward package to APP_MIDI_NotifyPackage()
 
 	sysex_port = port;
-	//MIOS32_UART_TX_Bypass(0, 0);
+	//ADIOS_UART_TX_Bypass(0, 0);
 	// branch depending on state
 	if( !sysex_state.MY_SYSEX ) {
 		if( midi_in != sysex_header[sysex_state.CTR] ) {
@@ -445,16 +445,16 @@ s32 MIDIO_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
 			MIDIO_SYSEX_Cmd_Finished();
 		} else {
 			if( !sysex_state.DEV_ID ) {
-				if(midi_in==MIOS32_MIDI_DeviceIDGet())sysex_state.DEV_ID = 1;
+				if(midi_in==ADIOS_MIDI_DeviceIDGet())sysex_state.DEV_ID = 1;
 				else MIDIO_SYSEX_Cmd_Finished();
-				//MIOS32_UART_TX_Bypass(0, 0);
+				//ADIOS_UART_TX_Bypass(0, 0);
 			}
 			// check if command byte has been received
 			else if( !sysex_state.CMD ) {
 				sysex_state.CMD = 1;
 				sysex_cmd = midi_in;
 				MIDIO_SYSEX_Cmd(MIDIO_SYSEX_CMD_STATE_BEGIN, midi_in);
-				//MIOS32_UART_TX_Bypass(0, 0);
+				//ADIOS_UART_TX_Bypass(0, 0);
 			}
 			else
 				MIDIO_SYSEX_Cmd(MIDIO_SYSEX_CMD_STATE_CONT, midi_in);
@@ -474,8 +474,8 @@ s32 MIDIO_SYSEX_Cmd_Finished(void)
 	sysex_state.ALL = 0;
 	sysex_cmd = CMD_IDLE;
 
-	//MIOS32_UART_TX_Bypass(0, 1);
-	//MIOS32_UART_TX_Bypass(0, 1);
+	//ADIOS_UART_TX_Bypass(0, 1);
+	//ADIOS_UART_TX_Bypass(0, 1);
 	// enable MIDI forwarding again
 	// TODO
 	//  MIOS_MPROC_MergerEnable();
@@ -674,7 +674,7 @@ s32 MIDIO_SYSEX_Cmd_WriteInfo(u8 cmd_state, u8 midi_in)
 			//MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_ACK, 0x00);
 			// start writing the block data, erase the ROM if necessary
 			// check for flash memory range
-			//while(MIOS32_UART_TxBufferUsed(0)>0){};
+			//while(ADIOS_UART_TxBufferUsed(0)>0){};
 			write_info_req=sysex_cmd;
 			tr5x6_xfer_state.STAT=XFER_INFO;
 			xfer_time_out=MIDIO_SYSEX_XFER_TIMEOUT;
@@ -723,7 +723,7 @@ s32 MIDIO_SYSEX_Cmd_ReadBlock(u8 cmd_state, u8 midi_in)
 
 	default: // MIDIO_SYSEX_CMD_STATE_END
 			MIDIO_SYSEX_Send_Block(sysex_port);
-			//MIOS32_IRQ_Enable();
+			//ADIOS_IRQ_Enable();
 			switch(tr5x6_slots[sysex_slot].size){
 			case SIZE_4K:sysex_total_block=16;break;
 			case SIZE_8K:sysex_total_block=32;break;
@@ -886,11 +886,11 @@ s32 MIDIO_SYSEX_Cmd_WriteInfoRequest(void)
 				tr5x6_xfer_state.STAT=XFER_ERROR;
 				xfer_time_out=-1;
 				tr5x6_xfer_state.FLAG_ERROR=1;
-	#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-				MIOS32_MIDI_SendDebugMessage("write failed for bank#%d data\n", slot.bank);
+	#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+				ADIOS_MIDI_SendDebugMessage("write failed for bank#%d data\n", slot.bank);
 	#endif
-				MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED);
-				while(MIOS32_UART_TxBufferUsed(0)>0){};
+				MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+				while(ADIOS_UART_TxBufferUsed(0)>0){};
 				return -1; // no error
 
 			}
@@ -901,11 +901,11 @@ s32 MIDIO_SYSEX_Cmd_WriteInfoRequest(void)
 				tr5x6_xfer_state.STAT=XFER_ERROR;
 				xfer_time_out=-1;
 				tr5x6_xfer_state.FLAG_ERROR=1;
-	#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-				MIOS32_MIDI_SendDebugMessage("write failed for bank#%d slot#%d data\n", slot.bank, slot.slot);
+	#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+				ADIOS_MIDI_SendDebugMessage("write failed for bank#%d slot#%d data\n", slot.bank, slot.slot);
 	#endif
-				MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED);
-				while(MIOS32_UART_TxBufferUsed(0)>0){};
+				MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+				while(ADIOS_UART_TxBufferUsed(0)>0){};
 				return -1; // no error
 
 			}
@@ -971,16 +971,16 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 					tr5x6_rom_status status;
 					// sector erase
 					if((status=TR5X6_ROM_Sector_Erase(addr, 1000))!=TR5X6_ROM_OK) {
-						//MIOS32_IRQ_Enable();
+						//ADIOS_IRQ_Enable();
 						TR5X6_ROM_HOST();
 						tr5x6_xfer_state.STAT=XFER_ERROR;
 						xfer_time_out=-1;
 						tr5x6_xfer_state.FLAG_ERROR=1;
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-						MIOS32_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+						ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
 #endif
-						MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED);
-						while(MIOS32_UART_TxBufferUsed(0)>0){};
+						MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+						while(ADIOS_UART_TxBufferUsed(0)>0){};
 						return -1; // no error
 					}
 					// write ROM from RAM
@@ -988,16 +988,16 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 
 						if( (status=TR5X6_ROM_Write(addr, datas[i], 1000)) != TR5X6_ROM_OK ) {
 
-							//MIOS32_IRQ_Enable();
+							//ADIOS_IRQ_Enable();
 							TR5X6_ROM_HOST();
 							tr5x6_xfer_state.STAT=XFER_ERROR;
 							xfer_time_out=-1;
 							tr5x6_xfer_state.FLAG_ERROR=1;
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-							MIOS32_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", sysex_buffer[i], addr, status);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+							ADIOS_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", sysex_buffer[i], addr, status);
 #endif
-							MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED);
-							while(MIOS32_UART_TxBufferUsed(0)>0){};
+							MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+							while(ADIOS_UART_TxBufferUsed(0)>0){};
 							return -1; // no error
 						}
 
@@ -1005,7 +1005,7 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 
 				}else{
 					// invalid address
-					MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE);
+					MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE);
 					tr5x6_xfer_state.STAT=XFER_ERROR;
 					xfer_time_out=-1;
 					tr5x6_xfer_state.FLAG_ERROR=1;
@@ -1026,22 +1026,22 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 				if( ((addr&0x007FFFFF) >= TR5X6_ROM_START_ADDR) && ((addr&0x007FFFFF) <= TR5X6_ROM_END_ADDR) ) {
 					tr5x6_rom_status status;
 					//TR5X6_SPI_TransferModeInit();
-					//MIOS32_IRQ_Disable();
+					//ADIOS_IRQ_Disable();
 					for(int i=0; i<(MIDIO_SYSEX_BLOCK_SIZE>>1); addr++, i++) {
 
 
 						if( (addr % TR5X6_ROM_SECTOR_SIZE) == 0 ) {
 							if((status=TR5X6_ROM_Sector_Erase(addr, 1000))!=TR5X6_ROM_OK) {
-								//MIOS32_IRQ_Enable();
+								//ADIOS_IRQ_Enable();
 								TR5X6_ROM_HOST();
 								tr5x6_xfer_state.STAT=XFER_ERROR;
 								xfer_time_out=-1;
 								tr5x6_xfer_state.FLAG_ERROR=1;
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-								MIOS32_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+								ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
 #endif
-								MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED);
-								while(MIOS32_UART_TxBufferUsed(0)>0){};
+								MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+								while(ADIOS_UART_TxBufferUsed(0)>0){};
 								return -1; // no error
 							}
 
@@ -1049,16 +1049,16 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 
 						if( (status=TR5X6_ROM_Write(addr, sysex_buffer[i], 1000)) != TR5X6_ROM_OK ) {
 
-							//MIOS32_IRQ_Enable();
+							//ADIOS_IRQ_Enable();
 							TR5X6_ROM_HOST();
 							tr5x6_xfer_state.STAT=XFER_ERROR;
 							xfer_time_out=-1;
 							tr5x6_xfer_state.FLAG_ERROR=1;
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-							MIOS32_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", sysex_buffer[i], addr, status);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+							ADIOS_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", sysex_buffer[i], addr, status);
 #endif
-							MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED);
-							while(MIOS32_UART_TxBufferUsed(0)>0){};
+							MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+							while(ADIOS_UART_TxBufferUsed(0)>0){};
 							return -1; // no error
 						}
 
@@ -1066,7 +1066,7 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 
 				}else{
 					// invalid address
-					MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE);
+					MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE);
 					tr5x6_xfer_state.STAT=XFER_ERROR;
 					xfer_time_out=-1;
 					tr5x6_xfer_state.FLAG_ERROR=1;
@@ -1076,7 +1076,7 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 
 		}
 
-		//MIOS32_IRQ_Enable();
+		//ADIOS_IRQ_Enable();
 		if( sysex_block < (sysex_total_block-1)){
 			//MIDIO_SYSEX_Send_UploadReq(sysex_port);
 			MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_ACK, MIDIO_SYSEX_ACK_CONTINUE);
@@ -1105,7 +1105,7 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 /////////////////////////////////////////////////////////////////////////////
 // This function sends an upload request
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDIO_SYSEX_Send_UploadReq(mios32_midi_port_t port)
+s32 MIDIO_SYSEX_Send_UploadReq(adios_midi_port_t port)
 {
 	u8 buffer[12]; // should be enough?
 	u8 *buffer_ptr = &buffer[0];
@@ -1115,7 +1115,7 @@ s32 MIDIO_SYSEX_Send_UploadReq(mios32_midi_port_t port)
 		*buffer_ptr++ = sysex_header[i];
 
 	// device ID
-	*buffer_ptr++ = MIOS32_MIDI_DeviceIDGet();
+	*buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
 
 	// send 0x01 to request code upload
 	*buffer_ptr++ = 0x01;
@@ -1127,7 +1127,7 @@ s32 MIDIO_SYSEX_Send_UploadReq(mios32_midi_port_t port)
 
 	// finally send SysEx stream
 	sysex_act = 2;
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)buffer, (u32)buffer_ptr - ((u32)&buffer[0]));
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)buffer, (u32)buffer_ptr - ((u32)&buffer[0]));
 }
 /////////////////////////////////////////////////////////////////////////////
 // Command 0F: Ping (just send back acknowledge)
@@ -1245,11 +1245,11 @@ s32 MIDIO_SYSEX_Cmd_BankDataEnd(u8 cmd_state, u8 midi_in)
 
 s32 MIDIO_SYSEX_TimeOut_Period(void){
 	if(xfer_time_out!=-1){
-		//if(xfer_time_out==2000)MIOS32_MIDI_SendDebugMessage("time out start\n");
+		//if(xfer_time_out==2000)ADIOS_MIDI_SendDebugMessage("time out start\n");
 		--xfer_time_out;
-		//MIOS32_MIDI_SendDebugMessage("%d\n", xfer_time_out);
+		//ADIOS_MIDI_SendDebugMessage("%d\n", xfer_time_out);
 		if(xfer_time_out<=0){
-			//MIOS32_MIDI_SendDebugMessage("xfer time out!\n");
+			//ADIOS_MIDI_SendDebugMessage("xfer time out!\n");
 			tr5x6_xfer_state.STAT=XFER_ERROR;
 			tr5x6_xfer_state.FLAG_ERROR=1;
 			sysex_bank_block=0;

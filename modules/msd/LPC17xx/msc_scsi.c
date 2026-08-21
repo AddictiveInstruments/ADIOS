@@ -37,7 +37,7 @@
 	  This command is not mandatory in the SBC/SBC-2 specification.
 */
 
-#include <mios32.h>
+#include <adios.h>
 #include <usbapi.h>
 #include <string.h>		// memcpy
 #include <msd.h>
@@ -48,11 +48,11 @@
 #include "blockdev.h"
 #include "msc_scsi.h"
 
-// TK: for debugging via MIOS32
+// TK: for debugging via ADIOS
 // since USB is allocated, add following command to the Init() function in app.c:
-// MIOS32_MIDI_DebugPortSet(UART0);
+// ADIOS_MIDI_DebugPortSet(UART0);
 //#undef DBG
-//#define DBG MIOS32_MIDI_SendDebugMessage
+//#define DBG ADIOS_MIDI_SendDebugMessage
 
 #define BLOCKSIZE		512
 

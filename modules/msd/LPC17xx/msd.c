@@ -1,5 +1,5 @@
 //!
-//! MSD Driver for MIOS32 running on a LPC17xx derivative
+//! MSD Driver for ADIOS running on a LPC17xx derivative
 //! Based on Code from Bertrik Sikken (bertrik@sikken.nl)
 //!
 //! \{
@@ -42,7 +42,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <msd.h>
 #include <string.h>
 #include <usbapi.h>
@@ -135,7 +135,7 @@ static const u8 abDescriptors[] = {
 //!
 //! Should be called during runtime once a SD Card has been connected.<BR>
 //! It is possible to switch back to the original device driver provided
-//! by MIOS32 (e.g. MIOS32_USB_MIDI) by calling MIOS32_USB_Init(1)
+//! by ADIOS (e.g. ADIOS_USB_MIDI) by calling ADIOS_USB_Init(1)
 //!
 //! \param[in] mode currently only mode 0 supported
 //! \return < 0 if initialisation failed
@@ -153,11 +153,11 @@ s32 MSD_Init(u32 mode)
   // initialise stack
   USBInit();
 
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
 	
   // disconnect from bus
   USBHwConnect(FALSE);
-  MIOS32_DELAY_Wait_uS(10000);
+  ADIOS_DELAY_Wait_uS(10000);
 
   // enable bulk-in interrupts on NAKs
   // these are required to get the BOT protocol going again after a STALL
@@ -177,12 +177,12 @@ s32 MSD_Init(u32 mode)
   USBHwRegisterEPIntHandler(MSC_BULK_OUT_EP, MSCBotBulkOut);
 
   // enable_USB_interrupt
-  MIOS32_IRQ_Install(USB_IRQn, MIOS32_IRQ_USB_PRIORITY);
+  ADIOS_IRQ_Install(USB_IRQn, ADIOS_IRQ_USB_PRIORITY);
 
   // connect to bus
   USBHwConnect(TRUE);
 
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
 
   return 0; // no error
 }
@@ -195,8 +195,8 @@ s32 MSD_Init(u32 mode)
 //! Take care that no other task accesses SD Card while this function is
 //! processed!
 //!
-//! Ensure that this function isn't called when a MIOS32 USB driver like
-//! MIOS32_USB_MIDI is running!
+//! Ensure that this function isn't called when a ADIOS USB driver like
+//! ADIOS_USB_MIDI is running!
 //!
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
@@ -230,7 +230,7 @@ s32 MSD_CheckAvailable(void)
 //! It will be disabled when the host unmounts the file system (like if the
 //! SD Card would be removed.
 //!
-//! When this happens, the application can either call MIOS32_USB_Init(1)
+//! When this happens, the application can either call ADIOS_USB_Init(1)
 //! again, e.g. to switch to USB MIDI, or it can make the LUN available
 //! again by calling MSD_LUN_AvailableSet(0, 1)
 //! \param[in] lun Logical Unit number (0)
@@ -333,8 +333,8 @@ static BOOL HandleClassRequest(TSetupPacket *pSetup, int *piLen, u8 **ppbData)
 #define BUFFER_SIZE 75
 static BOOL HandleCustomRequest(TSetupPacket *pSetup, int *piLen, U8 **ppbData)
 {
-  const u8 vendor_str[] = MIOS32_USB_VENDOR_STR;
-  const u8 product_str[] = "MIOS32 Mass Storage Device";
+  const u8 vendor_str[] = ADIOS_USB_VENDOR_STR;
+  const u8 product_str[] = "ADIOS Mass Storage Device";
   static u8 buffer[BUFFER_SIZE]; // TODO: maybe buffer provided by USB Driver?
 
   if( pSetup->bRequest != REQ_GET_DESCRIPTOR )
@@ -375,7 +375,7 @@ static BOOL HandleCustomRequest(TSetupPacket *pSetup, int *piLen, U8 **ppbData)
 
     case 3: { // Serial Number
         u8 serial_number_str[40];
-	if( MIOS32_SYS_SerialNumberGet((char *)serial_number_str) >= 0 ) {
+	if( ADIOS_SYS_SerialNumberGet((char *)serial_number_str) >= 0 ) {
 	  for(i=0, len=2; serial_number_str[i] != '\0' && len<BUFFER_SIZE; ++i) {
 	    buffer[len++] = serial_number_str[i];
 	    buffer[len++] = 0;

@@ -5,7 +5,7 @@
  *                                                                          *
  ****************************************************************************/
  
-#include <mios32.h> 
+#include <adios.h> 
 
 #include "max11300.h"
 #include "max11300_defs.h"
@@ -80,7 +80,7 @@ int8_t MAX11300_Init(u8 mode) {
     // Init MAX Config Array
     
 #if MAX11300_VERBOSE >=1
-    MIOS32_MIDI_SendDebugMessage("[MAX11300]%d PIXI(s) found.\n", MAX_NUM);
+    ADIOS_MIDI_SendDebugMessage("[MAX11300]%d PIXI(s) found.\n", MAX_NUM);
 #endif
     for (MAX_Curr=0; MAX_Curr<MAX_NUM; MAX_Curr++) {
 
@@ -111,17 +111,17 @@ int8_t MAX11300_Init(u8 mode) {
             MAX11300_readInternalTemp(HARD);
  #if MAX11300_VERBOSE >=1
             // Verbose Level 1 Status, internal Temp.
-            MIOS32_MIDI_SendDebugMessage("[MAX11300]PIXI %d connected. Temp=%ddegC. \n", MAX_Curr+1, (MAX_Configs[MAX_Curr].TMPINTDATA >> 3));
+            ADIOS_MIDI_SendDebugMessage("[MAX11300]PIXI %d connected. Temp=%ddegC. \n", MAX_Curr+1, (MAX_Configs[MAX_Curr].TMPINTDATA >> 3));
 #endif
         }else{
 #if MAX11300_VERBOSE >=1
-            MIOS32_MIDI_SendDebugMessage("[MAX11300]PIXI %d not connected. Status=%d \n", MAX_Curr+1, status);
+            ADIOS_MIDI_SendDebugMessage("[MAX11300]PIXI %d not connected. Status=%d \n", MAX_Curr+1, status);
 #endif
         }
         
     }
     // Init CS lines.
-        MIOS32_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_SPI_PIN_RC1, 1); // spi, rc_pin, pin_value
+        ADIOS_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_SPI_PIN_RC1, 1); // spi, rc_pin, pin_value
 //    /* J16.RC1 (PB2) as Interrupt Input */
 //    GPIO_InitStructure.GPIO_Pin = LL_GPIO_PIN_2;
 //    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
@@ -232,7 +232,7 @@ int8_t MAX11300_setPinDiffMode(uint8_t pin, Func_t FuncID, uint8_t differentialP
         case GPI:
             if (MAX11300_getPinThreshold(pin) == 0) {
                 MAX11300_setPinThreshold(pin, DEFAULT_THRESHOLD);
-                MIOS32_DELAY_Wait_uS(1000);
+                ADIOS_DELAY_Wait_uS(1000);
             }
             break;
         case BILvlTrans:
@@ -241,7 +241,7 @@ int8_t MAX11300_setPinDiffMode(uint8_t pin, Func_t FuncID, uint8_t differentialP
         case GPO:
             if (MAX11300_getPinThreshold(pin) == 0) {
                 MAX11300_setPinThreshold(pin, DEFAULT_THRESHOLD);
-                MIOS32_DELAY_Wait_uS(1000);
+                ADIOS_DELAY_Wait_uS(1000);
             }
             break;
         case UNIOutPath:
@@ -503,7 +503,7 @@ uint16_t MAX11300_getADCpin(uint8_t pin, uint8_t fromHard) {
     MAX_Configs[MAX_Curr].ports[pin].ADCvalue = readRegister(MAX_ADCDAT_BASE + pin);
     MAX11300_ADCreadyPin(pin);				// show that we've read the data from that pin
     MAX11300_ADCready();
-    //MIOS32_MIDI_SendDebugMessage("[MAX11300]PIXI %d / %d TEST %x  %d \n", MAX_Curr, pin, readRegister(MAX_FUNC_BASE + pin) , MAX_Configs[MAX_Curr].ports[pin].ADCvalue );
+    //ADIOS_MIDI_SendDebugMessage("[MAX11300]PIXI %d / %d TEST %x  %d \n", MAX_Curr, pin, readRegister(MAX_FUNC_BASE + pin) , MAX_Configs[MAX_Curr].ports[pin].ADCvalue );
     return MAX_Configs[MAX_Curr].ports[pin].ADCvalue;
 }
     /******************************** DAC Routines ********************************/
@@ -607,15 +607,15 @@ int8_t writeRegister (uint8_t address, uint16_t value) {
 int8_t writeRegisterS (uint8_t address, uint16_t * values, uint8_t size) {
     u8 i;
     if(!MAX_Configs[MAX_Curr].status)return 0;
-    //MIOS32_SPI_TransferModeInit(PIXI_SPI_PERIPH, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_128);
-    MIOS32_SPI_TransferModeInit(MAX_SPI_PERIPH, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_128);
-    MIOS32_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_Configs[MAX_Curr].CS_pin, 0); // spi, rc_pin, pin_value
-    MIOS32_SPI_TransferByte(MAX_SPI_PERIPH, (address << 1));
+    //ADIOS_SPI_TransferModeInit(PIXI_SPI_PERIPH, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_128);
+    ADIOS_SPI_TransferModeInit(MAX_SPI_PERIPH, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_128);
+    ADIOS_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_Configs[MAX_Curr].CS_pin, 0); // spi, rc_pin, pin_value
+    ADIOS_SPI_TransferByte(MAX_SPI_PERIPH, (address << 1));
     for (i = 0; i < size; i++) {
-        MIOS32_SPI_TransferByte(MAX_SPI_PERIPH, ((values[i] >> 8) & 0xff));
-        MIOS32_SPI_TransferByte(MAX_SPI_PERIPH, (values[i] & 0xff));
+        ADIOS_SPI_TransferByte(MAX_SPI_PERIPH, ((values[i] >> 8) & 0xff));
+        ADIOS_SPI_TransferByte(MAX_SPI_PERIPH, (values[i] & 0xff));
     }
-    MIOS32_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_Configs[MAX_Curr].CS_pin, 1); // spi, rc_pin, pin_value
+    ADIOS_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_Configs[MAX_Curr].CS_pin, 1); // spi, rc_pin, pin_value
     return 1;
 }
 
@@ -628,15 +628,15 @@ uint16_t readRegister (uint8_t address) {
 uint16_t readRegisterS (uint8_t address, uint16_t * values, uint8_t size) {
     u8 i;
     if(!MAX_Configs[MAX_Curr].status)return 0;
-    //MIOS32_SPI_TransferModeInit(PIXI_SPI_PERIPH, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_128);
-    MIOS32_SPI_TransferModeInit(MAX_SPI_PERIPH, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_128);
-    MIOS32_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_Configs[MAX_Curr].CS_pin, 0); // spi, rc_pin, pin_value
-    MIOS32_SPI_TransferByte(MAX_SPI_PERIPH, ((address << 1) | 1));
+    //ADIOS_SPI_TransferModeInit(PIXI_SPI_PERIPH, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_128);
+    ADIOS_SPI_TransferModeInit(MAX_SPI_PERIPH, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_128);
+    ADIOS_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_Configs[MAX_Curr].CS_pin, 0); // spi, rc_pin, pin_value
+    ADIOS_SPI_TransferByte(MAX_SPI_PERIPH, ((address << 1) | 1));
     for (i = 0; i < size; i++) {
-        values[i] = ((uint16_t)(MIOS32_SPI_TransferByte(MAX_SPI_PERIPH, 0x00)) << 8);
-        values[i] += ((uint16_t)(MIOS32_SPI_TransferByte(MAX_SPI_PERIPH, 0x00)));
+        values[i] = ((uint16_t)(ADIOS_SPI_TransferByte(MAX_SPI_PERIPH, 0x00)) << 8);
+        values[i] += ((uint16_t)(ADIOS_SPI_TransferByte(MAX_SPI_PERIPH, 0x00)));
     }
-    MIOS32_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_Configs[MAX_Curr].CS_pin, 1); // spi, rc_pin, pin_value
+    ADIOS_SPI_RC_PinSet(MAX_SPI_PERIPH, MAX_Configs[MAX_Curr].CS_pin, 1); // spi, rc_pin, pin_value
     return size;
 }
 
@@ -671,15 +671,15 @@ s32 Hlp_SPI_Init(u8 m)
     // init SPI for MAX11300
 //    if(MAX_Configs[MAX_Curr]==MAX_SPI_PINS_OD){
 //            // ports in open drain mode (to pull-up the outputs to 5V)
-//            status |= MIOS32_SPI_IO_Init(PIXI_SPI_PERIPH, MIOS32_SPI_PIN_DRIVER_STRONG_OD);
+//            status |= ADIOS_SPI_IO_Init(PIXI_SPI_PERIPH, ADIOS_SPI_PIN_DRIVER_STRONG_OD);
 //        }else{
 //            // ports in push-poll mode (3.3V output voltage)
-            status |= MIOS32_SPI_IO_Init(MAX_SPI_PERIPH, MIOS32_SPI_PIN_DRIVER_STRONG);
+            status |= ADIOS_SPI_IO_Init(MAX_SPI_PERIPH, ADIOS_SPI_PIN_DRIVER_STRONG);
 //        }
 //    }
 
     // init SPI
-    status |= MIOS32_SPI_TransferModeInit(MAX_SPI_PERIPH, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_128);
+    status |= ADIOS_SPI_TransferModeInit(MAX_SPI_PERIPH, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_128);
     
     // read DEVICE_ID
     //Temporary access SPI Read
@@ -708,25 +708,25 @@ MAX11300_INTERRUPT
         if(!GPIO_ReadInputDataBit(GPIOE, LL_GPIO_PIN_6)){
             if(MAX11300_getInterrupt ()){
 
-                //if(MAX_Configs[MAX_Curr].interrupt.ADCFLAG)MIOS32_MIDI_SendDebugMessage("1\n");
+                //if(MAX_Configs[MAX_Curr].interrupt.ADCFLAG)ADIOS_MIDI_SendDebugMessage("1\n");
                 if(MAX_Configs[MAX_Curr].interrupt.ADCDR &&  MAX11300_ADCreadyPin (4) ){
                     MAX_Configs[MAX_Curr].interrupt.ADCDR=0;
                     u16 polarity = MAX_Configs[MAX_Curr].ports[4].ADCvalue ;
                     MAX_Configs[MAX_Curr].ports[4].ADCvalue = readRegister(MAX_ADCDAT_BASE + 4);
                     //if(MAX_Configs[MAX_Curr].ports[4].ADCvalue>=(oldVal+2) || MAX_Configs[MAX_Curr].ports[4].ADCvalue<=(oldVal-2)){
                         
-                      //  MIOS32_MIDI_SendDebugMessage("%d\n", MAX_Configs[MAX_Curr].ports[4].ADCvalue);
+                      //  ADIOS_MIDI_SendDebugMessage("%d\n", MAX_Configs[MAX_Curr].ports[4].ADCvalue);
                     //}
 
                 }
-                if(MAX_Configs[MAX_Curr].interrupt.ADCDM)MIOS32_MIDI_SendDebugMessage("3\n");
-                if(MAX_Configs[MAX_Curr].interrupt.GPIDR)MIOS32_MIDI_SendDebugMessage("4\n");
-                if(MAX_Configs[MAX_Curr].interrupt.GPIDM)MIOS32_MIDI_SendDebugMessage("5\n");
-                if(MAX_Configs[MAX_Curr].interrupt.DACOI)MIOS32_MIDI_SendDebugMessage("6\n");
-                //if(MAX_Configs[MAX_Curr].interrupt.TMPINT)MIOS32_MIDI_SendDebugMessage("7\n");
-                if(MAX_Configs[MAX_Curr].interrupt.TMPEXT1)MIOS32_MIDI_SendDebugMessage("8\n");
-                if(MAX_Configs[MAX_Curr].interrupt.TMPEXT2)MIOS32_MIDI_SendDebugMessage("9\n");
-                if(MAX_Configs[MAX_Curr].interrupt.VMON)MIOS32_MIDI_SendDebugMessage("a\n");
+                if(MAX_Configs[MAX_Curr].interrupt.ADCDM)ADIOS_MIDI_SendDebugMessage("3\n");
+                if(MAX_Configs[MAX_Curr].interrupt.GPIDR)ADIOS_MIDI_SendDebugMessage("4\n");
+                if(MAX_Configs[MAX_Curr].interrupt.GPIDM)ADIOS_MIDI_SendDebugMessage("5\n");
+                if(MAX_Configs[MAX_Curr].interrupt.DACOI)ADIOS_MIDI_SendDebugMessage("6\n");
+                //if(MAX_Configs[MAX_Curr].interrupt.TMPINT)ADIOS_MIDI_SendDebugMessage("7\n");
+                if(MAX_Configs[MAX_Curr].interrupt.TMPEXT1)ADIOS_MIDI_SendDebugMessage("8\n");
+                if(MAX_Configs[MAX_Curr].interrupt.TMPEXT2)ADIOS_MIDI_SendDebugMessage("9\n");
+                if(MAX_Configs[MAX_Curr].interrupt.VMON)ADIOS_MIDI_SendDebugMessage("a\n");
                 MAX11300_clearInterrupt();
             }
         

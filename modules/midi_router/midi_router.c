@@ -14,7 +14,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <string.h>
 #include <osc_client.h>
 #include "app.h"
@@ -94,7 +94,7 @@ s32 MIDI_ROUTER_Init(u32 mode)
 /////////////////////////////////////////////////////////////////////////////
 // Returns 32bit selection mask for USB0..7, UART0..7, IIC0..7, OSC0..7
 /////////////////////////////////////////////////////////////////////////////
-static inline u32 MIDI_ROUTER_PortMaskGet(mios32_midi_port_t port)
+static inline u32 MIDI_ROUTER_PortMaskGet(adios_midi_port_t port)
 {
   u8 port_ix = port & 0xf;
   if( port >= USB0 && port <= OSC7 && port_ix <= 7 ) {
@@ -108,7 +108,7 @@ static inline u32 MIDI_ROUTER_PortMaskGet(mios32_midi_port_t port)
 /////////////////////////////////////////////////////////////////////////////
 // Receives a MIDI package from APP_NotifyReceivedEvent (-> app.c)
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_ROUTER_Receive(mios32_midi_port_t port, mios32_midi_package_t midi_package)
+s32 MIDI_ROUTER_Receive(adios_midi_port_t port, adios_midi_package_t midi_package)
 {
   // filter SysEx which is handled by separate parser
   if( midi_package.evnt0 < 0xf8 &&
@@ -128,12 +128,12 @@ s32 MIDI_ROUTER_Receive(mios32_midi_port_t port, mios32_midi_package_t midi_pack
 
       if( midi_package.event >= NoteOff && midi_package.event <= PitchBend ) {
 	if( n->src_chn == 17 || midi_package.chn == (n->src_chn-1) ) {
-	  mios32_midi_package_t fwd_package = midi_package;
+	  adios_midi_package_t fwd_package = midi_package;
 	  if( n->dst_chn <= 16 )
 	    fwd_package.chn = (n->dst_chn-1);
-	  mios32_midi_port_t port = n->dst_port;
+	  adios_midi_port_t port = n->dst_port;
 	  MUTEX_MIDIOUT_TAKE;
-	  MIOS32_MIDI_SendPackage(port, fwd_package);
+	  ADIOS_MIDI_SendPackage(port, fwd_package);
 	  MUTEX_MIDIOUT_GIVE;
 	}
       } else {
@@ -142,7 +142,7 @@ s32 MIDI_ROUTER_Receive(mios32_midi_port_t port, mios32_midi_package_t midi_pack
 	if( !mask || !(sysex_dst_fwd_done & mask) ) {
 	  sysex_dst_fwd_done |= mask;
 	  MUTEX_MIDIOUT_TAKE;
-	  MIOS32_MIDI_SendPackage(n->dst_port, midi_package);
+	  ADIOS_MIDI_SendPackage(n->dst_port, midi_package);
 	  MUTEX_MIDIOUT_GIVE;
 	}
       }
@@ -155,7 +155,7 @@ s32 MIDI_ROUTER_Receive(mios32_midi_port_t port, mios32_midi_package_t midi_pack
 /////////////////////////////////////////////////////////////////////////////
 // Receives a SysEx byte from APP_SYSEX_Parser (-> app.c)
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_ROUTER_ReceiveSysEx(mios32_midi_port_t port, u8 midi_in)
+s32 MIDI_ROUTER_ReceiveSysEx(adios_midi_port_t port, u8 midi_in)
 {
   // determine SysEx buffer
   int sysex_in = MIDI_PORT_InIxGet(port);
@@ -191,12 +191,12 @@ s32 MIDI_ROUTER_ReceiveSysEx(mios32_midi_port_t port, u8 midi_in)
 	if( !mask || !(sysex_dst_fwd_done & mask) ) {
 	  sysex_dst_fwd_done |= mask;
 
-	  mios32_midi_port_t port = n->dst_port;
+	  adios_midi_port_t port = n->dst_port;
 	  MUTEX_MIDIOUT_TAKE;
 	  if( (port & 0xf0) == OSC0 )
 	    OSC_CLIENT_SendSysEx(port & 0x0f, sysex_buffer[sysex_in], sysex_buffer_len[sysex_in]);
 	  else
-	    MIOS32_MIDI_SendSysEx(port, sysex_buffer[sysex_in], sysex_buffer_len[sysex_in]);
+	    ADIOS_MIDI_SendSysEx(port, sysex_buffer[sysex_in], sysex_buffer_len[sysex_in]);
 	  MUTEX_MIDIOUT_GIVE;
 	}
       }
@@ -223,7 +223,7 @@ s32 MIDI_ROUTER_ReceiveSysEx(mios32_midi_port_t port, u8 midi_in)
 // Returns -1 if port not supported
 // Returns -2 if MIDI In function disabled
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_ROUTER_MIDIClockInGet(mios32_midi_port_t port)
+s32 MIDI_ROUTER_MIDIClockInGet(adios_midi_port_t port)
 {
   // extra: MIDI IN Clock function not supported for IIC (yet)
   if( (port & 0xf0) == IIC0 )
@@ -240,7 +240,7 @@ s32 MIDI_ROUTER_MIDIClockInGet(mios32_midi_port_t port)
 /////////////////////////////////////////////////////////////////////////////
 // Enables/Disables MIDI In Clock function for given port
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_ROUTER_MIDIClockInSet(mios32_midi_port_t port, u8 enable)
+s32 MIDI_ROUTER_MIDIClockInSet(adios_midi_port_t port, u8 enable)
 {
   u32 mask = MIDI_ROUTER_PortMaskGet(port);
   if( mask ) {
@@ -262,7 +262,7 @@ s32 MIDI_ROUTER_MIDIClockInSet(mios32_midi_port_t port, u8 enable)
 // Returns -1 if port not supported
 // Returns -2 if MIDI In function disabled
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_ROUTER_MIDIClockOutGet(mios32_midi_port_t port)
+s32 MIDI_ROUTER_MIDIClockOutGet(adios_midi_port_t port)
 {
   u32 mask = MIDI_ROUTER_PortMaskGet(port);
   if( mask ) {
@@ -275,7 +275,7 @@ s32 MIDI_ROUTER_MIDIClockOutGet(mios32_midi_port_t port)
 /////////////////////////////////////////////////////////////////////////////
 // Enables/Disables MIDI Out Clock function for given port
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_ROUTER_MIDIClockOutSet(mios32_midi_port_t port, u8 enable)
+s32 MIDI_ROUTER_MIDIClockOutSet(adios_midi_port_t port, u8 enable)
 {
   u32 mask = MIDI_ROUTER_PortMaskGet(port);
   if( mask ) {
@@ -301,7 +301,7 @@ s32 MIDI_ROUTER_SendMIDIClockEvent(u8 evnt0, u32 bpm_tick)
 {
   int i;
 
-  mios32_midi_package_t p;
+  adios_midi_package_t p;
   p.ALL = 0;
   p.type = 0x5; // Single-byte system common message
   p.evnt0 = evnt0;
@@ -310,21 +310,21 @@ s32 MIDI_ROUTER_SendMIDIClockEvent(u8 evnt0, u32 bpm_tick)
   for(i=0; i<32; ++i, port_mask<<=1) {
     if( midi_router_mclk_out & port_mask & 0xffffff0f ) { // filter USB5..USB8 to avoid unwanted clock events to non-existent ports
       // coding: USB0..7, UART0..7, IIC0..7, OSC0..7
-      mios32_midi_port_t port = (USB0 + ((i&0x18) << 1)) | (i&7);
+      adios_midi_port_t port = (USB0 + ((i&0x18) << 1)) | (i&7);
 
-      // TODO: special check for OSC, since MIOS32_MIDI_CheckAvailable() won't work here
-      if( MIOS32_MIDI_CheckAvailable(port) ) {
+      // TODO: special check for OSC, since ADIOS_MIDI_CheckAvailable() won't work here
+      if( ADIOS_MIDI_CheckAvailable(port) ) {
 	if( bpm_tick ) {
 #if MIDI_ROUTER_COMBINED_WITH_SEQ
 	  SEQ_MIDI_OUT_Send(port, p, SEQ_MIDI_OUT_ClkEvent, bpm_tick, 0);
 #else
 	  MUTEX_MIDIOUT_TAKE;
-	  MIOS32_MIDI_SendPackage(port, p);
+	  ADIOS_MIDI_SendPackage(port, p);
 	  MUTEX_MIDIOUT_GIVE;
 #endif
 	} else {
 	  MUTEX_MIDIOUT_TAKE;
-	  MIOS32_MIDI_SendPackage(port, p);
+	  ADIOS_MIDI_SendPackage(port, p);
 	  MUTEX_MIDIOUT_GIVE;
 	}
       }
@@ -447,7 +447,7 @@ s32 MIDI_ROUTER_TerminalParseLine(char *input, void *_output_function)
 	  return 1; // command taken
 	}
 
-	mios32_midi_port_t src_port = 0xff;
+	adios_midi_port_t src_port = 0xff;
 	int port_ix;
 	for(port_ix=0; port_ix<MIDI_PORT_InNumGet(); ++port_ix) {
 	  // terminate port name at first space
@@ -495,7 +495,7 @@ s32 MIDI_ROUTER_TerminalParseLine(char *input, void *_output_function)
 	  return 1; // command taken
 	}
 
-	mios32_midi_port_t dst_port = 0xff;
+	adios_midi_port_t dst_port = 0xff;
 	for(port_ix=0; port_ix<MIDI_PORT_OutNumGet(); ++port_ix) {
 	  // terminate port name at first space
 	  char port_name[10];
@@ -560,7 +560,7 @@ s32 MIDI_ROUTER_TerminalParseLine(char *input, void *_output_function)
             out("Missing MIDI clock port!");
 	    return 1; // command taken
           } else {
-            mios32_midi_port_t mclk_port = 0xff;
+            adios_midi_port_t mclk_port = 0xff;
             int port_ix;
             for(port_ix=0; port_ix<MIDI_PORT_ClkNumGet(); ++port_ix) {
               // terminate port name at first space
@@ -673,7 +673,7 @@ s32 MIDI_ROUTER_TerminalPrintConfig(void *_output_function)
   int num_mclk_ports = MIDI_PORT_ClkNumGet();
   int port_ix;
   for(port_ix=0; port_ix<num_mclk_ports; ++port_ix) {
-    mios32_midi_port_t mclk_port = MIDI_PORT_ClkPortGet(port_ix);
+    adios_midi_port_t mclk_port = MIDI_PORT_ClkPortGet(port_ix);
 
     s32 enab_rx = MIDI_ROUTER_MIDIClockInGet(mclk_port);
     if( !MIDI_PORT_ClkCheckAvailable(mclk_port) )

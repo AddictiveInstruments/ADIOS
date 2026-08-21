@@ -1,5 +1,5 @@
 /*
- * MIOS32 Application Template
+ * ADIOS Application Template
  *
  * ==========================================================================
  *
@@ -14,7 +14,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <app_lcd.h>
 #include "app.h"
 u32 count = 0;
@@ -32,10 +32,10 @@ void APP_Init(void)
   //APP_LCD_Init(0);
 
   // initialize all LEDs
-  MIOS32_SOL_Init();
+  ADIOS_SOL_Init();
 
   // initialize the sign-of-life LED
-  MIOS32_SOL_Init();
+  ADIOS_SOL_Init();
 }
 
 
@@ -53,16 +53,16 @@ void APP_Background(void)
 // and AIN events. You could add more jobs here, but they shouldn't consume
 // more than 300 uS to ensure the responsiveness of buttons, encoders, pots.
 // Alternatively you could create a dedicated task for application specific
-// jobs as explained in $MIOS32_PATH/apps/tutorials/006_rtos_tasks
+// jobs as explained in $ADIOS_PATH/apps/tutorials/006_rtos_tasks
 /////////////////////////////////////////////////////////////////////////////
 void APP_Tick(void)
 {
   // PWM modulate the SOF LED (this is a sign of life)
-  u32 timestamp = MIOS32_TIMESTAMP_Get();
+  u32 timestamp = ADIOS_TIMESTAMP_Get();
   if( ((timestamp % 20) <= ((timestamp / 100) % 10)) & 1 )
-    MIOS32_SOL_Set();
+    ADIOS_SOL_Set();
   else
-    MIOS32_SOL_Clr();
+    ADIOS_SOL_Clr();
 
 }
 
@@ -80,20 +80,20 @@ void APP_MIDI_Tick(void)
 /////////////////////////////////////////////////////////////////////////////
 // This hook is called when a MIDI package has been received
 /////////////////////////////////////////////////////////////////////////////
-void APP_MIDI_NotifyPackage(mios32_midi_port_t port, mios32_midi_package_t midi_package)
+void APP_MIDI_NotifyPackage(adios_midi_port_t port, adios_midi_package_t midi_package)
 {
 //	if(midi_package.event==NoteOn){
-//		 MIOS32_MIDI_SendDebugMessage("Note On\n");
+//		 ADIOS_MIDI_SendDebugMessage("Note On\n");
 //	  // forward USB0->DIN0 and DIN0->USB0
 //	  switch( port ) {
 //	    case USB0:
-//	    	MIOS32_MIDI_SendPackage(USB0, midi_package);
-//	    	MIOS32_MIDI_SendPackage(DIN0,  midi_package);
-//	    	MIOS32_MIDI_SendPackage(DIN1,  midi_package);
+//	    	ADIOS_MIDI_SendPackage(USB0, midi_package);
+//	    	ADIOS_MIDI_SendPackage(DIN0,  midi_package);
+//	    	ADIOS_MIDI_SendPackage(DIN1,  midi_package);
 //	    	break;
 //	    case DIN0:
-//	    	MIOS32_MIDI_SendPackage(USB0, midi_package);
-//	    	MIOS32_MIDI_SendPackage(DIN0,  midi_package);
+//	    	ADIOS_MIDI_SendPackage(USB0, midi_package);
+//	    	ADIOS_MIDI_SendPackage(DIN0,  midi_package);
 //	    	break;
 //	  }
 //	}

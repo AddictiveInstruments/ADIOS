@@ -3,10 +3,10 @@
 # following setup taken from environment variables
 ################################################################################
 
-PROCESSOR =	$(MIOS32_PROCESSOR)
-FAMILY    = 	$(MIOS32_FAMILY)
-BOARD	  = 	$(MIOS32_BOARD)
-LCD       =     $(MIOS32_LCD)
+PROCESSOR =	$(ADIOS_PROCESSOR)
+FAMILY    = 	$(ADIOS_FAMILY)
+BOARD	  = 	$(ADIOS_BOARD)
+LCD       =     $(ADIOS_LCD)
 
 
 ################################################################################
@@ -47,11 +47,11 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 ################################################################################
 
 # sources of programming model
-include $(MIOS32_PATH)/core/core.mk
+include $(ADIOS_PATH)/core/core.mk
 
 # application specific LCD driver (selected via makefile variable)
-include $(MIOS32_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk
+include $(ADIOS_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk
 
 # common make rules
 # Please keep this include statement at the end of this Makefile. Add new modules above.
-include $(MIOS32_PATH)/include/makefile/common.mk
+include $(ADIOS_PATH)/include/makefile/common.mk

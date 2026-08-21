@@ -4,7 +4,7 @@
  *  Created on: Jul 20, 2025
  *      Author: Bruno
  */
-#include <mios32.h>
+#include <adios.h>
 #include "tr5x6_pict.h"
 
 /////////////////////////////////////////////////////////////////////////////

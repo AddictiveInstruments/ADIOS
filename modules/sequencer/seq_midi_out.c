@@ -16,7 +16,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 
 #include "seq_midi_out.h"
 #include "seq_bpm.h"
@@ -32,7 +32,7 @@
 /////////////////////////////////////////////////////////////////////////////
 #define DEBUG_VERBOSE_LEVEL 1
 #ifndef DEBUG_MSG
-#define DEBUG_MSG MIOS32_MIDI_SendDebugMessage
+#define DEBUG_MSG ADIOS_MIDI_SendDebugMessage
 #endif
 
 
@@ -45,7 +45,7 @@ typedef struct seq_midi_out_queue_item_t {
   u8                    port;
   u8                    event_type;
   u16                   len;
-  mios32_midi_package_t package;
+  adios_midi_package_t package;
   u32                   timestamp;
   struct seq_midi_out_queue_item_t *next;
 } seq_midi_out_queue_item_t;
@@ -77,7 +77,7 @@ u32 seq_midi_out_dropouts;
 // Local variables
 /////////////////////////////////////////////////////////////////////////////
 
-static s32 (*callback_midi_send_package)(mios32_midi_port_t port, mios32_midi_package_t midi_package);
+static s32 (*callback_midi_send_package)(adios_midi_port_t port, adios_midi_package_t midi_package);
 static s32 (*callback_bpm_is_running)(void);
 static u32 (*callback_bpm_tick_get)(void);
 static s32 (*callback_bpm_set)(float bpm);
@@ -166,7 +166,7 @@ s32 SEQ_MIDI_OUT_Init(u32 mode)
 //!
 //! \param[in] *_callback_midi_send_package pointer to callback function:<BR>
 //! \code
-//!   s32 callback_midi_send_package(mios32_midi_port_t port, mios32_midi_package_t midi_package)
+//!   s32 callback_midi_send_package(adios_midi_port_t port, adios_midi_package_t midi_package)
 //!   {
 //!     // ...
 //!     // do something with port and midi_package
@@ -175,14 +175,14 @@ s32 SEQ_MIDI_OUT_Init(u32 mode)
 //!     return 0; // no error
 //!   }
 //! \endcode
-//! If set to NULL, the default function MIOS32_MIDI_SendPackage function will
+//! If set to NULL, the default function ADIOS_MIDI_SendPackage function will
 //! be used. This allows you to restore the default setup properly.
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
 s32 SEQ_MIDI_OUT_Callback_MIDI_SendPackage_Set(void *_callback_midi_send_package)
 {
   callback_midi_send_package = (_callback_midi_send_package == NULL)
-  ? MIOS32_MIDI_SendPackage
+  ? ADIOS_MIDI_SendPackage
   : _callback_midi_send_package;
   
   return 0; // no error
@@ -281,14 +281,14 @@ s32 SEQ_MIDI_OUT_Callback_BPM_Set_Set(void *_callback_bpm_set)
 //! \param[in] port MIDI port (DEFAULT, USB0..USB7, UART0..UART1, IIC0..IIC7)
 //! \param[in] midi_package MIDI package
 //! If the re-schedule feature SEQ_MIDI_OUT_ReSchedule() should be used, the
-//! mios32_midi_package_t.cable field should be initialized with a tag (supported
+//! adios_midi_package_t.cable field should be initialized with a tag (supported
 //! range: 0-15)
 //! \param[in] event_type the event type
 //! \param[in] timestamp the bpm_tick value at which the event should be sent
 //! \return 0 if event has been scheduled successfully
 //! \return -1 if out of memory
 /////////////////////////////////////////////////////////////////////////////
-s32 SEQ_MIDI_OUT_Send(mios32_midi_port_t port, mios32_midi_package_t midi_package, seq_midi_out_event_type_t event_type, u32 timestamp, u32 len)
+s32 SEQ_MIDI_OUT_Send(adios_midi_port_t port, adios_midi_package_t midi_package, seq_midi_out_event_type_t event_type, u32 timestamp, u32 len)
 {
   // failsave measure:
   // don't take On or OnOff item if heap is almost completely allocated
@@ -425,7 +425,7 @@ s32 SEQ_MIDI_OUT_Send(mios32_midi_port_t port, mios32_midi_package_t midi_packag
 
 /////////////////////////////////////////////////////////////////////////////
 //! This function re-schedules MIDI Off/OnOff events assigned to a given "tag"
-//! (0..15, stored in mios32_midi_package_t.cable of events which already have been
+//! (0..15, stored in adios_midi_package_t.cable of events which already have been
 //! sent.
 //!
 //! Usually only SEQ_MIDI_OUT_Off events will be re-scheduled, all events
@@ -436,7 +436,7 @@ s32 SEQ_MIDI_OUT_Send(mios32_midi_port_t port, mios32_midi_package_t midi_packag
 //! event at timestamp 0xffffffff, reschedule it to timestamp == bpm_tick
 //! once the sequencer determined, that the off event should be played.
 //!
-//! \param[in] tag (0..15) the mios32_midi_package.t.cable number of events which should be re-scheduled
+//! \param[in] tag (0..15) the adios_midi_package.t.cable number of events which should be re-scheduled
 //! \param[in] event_type the event type which should be rescheduled
 //! \param[in] timestamp the bpm_tick value at which the event should be sent
 //! \param[in] reschedule_filter if != NULL, we expect a 4*32 bit word which contains flags for all
@@ -859,7 +859,7 @@ static seq_midi_out_queue_item_t *SEQ_MIDI_OUT_SlotMalloc(void)
   //! Sets a delay for the given MIDI port
   //! \return < 0 on errors
   /////////////////////////////////////////////////////////////////////////////
-  s32 SEQ_MIDI_OUT_DelaySet(mios32_midi_port_t port, s8 delay)
+  s32 SEQ_MIDI_OUT_DelaySet(adios_midi_port_t port, s8 delay)
   {
     if( port >= PPQN_DELAY_NUM )
       return -1; // invalid port
@@ -871,7 +871,7 @@ static seq_midi_out_queue_item_t *SEQ_MIDI_OUT_SlotMalloc(void)
   //! Returns the delay for the given MIDI port
   //! \return < 0 on errors
   /////////////////////////////////////////////////////////////////////////////
-  s8  SEQ_MIDI_OUT_DelayGet(mios32_midi_port_t port)
+  s8  SEQ_MIDI_OUT_DelayGet(adios_midi_port_t port)
   {
     if( port >= PPQN_DELAY_NUM )
       return 0;

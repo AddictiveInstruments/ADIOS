@@ -25,6 +25,6 @@ typedef struct {
   u16 height;        // in pixels
   u16 line_offset;   // bytes from the start of one line to the next
   u8  colour_depth;  // bits per pixel
-} mios32_lcd_bitmap_t;
+} adios_lcd_bitmap_t;
 
 #endif /* _APP_LCD_BITMAP_H */

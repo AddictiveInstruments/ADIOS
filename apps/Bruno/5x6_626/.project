@@ -79,42 +79,42 @@
 		<link>
 			<name>FreeRTOS</name>
 			<type>2</type>
-			<locationURI>MIOS32_ROOT/FreeRTOS</locationURI>
+			<locationURI>ADIOS_ROOT/FreeRTOS</locationURI>
 		</link>
 		<link>
 			<name>FreeRTOS_old</name>
 			<type>2</type>
-			<locationURI>MIOS32_ROOT/FreeRTOS_old</locationURI>
+			<locationURI>ADIOS_ROOT/FreeRTOS_old</locationURI>
 		</link>
 		<link>
 			<name>drivers</name>
 			<type>2</type>
-			<locationURI>MIOS32_ROOT/drivers</locationURI>
+			<locationURI>ADIOS_ROOT/drivers</locationURI>
 		</link>
 		<link>
 			<name>etc</name>
 			<type>2</type>
-			<locationURI>MIOS32_ROOT/etc</locationURI>
+			<locationURI>ADIOS_ROOT/etc</locationURI>
 		</link>
 		<link>
 			<name>include</name>
 			<type>2</type>
-			<locationURI>MIOS32_ROOT/include</locationURI>
+			<locationURI>ADIOS_ROOT/include</locationURI>
 		</link>
 		<link>
-			<name>mios32</name>
+			<name>adios</name>
 			<type>2</type>
-			<locationURI>MIOS32_ROOT/mios32</locationURI>
+			<locationURI>ADIOS_ROOT/adios</locationURI>
 		</link>
 		<link>
 			<name>modules</name>
 			<type>2</type>
-			<locationURI>MIOS32_ROOT/modules</locationURI>
+			<locationURI>ADIOS_ROOT/modules</locationURI>
 		</link>
 		<link>
 			<name>core</name>
 			<type>2</type>
-			<locationURI>MIOS32_ROOT/core</locationURI>
+			<locationURI>ADIOS_ROOT/core</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

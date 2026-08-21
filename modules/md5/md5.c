@@ -19,7 +19,7 @@
 
 /* Written by Ulrich Drepper <drepper@gnu.ai.mit.edu>, 1995.  */
 
-// modified by TK for MIOS32 integration
+// modified by TK for ADIOS integration
 // original source code can be found under http://ftp.gnu.org/gnu/coreutils/
 
 //#include <config.h>

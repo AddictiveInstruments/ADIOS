@@ -14,7 +14,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <string.h>
 
 #include <FreeRTOS.h>
@@ -28,7 +28,7 @@
 /////////////////////////////////////////////////////////////////////////////
 #define DEBUG_VERBOSE_LEVEL 0
 #ifndef DEBUG_MSG
-#define DEBUG_MSG MIOS32_MIDI_SendDebugMessage
+#define DEBUG_MSG ADIOS_MIDI_SendDebugMessage
 #endif
 
 
@@ -72,7 +72,7 @@ static u8 meta_buffer[MID_PARSER_META_BUFFER_SIZE];
 static u32 (*mid_parser_read_callback)(void *buffer, u32 len);
 static s32 (*mid_parser_eof_callback)(void);
 static s32 (*mid_parser_seek_callback)(u32 pos);
-static s32 (*mid_parser_playevent_callback)(u8 track, mios32_midi_package_t midi_package, u32 tick);
+static s32 (*mid_parser_playevent_callback)(u8 track, adios_midi_package_t midi_package, u32 tick);
 static s32 (*mid_parser_playmeta_callback)(u8 track, u8 meta, u32 len, u8 *buffer, u32 tick);
 
 
@@ -314,7 +314,7 @@ s32 MID_PARSER_FetchEvents(u32 tick_offset, u32 num_ticks)
 #endif
 
 	// TODO: use optimized packages for SysEx!
-	mios32_midi_package_t midi_package;
+	adios_midi_package_t midi_package;
 	midi_package.type = 0xf; // single bytes will be transmitted
 
 	// initial 0xf0
@@ -336,7 +336,7 @@ s32 MID_PARSER_FetchEvents(u32 tick_offset, u32 num_ticks)
 #if DEBUG_VERBOSE_LEVEL >= 3
 	DEBUG_MSG("[MID_PARSER:%d:%u] Escaped event with %u bytes\n\r", track, mt->tick, length);
 #endif
-	mios32_midi_package_t midi_package;
+	adios_midi_package_t midi_package;
 	midi_package.type = 0xf; // single bytes will be transmitted
 	int i;
 	for(i=0; i<length; ++i) {
@@ -383,7 +383,7 @@ s32 MID_PARSER_FetchEvents(u32 tick_offset, u32 num_ticks)
 	  mid_parser_playmeta_callback(track, meta, buflen, meta_buffer, mt->tick);
 	}
       } else { // common MIDI event
-	mios32_midi_package_t midi_package;
+	adios_midi_package_t midi_package;
 
 	if( event & 0x80 ) {
 	  mt->running_status = event;

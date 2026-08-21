@@ -96,23 +96,23 @@ static s32 DPOT_Device_Init(u32 mode)
     // These DAC pins coincide with SPI0 on J16
     for (dac = 0; dac < 2; dac++)
     {
-        MIOS32_BOARD_DAC_PinInit(dac, 0);
+        ADIOS_BOARD_DAC_PinInit(dac, 0);
     }
 #endif
 
 #if (DPOT_SPI_OUTPUTS_OD == 1)
     // pins in open drain mode (to pull-up the outputs to 5V)
-    status |= MIOS32_SPI_IO_Init(DPOT_SPI, MIOS32_SPI_PIN_DRIVER_STRONG_OD);
+    status |= ADIOS_SPI_IO_Init(DPOT_SPI, ADIOS_SPI_PIN_DRIVER_STRONG_OD);
 #else
     // pins in push-pull mode (3.3V output voltage)
-    status |= MIOS32_SPI_IO_Init(DPOT_SPI, MIOS32_SPI_PIN_DRIVER_STRONG);
+    status |= ADIOS_SPI_IO_Init(DPOT_SPI, ADIOS_SPI_PIN_DRIVER_STRONG);
 #endif
 
     // init SPI port for fast frequency access
-    status |= MIOS32_SPI_TransferModeInit(DPOT_SPI, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_4);
+    status |= ADIOS_SPI_TransferModeInit(DPOT_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_4);
 
     // ensure that CS is released
-    status |= MIOS32_SPI_RC_PinSet(DPOT_SPI, DPOT_SPI_RC_PIN, 1); // spi, rc_pin, pin_value
+    status |= ADIOS_SPI_RC_PinSet(DPOT_SPI, DPOT_SPI_RC_PIN, 1); // spi, rc_pin, pin_value
 
     return status;
 }
@@ -139,7 +139,7 @@ s32 DPOT_Device_Update(u32 req)
         for (chan_num = 0; chan_num < DPOT_NUM_CHAN_ON_CHIP; chan_num++)
         {
             // activate chip select
-            status |= MIOS32_SPI_RC_PinSet(DPOT_SPI, DPOT_SPI_RC_PIN, 0); // spi, rc_pin, pin_value
+            status |= ADIOS_SPI_RC_PinSet(DPOT_SPI, DPOT_SPI_RC_PIN, 0); // spi, rc_pin, pin_value
       
             // loop through devices (last device command/data has to be sent first)
             for (device = DPOT_NUM_IC - 1; device >= 0; device--)
@@ -160,12 +160,12 @@ s32 DPOT_Device_Update(u32 req)
                 }
         
                 // transfer command and data byte
-                status |= MIOS32_SPI_TransferByte(DPOT_SPI, commmand);
-                status |= MIOS32_SPI_TransferByte(DPOT_SPI, (dpot_value[pot_num] & 0xFF));          
+                status |= ADIOS_SPI_TransferByte(DPOT_SPI, commmand);
+                status |= ADIOS_SPI_TransferByte(DPOT_SPI, (dpot_value[pot_num] & 0xFF));          
             }
       
             // deactivate chip select
-            status |= MIOS32_SPI_RC_PinSet(DPOT_SPI, DPOT_SPI_RC_PIN, 1); // spi, rc_pin, pin_value
+            status |= ADIOS_SPI_RC_PinSet(DPOT_SPI, DPOT_SPI_RC_PIN, 1); // spi, rc_pin, pin_value
         }
     }
 

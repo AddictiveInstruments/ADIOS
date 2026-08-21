@@ -61,7 +61,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 
 #include "seq_bpm.h"
 
@@ -231,7 +231,7 @@ s32 SEQ_BPM_Set(float _bpm)
     // safety measure: ensure that period is nether less than 250 uS
     if( period_u < 250 )
       period_u = 250;
-    MIOS32_TIMER_ReInit(SEQ_BPM_MIOS32_TIMER_NUM, period_u); // re-init timer interval
+    ADIOS_TIMER_ReInit(SEQ_BPM_ADIOS_TIMER_NUM, period_u); // re-init timer interval
   }
 
   // update LED digits
@@ -333,10 +333,10 @@ s32 SEQ_BPM_CheckAutoMaster(void)
   if( slave_clk &&
       bpm_mode == SEQ_BPM_MODE_Auto &&
       incoming_clk_ctr >= SLAVE_CLK_TIMEOUT_DELAY ) {
-    MIOS32_IRQ_Disable();
+    ADIOS_IRQ_Disable();
     slave_clk = 0;
     SEQ_BPM_TimerInit();
-    MIOS32_IRQ_Enable();
+    ADIOS_IRQ_Enable();
 
     return 1;
   }
@@ -355,10 +355,10 @@ static s32 SEQ_BPM_TimerInit(void)
     // two clocks to generate 16 internal clocks (@384ppqn) on every F8 event.
     // using 250 uS as reference
     // using highest priority for best accuracy (routine is very short, so that this doesn't hurt)
-    MIOS32_TIMER_Init(SEQ_BPM_MIOS32_TIMER_NUM, TIMER_RATE_SLAVE_MODE_US, SEQ_BPM_Timer_Slave, MIOS32_IRQ_PRIO_HIGHEST);
+    ADIOS_TIMER_Init(SEQ_BPM_ADIOS_TIMER_NUM, TIMER_RATE_SLAVE_MODE_US, SEQ_BPM_Timer_Slave, ADIOS_IRQ_PRIO_HIGHEST);
   } else {
     // initial timer configuration for master mode -- calls the core clk routine directly
-    MIOS32_TIMER_Init(SEQ_BPM_MIOS32_TIMER_NUM, 1000, SEQ_BPM_Timer_Master, MIOS32_IRQ_PRIO_HIGHEST);
+    ADIOS_TIMER_Init(SEQ_BPM_ADIOS_TIMER_NUM, 1000, SEQ_BPM_Timer_Master, ADIOS_IRQ_PRIO_HIGHEST);
     // set the correct BPM rate
     SEQ_BPM_Set(bpm);
   }
@@ -380,7 +380,7 @@ static void SEQ_BPM_Timer_Slave(void)
 {
   // disable interrupts to avoid conflicts with NotifyRx handler (which could be called from 
   // a high-prio interrupt)
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
 
   // increment clock counter, used to measure the delay between two F8 events
   ++incoming_clk_ctr;
@@ -397,7 +397,7 @@ static void SEQ_BPM_Timer_Slave(void)
       }
     }
   }
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
 }
 
 
@@ -438,7 +438,7 @@ s32 SEQ_BPM_NotifyMIDIRx(u8 midi_byte)
       return 0; // no error
 
     // following operations should be atomic
-    MIOS32_IRQ_Disable();
+    ADIOS_IRQ_Disable();
 
     if( midi_byte == 0xf8 ) { // MIDI clock
 
@@ -512,7 +512,7 @@ s32 SEQ_BPM_NotifyMIDIRx(u8 midi_byte)
     }
 
     // enable interrupts again
-    MIOS32_IRQ_Enable();
+    ADIOS_IRQ_Enable();
 
   } else if( receive_song_pos_state || midi_byte == 0xf2 ) {
 
@@ -567,7 +567,7 @@ s32 SEQ_BPM_NotifyMIDIRx(u8 midi_byte)
 /////////////////////////////////////////////////////////////////////////////
 s32 SEQ_BPM_Start(void)
 {
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
   bpm_req_start = 1;
 
 #if 0
@@ -578,7 +578,7 @@ s32 SEQ_BPM_Start(void)
   run_mode = SEQ_BPM_RUN_MODE_Clocked;
 #endif
 
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
 
   return 0; // no error
 }
@@ -591,7 +591,7 @@ s32 SEQ_BPM_Start(void)
 /////////////////////////////////////////////////////////////////////////////
 s32 SEQ_BPM_Cont(void)
 {
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
   bpm_req_cont = 1;
 
 #if 0
@@ -602,7 +602,7 @@ s32 SEQ_BPM_Cont(void)
   run_mode = SEQ_BPM_RUN_MODE_Clocked;
 #endif
 
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
 
   return 0; // no error
 }
@@ -615,10 +615,10 @@ s32 SEQ_BPM_Cont(void)
 /////////////////////////////////////////////////////////////////////////////
 s32 SEQ_BPM_Stop(void)
 {
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
   bpm_req_stop = 1;
   run_mode = SEQ_BPM_RUN_MODE_Off;
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
 
   return 0; // no error
 }
@@ -631,10 +631,10 @@ s32 SEQ_BPM_Stop(void)
 /////////////////////////////////////////////////////////////////////////////
 s32 SEQ_BPM_ChkReqStop(void)
 {
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
   u8 req = bpm_req_stop;
   bpm_req_stop = 0;
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
   return req;
 }
 
@@ -645,10 +645,10 @@ s32 SEQ_BPM_ChkReqStop(void)
 /////////////////////////////////////////////////////////////////////////////
 s32 SEQ_BPM_ChkReqStart(void)
 {
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
   u8 req = bpm_req_start;
   bpm_req_start = 0;
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
   return req;
 }
 
@@ -659,10 +659,10 @@ s32 SEQ_BPM_ChkReqStart(void)
 /////////////////////////////////////////////////////////////////////////////
 s32 SEQ_BPM_ChkReqCont(void)
 {
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
   u8 req = bpm_req_cont;
   bpm_req_cont = 0;
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
   return req;
 }
 
@@ -686,7 +686,7 @@ s32 SEQ_BPM_ChkReqClk(u32 *bpm_tick_ptr)
   if( bpm_req_stop || bpm_req_start || bpm_req_cont || bpm_req_song_pos ) {
     req = 0;
   } else {
-    MIOS32_IRQ_Disable();
+    ADIOS_IRQ_Disable();
     if( bpm_req_clk_ctr > bpm_tick ) {
       // ensure that bpm_tick never gets negative (e.g. if clock wasn't polled for long time)
       bpm_tick = bpm_req_clk_ctr;
@@ -696,7 +696,7 @@ s32 SEQ_BPM_ChkReqClk(u32 *bpm_tick_ptr)
       --bpm_req_clk_ctr;
     }
 
-    MIOS32_IRQ_Enable();
+    ADIOS_IRQ_Enable();
   }
   return req;
 }
@@ -711,11 +711,11 @@ s32 SEQ_BPM_ChkReqClk(u32 *bpm_tick_ptr)
 /////////////////////////////////////////////////////////////////////////////
 s32 SEQ_BPM_ChkReqSongPos(u16 *song_pos)
 {
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
   u8 req = bpm_req_song_pos;
   bpm_req_song_pos = 0;
   *song_pos = new_song_pos;
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
   return req;
 }
 

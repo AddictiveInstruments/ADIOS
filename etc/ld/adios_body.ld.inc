@@ -20,7 +20,7 @@
  * project's ADIOS_LD_BSL_BOUNDARY_K.
  */
 
-/* MIOS32_USERDATA_PAGES: flash pages at the TOP of memory that belong to the
+/* ADIOS_USERDATA_PAGES: flash pages at the TOP of memory that belong to the
    application but not to its image - sound banks, settings, the persistent
    device-ID record. Reserving them HERE is the whole point: the FLASH region
    below is shortened by exactly that much, so an application growing into its
@@ -30,7 +30,7 @@
    declares none and must place such a region elsewhere entirely. */
 #ifdef ADIOS_LD_USERDATA_PAGES
 # ifndef ADIOS_USERDATA_PAGE_SIZE
-#  error "MIOS32_USERDATA_PAGES was requested, but this family's linker template declares no uniform erase-page size. The region cannot simply be carved off the top of flash here."
+#  error "ADIOS_USERDATA_PAGES was requested, but this family's linker template declares no uniform erase-page size. The region cannot simply be carved off the top of flash here."
 # endif
 # define ADIOS_USERDATA_LEN (ADIOS_LD_USERDATA_PAGES * ADIOS_USERDATA_PAGE_SIZE)
 #else
@@ -42,9 +42,9 @@ MEMORY
 {
   RAM (xrw) :     ORIGIN = 0x20000000, LENGTH = ADIOS_RAM_LEN
 #ifdef ADIOS_LD_NO_BOOTLOADER
-  /* MIOS32_USE_BOOTLOADER = 0: no reserved bootloader region at all, the
+  /* ADIOS_USE_BOOTLOADER = 0: no reserved bootloader region at all, the
      application owns the whole flash from its base. FLASH_BSL is not even
-     declared - the .mios32_bsl output section below is retargeted to FLASH,
+     declared - the .adios_bsl output section below is retargeted to FLASH,
      the same way etc/gen_bsl_boundary.sh does it for the bootloader's own
      build (an output section mapped to an undeclared region makes ld warn
      and mis-size its neighbours). */
@@ -60,8 +60,8 @@ MEMORY
   EXTMEMB3 (rx) : ORIGIN = 0x00000000, LENGTH = 0
 }
 
-/* exposes the RAM region size to C code (MIOS32_SYS_RAMSizeGet()) without a
-   per-chip #if - see mios32_sys.c */
+/* exposes the RAM region size to C code (ADIOS_SYS_RAMSizeGet()) without a
+   per-chip #if - see adios_sys.c */
 PROVIDE ( _ram_size = LENGTH(RAM) ) ;
 
 /* total flash of this chip, independent of how it is currently split.
@@ -79,7 +79,7 @@ PROVIDE ( _flash_size = ADIOS_FLASH_TOTAL_LEN ) ;
 _estack = 0x20000000 + ADIOS_RAM_LEN;
 
 /* Reserved stack region. __Stack_Init is the BOTTOM of it, and it is a live
-   symbol: the bare-metal canary (MIOS32_CORE_USE_CANARI, see
+   symbol: the bare-metal canary (ADIOS_CORE_USE_CANARI, see
    core/main.c) fills from there up to the current
    stack pointer, then checks that first word for corruption.
    Uniform across families since 2026-08-10 - STM32F4xx used to say 128,
@@ -109,11 +109,11 @@ _Minimum_Stack_Size = 0x100 ;
 
 SECTIONS
 {
-    /* the MIOS32 BSL section */
-    .mios32_bsl :
+    /* the ADIOS BSL section */
+    .adios_bsl :
     {
 	. = ALIGN(4);
-        KEEP(*(.mios32_bsl))
+        KEEP(*(.adios_bsl))
 	. = ALIGN(4);
 #ifdef ADIOS_LD_NO_BOOTLOADER
     } >FLASH        /* stays empty: no image is embedded in this mode */
@@ -124,14 +124,14 @@ SECTIONS
     /* for Cortex devices, the beginning of the startup code is stored in the .isr_vector section, which goes to FLASH */
     .isr_vector :
     {
-	_mios32_sys_isr_vector = . ;
+	_adios_sys_isr_vector = . ;
 	. = ALIGN(4);
         KEEP(*(.isr_vector))            /* Startup code */
 	. = ALIGN(4);
     } >FLASH
 
-    /* used in MIOS32_SYS to set the start vector */
-    PROVIDE ( mios32_sys_isr_vector = _mios32_sys_isr_vector );
+    /* used in ADIOS_SYS to set the start vector */
+    PROVIDE ( adios_sys_isr_vector = _adios_sys_isr_vector );
  
     /* for some STRx devices, the beginning of the startup code is stored in the .flashtext section, which goes to FLASH */
     .flashtext :

@@ -76,15 +76,15 @@ extern s32 SEQ_MIDI_OUT_Callback_BPM_IsRunning_Set(void *_callback_bpm_is_runnin
 extern s32 SEQ_MIDI_OUT_Callback_BPM_TickGet_Set(void *_callback_bpm_tick_get);
 extern s32 SEQ_MIDI_OUT_Callback_BPM_Set_Set(void *_callback_bpm_set);
 
-extern s32 SEQ_MIDI_OUT_Send(mios32_midi_port_t port, mios32_midi_package_t midi_package, seq_midi_out_event_type_t event_type, u32 timestamp, u32 len);
+extern s32 SEQ_MIDI_OUT_Send(adios_midi_port_t port, adios_midi_package_t midi_package, seq_midi_out_event_type_t event_type, u32 timestamp, u32 len);
 extern s32 SEQ_MIDI_OUT_ReSchedule(u8 tag, seq_midi_out_event_type_t event_type, u32 timestamp, u32 *reschedule_filter);
 extern s32 SEQ_MIDI_OUT_FlushQueue(void);
 extern s32 SEQ_MIDI_OUT_FreeHeap(void);
 extern s32 SEQ_MIDI_OUT_Handler(void);
 
 #if SEQ_MIDI_OUT_SUPPORT_DELAY
-extern s32 SEQ_MIDI_OUT_DelaySet(mios32_midi_port_t port, s8 delay);
-extern s8  SEQ_MIDI_OUT_DelayGet(mios32_midi_port_t port);
+extern s32 SEQ_MIDI_OUT_DelaySet(adios_midi_port_t port, s8 delay);
+extern s8  SEQ_MIDI_OUT_DelayGet(adios_midi_port_t port);
 #endif
 
 /////////////////////////////////////////////////////////////////////////////

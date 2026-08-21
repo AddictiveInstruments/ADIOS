@@ -2,12 +2,12 @@
 //!
 //! USB Mass Storage Device Driver
 //!
-//! Mainly based on STM32 example code and adapted to MIOS32.
+//! Mainly based on STM32 example code and adapted to ADIOS.
 //!
 //! Application examples:
 //! <UL CLASS=CL>
-//!   <LI>$MIOS32_PATH/apps/misc/usb_mass_storage_device
-//!   <LI>$MIOS32_PATH/apps/sequencers/midibox_seq_v4/mios32/tasks.c
+//!   <LI>$ADIOS_PATH/apps/misc/usb_mass_storage_device
+//!   <LI>$ADIOS_PATH/apps/sequencers/midibox_seq_v4/adios/tasks.c
 //! </UL>
 //!
 //! \{
@@ -24,7 +24,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <usb_lib.h>
 
 #include <string.h>
@@ -81,7 +81,7 @@ static const DEVICE My_Device_Table = {
 };
 
 static const DEVICE_PROP My_Device_Property = {
-  0, // Init hook not used, done by MIOS32_USB module!
+  0, // Init hook not used, done by ADIOS_USB module!
   MSD_MASS_Reset,
   MSD_MASS_Status_In,
   MSD_MASS_Status_Out,
@@ -133,7 +133,7 @@ static u8 lun_available;
 //!
 //! Should be called during runtime once a SD Card has been connected.<BR>
 //! It is possible to switch back to the original device driver provided
-//! by MIOS32 (e.g. MIOS32_USB_MIDI) by calling MIOS32_USB_Init(1)
+//! by ADIOS (e.g. ADIOS_USB_MIDI) by calling ADIOS_USB_Init(1)
 //!
 //! \param[in] mode currently only mode 0 supported
 //! \return < 0 if initialisation failed
@@ -144,7 +144,7 @@ s32 MSD_Init(u32 mode)
   ID*/
   u8 serial_number_str[40];
   int i, len;
-  MIOS32_SYS_SerialNumberGet((char *)serial_number_str);
+  ADIOS_SYS_SerialNumberGet((char *)serial_number_str);
   for(i=0, len=0; serial_number_str[i] != '\0' && len<25; ++i) {
     MSD_MASS_StringSerial[len++] = serial_number_str[i];
     MSD_MASS_StringSerial[len++] = 0;
@@ -159,7 +159,7 @@ s32 MSD_Init(u32 mode)
   msd_memory_rd_led_ctr = 0;
   msd_memory_wr_led_ctr = 0;
 
-  MIOS32_IRQ_Disable();
+  ADIOS_IRQ_Disable();
 
   // clear all USB interrupt requests
   _SetCNTR(0); // Interrupt Mask
@@ -174,8 +174,8 @@ s32 MSD_Init(u32 mode)
   pEpInt_IN[0] = MSD_Mass_Storage_In;
   pEpInt_OUT[1] = MSD_Mass_Storage_Out;
 
-  // force re-enumeration w/o overwriting MIOS32 hooks
-  MIOS32_USB_Init(2);
+  // force re-enumeration w/o overwriting ADIOS hooks
+  ADIOS_USB_Init(2);
 
   // clear pending interrupts (again)
   _SetISTR(0);
@@ -183,7 +183,7 @@ s32 MSD_Init(u32 mode)
   // set interrupts mask
   _SetCNTR(MSD_IMR_MSK);
 
-  MIOS32_IRQ_Enable();
+  ADIOS_IRQ_Enable();
 
   return 0; // no error
 }
@@ -196,8 +196,8 @@ s32 MSD_Init(u32 mode)
 //! Take care that no other task accesses SD Card while this function is
 //! processed!
 //!
-//! Ensure that this function isn't called when a MIOS32 USB driver like
-//! MIOS32_USB_MIDI is running!
+//! Ensure that this function isn't called when a ADIOS USB driver like
+//! ADIOS_USB_MIDI is running!
 //!
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
@@ -212,7 +212,7 @@ s32 MSD_Periodic_mS(void)
 
   // call endpoint handler of STM32 USB driver
   //CTR_LP();
-  // now done in USB_LP_CAN1_RX0_IRQHandler(), see mios32_usb.c
+  // now done in USB_LP_CAN1_RX0_IRQHandler(), see adios_usb.c
 
   return 0; // no error
 }
@@ -237,7 +237,7 @@ s32 MSD_CheckAvailable(void)
 //! It will be disabled when the host unmounts the file system (like if the
 //! SD Card would be removed.
 //!
-//! When this happens, the application can either call MIOS32_USB_Init(1)
+//! When this happens, the application can either call ADIOS_USB_Init(1)
 //! again, e.g. to switch to USB MIDI, or it can make the LUN available
 //! again by calling MSD_LUN_AvailableSet(0, 1)
 //! \param[in] lun Logical Unit number (0)

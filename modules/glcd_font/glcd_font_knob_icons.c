@@ -1,6 +1,6 @@
 // converted with 'convpix_c.pl glcd_font_knob_icons.xpm -icons 12 -height 24'
 
-#include <mios32.h>
+#include <adios.h>
 
 const u8 GLCD_FONT_KNOB_ICONS[] = {
 28, 3*8, 2, 32, // width, height, X0 offset, char offset

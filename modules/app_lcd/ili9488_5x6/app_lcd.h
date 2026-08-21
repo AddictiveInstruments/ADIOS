@@ -92,7 +92,7 @@ typedef enum{
 // Prototypes
 /////////////////////////////////////////////////////////////////////////////
 
-// hooks to MIOS32_LCD
+// hooks to ADIOS_LCD
 extern s32 APP_LCD_Init(u32 mode);
 extern s32 APP_LCD_SPI_TransferModeInit(void);
 extern s32 APP_LCD_DelayedInit(u32 mode);
@@ -126,10 +126,10 @@ extern s32 APP_LCD_StringKernGet(s16 ascii_offset, const char *str);
 extern s32 APP_LCD_PrintChar(s16 x, s16 y, s16 w_stop, s16 ascii_offset, char c);   // new
 extern s32 APP_LCD_PrintString(s16 x, s16 y, s16 w_stop, u8 alignment, s16 ascii_offset, const char *str);   // new
 extern s32 APP_LCD_PrintFormattedString(s16 x, s16 y, s16 w_stop, u8 alignment, s16 ascii_offset, const char *format, ...);   //new
-extern s32 APP_LCD_PrintProgress(mios32_lcd_bitmap_t bitmap, u32 progress_color, s16 x, s16 y, s16 w_stop, s16 height, s16 progress);   // new
-extern s32 APP_LCD_BitmapPrintChar(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, s16 ascii_offset, char c);   // new
-extern s32 APP_LCD_BitmapPrintString(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, u8 alignment, s16 ascii_offset, const char *str);   // new
-extern s32 APP_LCD_BitmapPrintFormattedString(mios32_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, u8 alignment, s16 ascii_offset, const char *format, ...);   //new
+extern s32 APP_LCD_PrintProgress(adios_lcd_bitmap_t bitmap, u32 progress_color, s16 x, s16 y, s16 w_stop, s16 height, s16 progress);   // new
+extern s32 APP_LCD_BitmapPrintChar(adios_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, s16 ascii_offset, char c);   // new
+extern s32 APP_LCD_BitmapPrintString(adios_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, u8 alignment, s16 ascii_offset, const char *str);   // new
+extern s32 APP_LCD_BitmapPrintFormattedString(adios_lcd_bitmap_t bitmap, float luma, s16 x, s16 y, app_lcd_fusion_t fusion, u8 alignment, s16 ascii_offset, const char *format, ...);   //new
 
 
 extern u16 APP_LCD_ColourConvert(u32 rgb);
@@ -138,20 +138,20 @@ extern s32 APP_LCD_FColourSet(u16 color);   // used for: rectDraw border, pixelS
 extern s32 APP_LCD_BColourSetRGB(u32 rgb);   // used for: rectDraw fill.
 extern s32 APP_LCD_FColourSetRGB(u32 rgb);   // used for: rectDraw border, pixelSet, legacy 2 native PrintChar/Fusion...
 
-extern mios32_lcd_bitmap_t APP_LCD_BitmapInit(u8 *memory, u16 width, u16 height, u16 line_offset, app_lcd_color_depth_t colour_depth);   //new
+extern adios_lcd_bitmap_t APP_LCD_BitmapInit(u8 *memory, u16 width, u16 height, u16 line_offset, app_lcd_color_depth_t colour_depth);   //new
 
 extern s32 APP_LCD_PixelSet(u16 x, u16 y, u32 colour);
-extern s32 APP_LCD_BitmapPixelSet(mios32_lcd_bitmap_t bitmap, u16 x, u16 y, u32 colour);
+extern s32 APP_LCD_BitmapPixelSet(adios_lcd_bitmap_t bitmap, u16 x, u16 y, u32 colour);
 extern s32 APP_LCD_Rectangle(u16 x, u16 y, u16 w, u16 h, u8 border, u16 bd_color, u8 fill, u16 fill_color);
-extern s32 APP_LCD_BitmapRectangle(mios32_lcd_bitmap_t bitmap, s16 x, s16 y, u16 width, u16 height, u8 border, u32 bd_color, u8 fill, u32 back_color);   //new
-extern s32 APP_LCD_BitmapByteSet(mios32_lcd_bitmap_t bitmap, s16 x, s16 y, u8 value);
-extern s32 APP_LCD_Bitmap16BitLuma(mios32_lcd_bitmap_t bitmap, s16 x, s16 y, u16 width, u16 height, float luma);   // new
+extern s32 APP_LCD_BitmapRectangle(adios_lcd_bitmap_t bitmap, s16 x, s16 y, u16 width, u16 height, u8 border, u32 bd_color, u8 fill, u32 back_color);   //new
+extern s32 APP_LCD_BitmapByteSet(adios_lcd_bitmap_t bitmap, s16 x, s16 y, u8 value);
+extern s32 APP_LCD_Bitmap16BitLuma(adios_lcd_bitmap_t bitmap, s16 x, s16 y, u16 width, u16 height, float luma);   // new
 extern u16 APP_LCD_HelpPixelLuma(u16 pix_mem, float luma);
 extern u16 APP_LCD_PixelFusion(u16 fore_pix, float fore_luma, u16 back_pix, float back_luma, app_lcd_fusion_t fusion);
-extern s32 APP_LCD_BitmapFusion(mios32_lcd_bitmap_t top_bmp, float top_luma, mios32_lcd_bitmap_t bmp, s16 top_pos_x, s16 top_pos_y, app_lcd_fusion_t fusion);   // new
-extern s32 APP_LCD_SendBitmap(mios32_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos);
-extern s32 APP_LCD_BitmapHBoundaryPrint(mios32_lcd_bitmap_t bitmap, u16 b_x, u16 b_width);
-extern s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap);
+extern s32 APP_LCD_BitmapFusion(adios_lcd_bitmap_t top_bmp, float top_luma, adios_lcd_bitmap_t bmp, s16 top_pos_x, s16 top_pos_y, app_lcd_fusion_t fusion);   // new
+extern s32 APP_LCD_SendBitmap(adios_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos);
+extern s32 APP_LCD_BitmapHBoundaryPrint(adios_lcd_bitmap_t bitmap, u16 b_x, u16 b_width);
+extern s32 APP_LCD_BitmapPrint(adios_lcd_bitmap_t bitmap);
 
 
 /////////////////////////////////////////////////////////////////////////////

@@ -2,7 +2,7 @@
 
 Existing Wiki Pages for Toolchain installation:
 
-Windows: http://www.midibox.org/dokuwiki/doku.php?id=windows_mios32_toolchain_core 
+Windows: http://www.midibox.org/dokuwiki/doku.php?id=windows_adios_toolchain_core 
 MacOS: http://www.midibox.org/dokuwiki/doku.php?id=installing_gnu_on_osx
 
 
@@ -48,10 +48,10 @@ Downloading Repository
 ~~~~~~~~~~~~~~~~~~~~~~
 
 Download the repository with:
-   svn co svn://svnmios.midibox.org/mios32
+   svn co svn://svnmios.midibox.org/adios
 
 If you have write access to the midibox.org SVN server, use:
-   svn co svn+ssh://svn@midibox.org/mios32
+   svn co svn+ssh://svn@midibox.org/adios
 
 
 Synching Repository
@@ -63,57 +63,57 @@ Just type "svn update" in the root directory of the repository
 Environment Variables
 ~~~~~~~~~~~~~~~~~~~~~
 
-Before compiling code, set the MIOS32 environment variables:
+Before compiling code, set the ADIOS environment variables:
 
 Unix (we assume, that the repository has been dowloaded into ~/svn)
-  export MIOS32_PATH=~/svn/mios32/trunk
-  export MIOS32_BIN_PATH=$MIOS32_PATH/bin
+  export ADIOS_PATH=~/svn/adios/trunk
+  export ADIOS_BIN_PATH=$ADIOS_PATH/bin
 
 
 DOS: (we assume, that the repository has been downloaded to D:\)
-  set MIOS32_PATH=/D/mios32/trunk
-  set MIOS32_BIN_PATH=/D/mios32/trunk/bin
+  set ADIOS_PATH=/D/adios/trunk
+  set ADIOS_BIN_PATH=/D/adios/trunk/bin
 
 
 Additional environment variables to configure the environment:
 (they have to be set, otherwise compiler will fail)
 
 MBHP_CORE_STM32:
-export MIOS32_GCC_PREFIX=arm-none-eabi
-export MIOS32_FAMILY=STM32F10x
-export MIOS32_PROCESSOR=STM32F103RE
-export MIOS32_BOARD=MBHP_CORE_STM32
-export MIOS32_LCD=universal
+export ADIOS_GCC_PREFIX=arm-none-eabi
+export ADIOS_FAMILY=STM32F10x
+export ADIOS_PROCESSOR=STM32F103RE
+export ADIOS_BOARD=MBHP_CORE_STM32
+export ADIOS_LCD=universal
 
 
 MBHP_CORE_STM32 with STM32F105RC (communication line):
-export MIOS32_GCC_PREFIX=arm-none-eabi
-export MIOS32_FAMILY=STM32F10x
-export MIOS32_PROCESSOR=STM32F105RC
-export MIOS32_BOARD=MBHP_CORE_STM32
-export MIOS32_LCD=universal
+export ADIOS_GCC_PREFIX=arm-none-eabi
+export ADIOS_FAMILY=STM32F10x
+export ADIOS_PROCESSOR=STM32F105RC
+export ADIOS_BOARD=MBHP_CORE_STM32
+export ADIOS_LCD=universal
 
 
 STM32 Primer:
-export MIOS32_GCC_PREFIX=arm-none-eabi
-export MIOS32_FAMILY=STM32F10x
-export MIOS32_PROCESSOR=STM32F103RB
-export MIOS32_BOARD=STM32_PRIMER
-export MIOS32_LCD=st7637
+export ADIOS_GCC_PREFIX=arm-none-eabi
+export ADIOS_FAMILY=STM32F10x
+export ADIOS_PROCESSOR=STM32F103RB
+export ADIOS_BOARD=STM32_PRIMER
+export ADIOS_LCD=st7637
 
 MBHP_CORE_LPC17 with LPCXPRESSO LPC1769:
-export MIOS32_GCC_PREFIX=arm-none-eabi
-export MIOS32_FAMILY=LPC17xx
-export MIOS32_PROCESSOR=LPC1769
-export MIOS32_BOARD=MBHP_CORE_LPC17
-export MIOS32_LCD=universal
+export ADIOS_GCC_PREFIX=arm-none-eabi
+export ADIOS_FAMILY=LPC17xx
+export ADIOS_PROCESSOR=LPC1769
+export ADIOS_BOARD=MBHP_CORE_LPC17
+export ADIOS_LCD=universal
 
 STM32F4 Discovery:
-export MIOS32_GCC_PREFIX=arm-none-eabi
-export MIOS32_FAMILY=STM32F4xx
-export MIOS32_PROCESSOR=STM32F407VG
-export MIOS32_BOARD=STM32F4DISCOVERY
-export MIOS32_LCD=universal
+export ADIOS_GCC_PREFIX=arm-none-eabi
+export ADIOS_FAMILY=STM32F4xx
+export ADIOS_PROCESSOR=STM32F407VG
+export ADIOS_BOARD=STM32F4DISCOVERY
+export ADIOS_LCD=universal
 
 
 Installing Toolchain
@@ -143,7 +143,7 @@ Excellent guide can be found under
 Note, that the installation of FatFryer is not required, as CircleOS
 is not used. 
 
-Installing MIOS32 Bootloader:
+Installing ADIOS Bootloader:
 see http://www.ucapps.de/mios_bootstrap.html
 
 
@@ -155,7 +155,7 @@ Excellent guide to install gcc for Cortex M3 can be found under
 Note, that the installation of FatFryer is not required, as CircleOS
 is not used. 
 
-Installing MIOS32 Bootloader:
+Installing ADIOS Bootloader:
 see http://www.ucapps.de/mios_bootstrap.html
 
 
@@ -180,7 +180,7 @@ and
     CFLAGS="$CFLAGS -I/usr/include"
 to be sure that the C compiler is looking for headers in the right place.
 
-Installing MIOS32 Bootloader:
+Installing ADIOS Bootloader:
 see http://www.ucapps.de/mios_bootstrap.html
 
 
@@ -191,7 +191,7 @@ gcc sources can be downloaded from:
 -> http://www.paintyourdragon.com/uc/osxstm32/index.html
 and simply recompiled for your Linux installation
 
-Installing MIOS32 Bootloader:
+Installing ADIOS Bootloader:
 see http://www.ucapps.de/mios_bootstrap.html
 
 
@@ -199,7 +199,7 @@ see http://www.ucapps.de/mios_bootstrap.html
 Quickstart STM32 Primer under DOS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We assume, that the MIOS32 repository has been downloaded to D:\mios32, and that
+We assume, that the ADIOS repository has been downloaded to D:\adios, and that
 the Ride7 IDE (which comes with STM32 Primer) has been installed. We won't use
 the IDE, but build & upload the application from the commandline instead.
 
@@ -216,12 +216,12 @@ like used for the PIC based MIOS environment, see also:
 
 
 a) set your environment variables to:
-     set MIOS32_PATH=/D/mios32/trunk
-     set MIOS32_BIN_PATH=/D/mios32/trunk/bin
-     set MIOS32_FAMILY=STM32F10x
-     set MIOS32_PROCESSOR=STM32F103RB
-     set MIOS32_BOARD=STM32_PRIMER
-     set MIOS32_LCD=st7637
+     set ADIOS_PATH=/D/adios/trunk
+     set ADIOS_BIN_PATH=/D/adios/trunk/bin
+     set ADIOS_FAMILY=STM32F10x
+     set ADIOS_PROCESSOR=STM32F103RB
+     set ADIOS_BOARD=STM32_PRIMER
+     set ADIOS_LCD=st7637
 
    (note you could write this into a batch file)
 
@@ -257,7 +257,7 @@ f) after upload the program will be executed automatically
 Quickstart MBHP_CORE_STM32 under DOS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We assume, that the MIOS32 repository has been downloaded to D:\mios32, and that
+We assume, that the ADIOS repository has been downloaded to D:\adios, and that
 an arm-gcc installation is available, which supports Cortex M3 
 (TODO: check if free available from Raisonance website)
 
@@ -266,22 +266,22 @@ The command:
 should return a version number >= 4.2.1
 
 Sidenote: If you use a different arm-gcc installation (later, once properly 
-integrated into gcc), you have to adapt your MIOS32_GCC_PREFIX setting, e.g.
+integrated into gcc), you have to adapt your ADIOS_GCC_PREFIX setting, e.g.
 from "arm-none-eabi" to the common "arm-elf"
 
 a) set your environment variables to:
-     set MIOS32_PATH=/D/mios32/trunk
-     set MIOS32_BIN_PATH=/D/mios32/trunk/bin
-     set MIOS32_FAMILY=STM32F10x
-     set MIOS32_PROCESSOR=STM32F103RE
-     set MIOS32_BOARD=MBHP_CORE_STM32
-     set MIOS32_LCD=universal
+     set ADIOS_PATH=/D/adios/trunk
+     set ADIOS_BIN_PATH=/D/adios/trunk/bin
+     set ADIOS_FAMILY=STM32F10x
+     set ADIOS_PROCESSOR=STM32F103RE
+     set ADIOS_BOARD=MBHP_CORE_STM32
+     set ADIOS_LCD=universal
 
    (note you could write this into a batch file)
 
 
 b) go into an application directory, e.g.
-     apps/tutorial/007_mios32_timer
+     apps/tutorial/007_adios_timer
 
 
 c) build the project with
@@ -310,17 +310,17 @@ version 6.8
 
 go into installation dir
    mkdir build; cd build
-   ../configure --target=$MIOS32_GCC_PREFIX --prefix=/usr/local/stm32 --disable-nls --enable-shared
+   ../configure --target=$ADIOS_GCC_PREFIX --prefix=/usr/local/stm32 --disable-nls --enable-shared
    make
    sudo make install
 
 Starting:
-   $MIOS32_GCC_PREFIX-insight project.elf &
+   $ADIOS_GCC_PREFIX-insight project.elf &
 (assumed that /usr/local/stm32/bin is in your PATH variable)
 
 MacOS: if you get following message
 ---
-$MIOS32_GCC_PREFIX-insight project.elf 
+$ADIOS_GCC_PREFIX-insight project.elf 
 dyld: Library not loaded: libitcl3.2.dylib
   Referenced from: /usr/local/stm32/bin/arm-none-eabi-insight
   Reason: image not found
@@ -353,7 +353,7 @@ Configuration steps:
 - Select GNU GCC Compiler (if not already selected)
 - press Copy button, new name: Cortex M3 GCC
 - press "Toolchain executables" tab
-- change compiler's directory, e.g. to /usr/local/mios32
+- change compiler's directory, e.g. to /usr/local/adios
 - add "arm-none-eabi" prefix to all commands, e.g.
   arm-none-eabi-gcc
   arm-none-eabi-g++
@@ -393,7 +393,7 @@ continue
 --- LPC17 ---
 
 
-2) define MIOS32 specific environment variables
+2) define ADIOS specific environment variables
 - go to Settings->Environment Settings
 - Select "Environment variables" tab, and add following variables:
 
@@ -401,28 +401,28 @@ continue
 (note that ~ doesn't work as shortcut for your home directory!)
 
 --- STM32 ---
-MIOS32_PATH=/Users/TK/svn/mios32/trunk
-MIOS32_BIN_PATH=$MIOS32_PATH/bin
-MIOS32_GCC_PREFIX=arm-none-eabi
-MIOS32_FAMILY=STM32F10x
-MIOS32_PROCESSOR=STM32F103RE
-MIOS32_BOARD=MBHP_CORE_STM32
-MIOS32_LCD=universal
+ADIOS_PATH=/Users/TK/svn/adios/trunk
+ADIOS_BIN_PATH=$ADIOS_PATH/bin
+ADIOS_GCC_PREFIX=arm-none-eabi
+ADIOS_FAMILY=STM32F10x
+ADIOS_PROCESSOR=STM32F103RE
+ADIOS_BOARD=MBHP_CORE_STM32
+ADIOS_LCD=universal
 --- STM32 ---
 
 --- LPC17 ---
-MIOS32_PATH=/Users/TK/svn/mios32/trunk
-MIOS32_BIN_PATH=$MIOS_PATH/bin
-MIOS32_GCC_PREFIX=arm-none-eabi
-MIOS32_FAMILY=LPC17xx
-MIOS32_PROCESSOR=LPC1769
-MIOS32_BOARD=MBHP_CORE_LPC17
-MIOS32_LCD=universal
+ADIOS_PATH=/Users/TK/svn/adios/trunk
+ADIOS_BIN_PATH=$MIOS_PATH/bin
+ADIOS_GCC_PREFIX=arm-none-eabi
+ADIOS_FAMILY=LPC17xx
+ADIOS_PROCESSOR=LPC1769
+ADIOS_BOARD=MBHP_CORE_LPC17
+ADIOS_LCD=universal
 --- LPC17 ---
 
 MacOS users: add also
 ---
-DYLD_LIBRARY_PATH=/usr/local/mios32/lib
+DYLD_LIBRARY_PATH=/usr/local/adios/lib
 ---
 
 

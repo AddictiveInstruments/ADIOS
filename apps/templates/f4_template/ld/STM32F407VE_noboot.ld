@@ -36,7 +36,7 @@ MEMORY
   EXTMEMB3 (rx) : ORIGIN = 0x00000000, LENGTH = 0
 }
 
-/* exposes the RAM region size to C code (MIOS32_SYS_RAMSizeGet()) without a
+/* exposes the RAM region size to C code (ADIOS_SYS_RAMSizeGet()) without a
    per-processor #elif chain - STM32 has no hardware register for this,
    unlike FLASH size (electronic signature) */
 PROVIDE ( _ram_size = LENGTH(RAM) ) ;
@@ -50,7 +50,7 @@ _estack = 0x20020000; /* end of 128K contiguous SRAM on AHB bus*/
 These are used by the startup in order to allocate stacks for the different modes.
 
 Note: FreeRTOS gives each task an own stack, the default stack sizes used by the
-"programming model" can be changed with MIOS32_MINIMAL_STACK_SIZE
+"programming model" can be changed with ADIOS_MINIMAL_STACK_SIZE
 */
 
 __Stack_Size = 128 ;
@@ -142,25 +142,25 @@ PROVIDE ( SCB             = (SCS_BASE + 0x0D00) ) ;
 
 SECTIONS
 {
-    /* the MIOS32 BSL section */
-    .mios32_bsl :
+    /* the ADIOS BSL section */
+    .adios_bsl :
     {
 	. = ALIGN(4);
-        KEEP(*(.mios32_bsl))
+        KEEP(*(.adios_bsl))
 	. = ALIGN(4);
     } >FLASH_BSL
 
     /* for Cortex devices, the beginning of the startup code is stored in the .isr_vector section, which goes to FLASH */
     .isr_vector :
     {
-	_mios32_sys_isr_vector = . ;
+	_adios_sys_isr_vector = . ;
 	. = ALIGN(4);
         KEEP(*(.isr_vector))            /* Startup code */
 	. = ALIGN(4);
     } >FLASH
 
-    /* used in MIOS32_SYS to set the start vector */
-    PROVIDE ( mios32_sys_isr_vector = _mios32_sys_isr_vector );
+    /* used in ADIOS_SYS to set the start vector */
+    PROVIDE ( adios_sys_isr_vector = _adios_sys_isr_vector );
 
     /* for some STRx devices, the beginning of the startup code is stored in the .flashtext section, which goes to FLASH */
     .flashtext :

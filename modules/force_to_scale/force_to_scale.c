@@ -16,7 +16,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 
 #include "force_to_scale.h"
 
@@ -277,14 +277,14 @@ char *FTS_NameGet(u8 scale)
 /////////////////////////////////////////////////////////////////////////////
 // This function is called if a note value should be forced to the globally
 // selected scale
-// IN: *p: midi note (a mios32_midi_package_t) - will be modified, 
+// IN: *p: midi note (a adios_midi_package_t) - will be modified, 
 //     therefore passed as pointer
 //     scale: within the range 0..FTS_GetNum()-1
 //     root: the root note (0..11)
 // returns modified note in *p
 // returns < 0 on errors
 /////////////////////////////////////////////////////////////////////////////
-s32 FTS_Note(mios32_midi_package_t *p, u8 scale, u8 root)
+s32 FTS_Note(adios_midi_package_t *p, u8 scale, u8 root)
 {
   // exit if no Note event
   if( p->type != NoteOn && p->type != NoteOff )

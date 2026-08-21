@@ -1,6 +1,6 @@
 // converted with 'convpix_c.pl glcd_font_big.xpm -icons 16 -height 24'
 
-#include <mios32.h>
+#include <adios.h>
 
 const u8 GLCD_FONT_BIG[] = {
 16, 3*8, 0, 16, // width, height, X0 offset, char offset

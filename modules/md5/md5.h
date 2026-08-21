@@ -17,14 +17,14 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, see <http://www.gnu.org/licenses/>.  */
 
-// modified by TK for MIOS32 integration
+// modified by TK for ADIOS integration
 // original source code can be found under http://ftp.gnu.org/gnu/coreutils/
 
 #ifndef _MD5_H
 #define _MD5_H 1
 
 //#include <stdio.h>
-#include <mios32.h>
+#include <adios.h>
 #include <stdint.h>
 
 #define MD5_DIGEST_SIZE 16

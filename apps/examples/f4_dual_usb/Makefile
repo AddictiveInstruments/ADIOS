@@ -21,7 +21,7 @@ LCD       =	dummy
 # an erase unit, which is how you make a build behave as a bootloader that
 # outgrew its sector without changing a line of its code:
 #
-#   MIOS32_BSL_PADDING = 1024      -> boundary 0x8000 instead of 0x4000
+#   ADIOS_BSL_PADDING = 1024      -> boundary 0x8000 instead of 0x4000
 #
 # Used on 2026-08-19 to exercise a boundary MIGRATION on this family for the
 # first time: a device sitting at 0x4000 was sent a bootloader wanting 0x8000,
@@ -30,8 +30,8 @@ LCD       =	dummy
 
 # self-locating repo root: apps live at a fixed depth inside the repo, so a
 # plain `make` works with no environment setup at all (any exported
-# MIOS32_PATH - e.g. from a CubeIDE workspace - still overrides this default)
-MIOS32_PATH ?= ../../..
+# ADIOS_PATH - e.g. from a CubeIDE workspace - still overrides this default)
+ADIOS_PATH ?= ../../..
 
 # opt into the real dynamic bootloader/app flash boundary mechanism - see
 # core.mk and etc/gen_bsl_boundary.sh for the full explanation.
@@ -39,7 +39,7 @@ MIOS32_PATH ?= ../../..
 # STM32F407xE.ld reference-library one) - core.mk's own
 # LD_FILE_EXACT/LD_FILE_FALLBACK derivation already resolves to that file
 # automatically, no override needed here.
-MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
+ADIOS_USE_DYNAMIC_BSL_BOUNDARY = 1
 
 
 ################################################################################
@@ -77,11 +77,11 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 ################################################################################
 
 # sources of programming model
-include $(MIOS32_PATH)/core/core.mk
+include $(ADIOS_PATH)/core/core.mk
 
 # application specific LCD driver (selected via makefile variable)
-include $(MIOS32_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk
+include $(ADIOS_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk
 
 # common make rules
 # Please keep this include statement at the end of this Makefile. Add new modules above.
-include $(MIOS32_PATH)/include/makefile/common.mk
+include $(ADIOS_PATH)/include/makefile/common.mk

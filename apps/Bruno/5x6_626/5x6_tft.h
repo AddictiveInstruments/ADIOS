@@ -8,7 +8,7 @@
 #ifndef _5X6_TFT_H_
 #define _5X6_TFT_H_
 
-#include <mios32.h>
+#include <adios.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>

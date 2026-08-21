@@ -7,7 +7,7 @@ See the LICENSE file in the project root for full licence information.
 ===============================================================================
 
 Required tools:
-  -> http://www.ucapps.de/mios32_c.html
+  -> http://www.ucapps.de/adios_c.html
 
 ===============================================================================
 
@@ -20,7 +20,7 @@ Required hardware:
 This application has different purposes:
 
 1) you would like to program the bootloader on a virgin STM32 or LPC17 device via JTAG
-or COM interface as described under http://www.ucapps.de/mios32_bootstrap_experts.html
+or COM interface as described under http://www.ucapps.de/adios_bootstrap_experts.html
 
 In this case, just use the <board>/project.bin or <board>/project.hex file.
 Once uploaded, you are able to update applications via MIOS Studio
@@ -93,7 +93,7 @@ Once the LED is permanently on, another application can be uploaded.
 
 ===============================================================================
 
-Customizing the MIOS32 application:
+Customizing the ADIOS application:
 
 The bootloader provides a permanent storage for parameters which are referenced
 by (most) applications. These parameters can be customized from the MIOS Terminal
@@ -136,11 +136,11 @@ Explanation of the most important parameters:
 
 
 - Device ID: this ID is relevant once multiple cores are available on the same MIDI port,
-  or if you are using your MIOS32 based core as a USB<->MIDI / OSC<->MIDI gateway to a
+  or if you are using your ADIOS based core as a USB<->MIDI / OSC<->MIDI gateway to a
   PIC based MBHP_CORE.
 
   MIOS Studio won't be able to differ between the cores in this case if they have the
-  same Device ID, therefore it's recommended to change the Device ID of the MIOS32 core
+  same Device ID, therefore it's recommended to change the Device ID of the ADIOS core
 
   Enter:
      set device_id 127
@@ -194,7 +194,7 @@ Explanation of the most important parameters:
   parameters if they can't handle smaller (or larger) LCD sizes.
 
   Please note also: some applications could have been released with a different
-  LCD driver (MIOS32_LCD != "universal") which don't consider these parameters.
+  LCD driver (ADIOS_LCD != "universal") which don't consider these parameters.
   It's up to the developer to document this limitation.
 
 

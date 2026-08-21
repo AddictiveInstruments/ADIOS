@@ -1,6 +1,6 @@
 //!
 //! Reduced version of SD Card Block device
-//! most functions already handled by MIOS32, therefore only block read/write
+//! most functions already handled by ADIOS, therefore only block read/write
 //! functions have to be supported
 //!
 //! \{
@@ -13,7 +13,7 @@
  * ==========================================================================
  */
 
-#include <mios32.h>
+#include <adios.h>
 #include "blockdev.h"
 
 u16 msd_memory_rd_led_ctr;
@@ -26,8 +26,8 @@ u16 msd_memory_wr_led_ctr;
  */
 int BlockDevGetSize(u32 *pdwDriveSize)
 {
-    mios32_sdcard_csd_t csd;
-    if( MIOS32_SDCARD_CSDRead(&csd) < 0 )
+    adios_sdcard_csd_t csd;
+    if( ADIOS_SDCARD_CSDRead(&csd) < 0 )
       return 1;
 
     u32 DeviceSizeMul = csd.DeviceSizeMul + 2;
@@ -46,11 +46,11 @@ int BlockDevInit(void)
 int BlockDevWrite(u32 dwAddress, u8 * pbBuf)
 {
   msd_memory_wr_led_ctr = 0;
-  return MIOS32_SDCARD_SectorWrite(dwAddress, (u8 *)pbBuf);
+  return ADIOS_SDCARD_SectorWrite(dwAddress, (u8 *)pbBuf);
 }
 
 int BlockDevRead(u32 dwAddress, u8 * pbBuf)
 {
   msd_memory_rd_led_ctr = 0;
-  return MIOS32_SDCARD_SectorRead(dwAddress, (u8 *)pbBuf);
+  return ADIOS_SDCARD_SectorRead(dwAddress, (u8 *)pbBuf);
 }

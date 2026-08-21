@@ -1,7 +1,7 @@
-// Minimal, CubeMX-style smoke test - no MIOS32 involved at all, just raw
+// Minimal, CubeMX-style smoke test - no ADIOS involved at all, just raw
 // CMSIS register writes. Sole purpose: prove code in flash at 0x08000000
 // actually executes on this board, independent of every other variable
-// (MIOS32 init chain, bare-metal loop, dispatcher, option bytes...).
+// (ADIOS init chain, bare-metal loop, dispatcher, option bytes...).
 // PC6 driven high and left high - onboard user LED per board schematic.
 
 #include "stm32g0xx.h"

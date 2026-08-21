@@ -494,7 +494,7 @@ const WCHAR Tbl[] = {	/*  CP1258(0x80-0xFF) to Unicode conversion table */
 
 
 #if !_TBLDEF || !_USE_LFN
-// TK: disabled for optional LFN selected in mios32_config.h
+// TK: disabled for optional LFN selected in adios_config.h
 //#error This file is not needed in current configuration
 #endif
 

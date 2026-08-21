@@ -1,9 +1,9 @@
 /*
     microvga.c
-    MIOS32/STM32 hardware low-level routines
+    ADIOS/STM32 hardware low-level routines
 
     Copyright (c) 2008-9 SECONS s.r.o., http://www.MicroVGA.com
-	MIOS32 modifications Copyright (c) 2010 Phil Taylor
+	ADIOS modifications Copyright (c) 2010 Phil Taylor
 	
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@
    _putch, _getch, _kbhit must be defined for lib (conio.c and ui.c)
 */
 
-#include <mios32.h>
+#include <adios.h>
 
 #include "conio.h"
 
@@ -86,29 +86,29 @@ void _putch(char ch)
 {
    unsigned char b;
 
-   MIOS32_SPI_RC_PinSet(MICROVGA_PORT,0,0); // Set RCLK1 to 0 (enable)
+   ADIOS_SPI_RC_PinSet(MICROVGA_PORT,0,0); // Set RCLK1 to 0 (enable)
    
    // wait for RDY signal (RCLK2) to go low!
 #if (MICROVGA_PORT != 1)
    while ((RCLK2_PORT->IDR & RCLK2_PIN)); // Wait for ready input
 #else
 	// The maximum time to ready I have seen in my LA is about 130uS 
-	MIOS32_DELAY_Wait_uS(150); // Simulate waiting for ready pin (untested)
+	ADIOS_DELAY_Wait_uS(150); // Simulate waiting for ready pin (untested)
 #endif
 
-   b = MIOS32_SPI_TransferByte(MICROVGA_PORT,ch);
+   b = ADIOS_SPI_TransferByte(MICROVGA_PORT,ch);
    
    // for  s/w spi we must reverse the bit order, __RBIT uses a single thumb2 instruction for 
    //reversing 32 bit values. For other platforms use a (slow) multiply/shift operation.
 #if (MICROVGA_PORT==2)
-#ifdef MIOS32_FAMILY_STM32F10x 
+#ifdef ADIOS_FAMILY_STM32F10x 
    b = (__RBIT(b)>>24)&0xff;
 #else
    b = b * 0x0802LU & 0x22110LU) | (b * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16; // Reverse bits!
 #endif
 #endif
    if (b != 0xFF) {
-      MIOS32_MIDI_SendDebugMessage("RX = 0x%02X\n", b);
+      ADIOS_MIDI_SendDebugMessage("RX = 0x%02X\n", b);
 
       // Put received byte into keyboard buffer.
       keybuf[ktail] = b;
@@ -117,7 +117,7 @@ void _putch(char ch)
       kbhit = 1;
    } 
    
-   MIOS32_SPI_RC_PinSet(MICROVGA_PORT,0,1); // Set RCLK1 to 1 (disable)
+   ADIOS_SPI_RC_PinSet(MICROVGA_PORT,0,1); // Set RCLK1 to 1 (disable)
 } 
 
 
@@ -128,9 +128,9 @@ void MicroVGA_Init()
     ktail = 0;
 	
 #ifdef MICROVGA_SPI_OUTPUTS_OD
-    MIOS32_SPI_IO_Init(MICROVGA_PORT, MIOS32_SPI_PIN_DRIVER_STRONG_OD);
+    ADIOS_SPI_IO_Init(MICROVGA_PORT, ADIOS_SPI_PIN_DRIVER_STRONG_OD);
 #else
-    MIOS32_SPI_IO_Init(MICROVGA_PORT, MIOS32_SPI_PIN_DRIVER_STRONG);
+    ADIOS_SPI_IO_Init(MICROVGA_PORT, ADIOS_SPI_PIN_DRIVER_STRONG);
 #endif
 	// Once SPI is initialized, we need to reconfig RCLK2 as input.
 	// Suggest this is added as an option to SPI_IO_Init
@@ -142,6 +142,6 @@ void MicroVGA_Init()
 #endif
 	// PRESCALER_8 is the fastest the microvga supports. 
 	// Prescaler is ignored in s/w spi, it just sends as fast as it can!
-	MIOS32_SPI_TransferModeInit(MICROVGA_PORT,MIOS32_SPI_MODE_CLK0_PHASE1,MIOS32_SPI_PRESCALER_8); 
+	ADIOS_SPI_TransferModeInit(MICROVGA_PORT,ADIOS_SPI_MODE_CLK0_PHASE1,ADIOS_SPI_PRESCALER_8); 
 	
 }

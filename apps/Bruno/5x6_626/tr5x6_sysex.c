@@ -14,7 +14,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <string.h>
 
 /* Includes ------------------------------------------------------------------*/
@@ -93,8 +93,8 @@ static s32 TR5X6_SYSEX_CmdFinished(void);
 static s32 TR5X6_SYSEX_Cmd_ReadMem(u8 cmd_state, u8 midi_in);
 static s32 TR5X6_SYSEX_Cmd_WriteMem(u8 cmd_state, u8 midi_in);
 static s32 TR5X6_SYSEX_RecAddrAndLen(u8 midi_in);
-static s32 TR5X6_SYSEX_SendAck(mios32_midi_port_t port, u8 ack_code, u8 ack_arg);
-static s32 TR5X6_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len);
+static s32 TR5X6_SYSEX_SendAck(adios_midi_port_t port, u8 ack_code, u8 ack_arg);
+static s32 TR5X6_SYSEX_SendMem(adios_midi_port_t port, u32 addr, u32 len);
 static s32 TR5X6_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer);
 
 
@@ -106,7 +106,7 @@ static sysex_rec_state_t sysex_rec_state;
 static sysex_cmd_state_t sysex_cmd_state;
 static u8 sysex_cmd;
 
-static mios32_midi_port_t sysex_port = DEFAULT;
+static adios_midi_port_t sysex_port = DEFAULT;
 static u32 sysex_addr;
 static u32 sysex_len;
 static u8 sysex_checksum;
@@ -159,7 +159,7 @@ s32 TR5X6_SYSEX_HaltStateGet(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Used by MIOS32_MIDI to release halt state instead of triggering a reset
+// Used by ADIOS_MIDI to release halt state instead of triggering a reset
 /////////////////////////////////////////////////////////////////////////////
 s32 TR5X6_SYSEX_ReleaseHaltState(void)
 {
@@ -177,7 +177,7 @@ s32 TR5X6_SYSEX_ReleaseHaltState(void)
 /////////////////////////////////////////////////////////////////////////////
 // This function parses an incoming sysex stream for SysEx messages
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
+s32 TR5X6_SYSEX_Parser(adios_midi_port_t port, u8 midi_in)
 {
 	// TODO: here we could send an error notification, that multiple devices are trying to access the device
 	if( sysex_cmd_state.MY_SYSEX && port != sysex_port )
@@ -207,8 +207,8 @@ s32 TR5X6_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
 				TR5X6_SYSEX_Cmd(SYSEX_CMD_STATE_END, midi_in);
 			}
 			TR5X6_SYSEX_CmdFinished();
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-			MIOS32_MIDI_SendDebugMessage("parser end\n");
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+			ADIOS_MIDI_SendDebugMessage("parser end\n");
 #endif
 		} else {
 			// check if command byte has been received
@@ -216,14 +216,14 @@ s32 TR5X6_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
 				sysex_cmd_state.CMD = 1;
 				sysex_cmd = midi_in;
 				TR5X6_SYSEX_Cmd(SYSEX_CMD_STATE_BEGIN, midi_in);
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-			MIOS32_MIDI_SendDebugMessage("parser start cmd=x%02x\n", sysex_cmd);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+			ADIOS_MIDI_SendDebugMessage("parser start cmd=x%02x\n", sysex_cmd);
 #endif
 			}
 			else
 				TR5X6_SYSEX_Cmd(SYSEX_CMD_STATE_CONT, midi_in);
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-			MIOS32_MIDI_SendDebugMessage("[TR5X6_SYSEX] data 0x%02x, cnt %d\n", midi_in, sysex_receive_ctr);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+			ADIOS_MIDI_SendDebugMessage("[TR5X6_SYSEX] data 0x%02x, cnt %d\n", midi_in, sysex_receive_ctr);
 #endif
 		}
 	}
@@ -253,22 +253,22 @@ s32 TR5X6_SYSEX_CmdFinished(void)
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// This function enhances MIOS32 SysEx commands
-// it's called from MIOS32_MIDI_SYSEX_Cmd if the "MIOS32_MIDI_TR5X6_ENHANCEMENTS"
+// This function enhances ADIOS SysEx commands
+// it's called from ADIOS_MIDI_SYSEX_Cmd if the "ADIOS_MIDI_TR5X6_ENHANCEMENTS"
 // switch is set (see code there for details)
 /////////////////////////////////////////////////////////////////////////////
 s32 TR5X6_SYSEX_Cmd(u8 cmd_state, u8 midi_in)
 {
 	//	// change debug port
-	//	MIOS32_MIDI_DebugPortSet(port);
+	//	ADIOS_MIDI_DebugPortSet(port);
 	//
 	//	// wait 2 additional seconds whenever a SysEx message has been received
-	//	MIOS32_STOPWATCH_Reset();
+	//	ADIOS_STOPWATCH_Reset();
 
 	// enter the commands here
 	switch( sysex_cmd ) {
-	// case 0x00: // query command is implemented in MIOS32
-	// case 0x0f: // ping command is implemented in MIOS32
+	// case 0x00: // query command is implemented in ADIOS
+	// case 0x0f: // ping command is implemented in ADIOS
 
 	case 0x01:
 		TR5X6_SYSEX_Cmd_ReadMem(cmd_state, midi_in);
@@ -279,7 +279,7 @@ s32 TR5X6_SYSEX_Cmd(u8 cmd_state, u8 midi_in)
 
 	default:
 		// unknown command
-		TR5X6_SYSEX_SendAck(sysex_port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_INVALID_COMMAND);
+		TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_INVALID_COMMAND);
 		break;
 	}
 
@@ -296,14 +296,14 @@ s32 TR5X6_SYSEX_Cmd_ReadMem(u8 cmd_state, u8 midi_in)
 {
 	switch( cmd_state ) {
 
-	case MIOS32_MIDI_SYSEX_CMD_STATE_BEGIN:
+	case ADIOS_MIDI_SYSEX_CMD_STATE_BEGIN:
 		// set initial receive state and address/len
 		sysex_rec_state = TR5X6_SYSEX_REC_A3;
 		sysex_addr = 0;
 		sysex_len = 0;
 		break;
 
-	case MIOS32_MIDI_SYSEX_CMD_STATE_CONT:
+	case ADIOS_MIDI_SYSEX_CMD_STATE_CONT:
 		if( sysex_rec_state < TR5X6_SYSEX_REC_PAYLOAD )
 			TR5X6_SYSEX_RecAddrAndLen(midi_in);
 		break;
@@ -314,7 +314,7 @@ s32 TR5X6_SYSEX_Cmd_ReadMem(u8 cmd_state, u8 midi_in)
 		// did we reach payload state?
 		if( sysex_rec_state != TR5X6_SYSEX_REC_PAYLOAD ) {
 			// not enough bytes received
-			TR5X6_SYSEX_SendAck(sysex_port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
+			TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
 		} else {
 			// send dump
 			TR5X6_SYSEX_SendMem(sysex_port, sysex_addr, sysex_len);
@@ -382,22 +382,22 @@ s32 TR5X6_SYSEX_Cmd_WriteMem(u8 cmd_state, u8 midi_in)
 		}
 		break;
 
-	default: // MIOS32_MIDI_SYSEX_CMD_STATE_END
+	default: // ADIOS_MIDI_SYSEX_CMD_STATE_END
 		// TODO: send 0xf7 if merger enabled
 
 		if( sysex_receive_ctr < sysex_len ) {
 			// for remote analysis...
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-			MIOS32_MIDI_SendDebugMessage("[TR5X6_SYSEX] expected %d, got %d bytes (retry)\n", sysex_len, sysex_receive_ctr);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+			ADIOS_MIDI_SendDebugMessage("[TR5X6_SYSEX] expected %d, got %d bytes (retry)\n", sysex_len, sysex_receive_ctr);
 #endif
 			// not enough bytes received
-			TR5X6_SYSEX_SendAck(sysex_port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
+			TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
 		} else if( sysex_rec_state == TR5X6_SYSEX_REC_INVALID ) {
 			// too many bytes received
-			TR5X6_SYSEX_SendAck(sysex_port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_MORE_BYTES_THAN_EXP);
+			TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_MORE_BYTES_THAN_EXP);
 		} else if( sysex_received_checksum != (-sysex_checksum & 0x7f) ) {
 			// notify that wrong checksum has been received
-			TR5X6_SYSEX_SendAck(sysex_port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRONG_CHECKSUM);
+			TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRONG_CHECKSUM);
 		} else {
 			// enter halt state (can only be released via BSL reset)
 			halt_state = 1;
@@ -406,15 +406,15 @@ s32 TR5X6_SYSEX_Cmd_WriteMem(u8 cmd_state, u8 midi_in)
 			s32 error;
 			if( (error = TR5X6_SYSEX_WriteMem(sysex_addr, sysex_len, sysex_buffer)) ) {
 				// write failed - return negated error status
-				TR5X6_SYSEX_SendAck(sysex_port, MIOS32_MIDI_SYSEX_DISACK, -error);
+				TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, -error);
 			} else {
 				// notify that bytes have been received by returning checksum
-				TR5X6_SYSEX_SendAck(sysex_port, MIOS32_MIDI_SYSEX_ACK, -sysex_checksum & 0x7f);
+				TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_ACK, -sysex_checksum & 0x7f);
 			}
 
 			// enfore immediate MIDI queue flush
 			// (important for retry handling: send ack before next message is processed)
-			//MIOS32_MIDI_Periodic_mS();
+			//ADIOS_MIDI_Periodic_mS();
 		}
 		break;
 	}
@@ -454,7 +454,7 @@ static s32 TR5X6_SYSEX_RecAddrAndLen(u8 midi_in)
 // This function sends a SysEx acknowledge to notify the user about the received command
 // expects acknowledge code (e.g. 0x0f for good, 0x0e for error) and additional argument
 /////////////////////////////////////////////////////////////////////////////
-static s32 TR5X6_SYSEX_SendAck(mios32_midi_port_t port, u8 ack_code, u8 ack_arg)
+static s32 TR5X6_SYSEX_SendAck(adios_midi_port_t port, u8 ack_code, u8 ack_arg)
 {
 	u8 sysex_buffer[32]; // should be enough?
 	u8 *sysex_buffer_ptr = &sysex_buffer[0];
@@ -464,7 +464,7 @@ static s32 TR5X6_SYSEX_SendAck(mios32_midi_port_t port, u8 ack_code, u8 ack_arg)
 		*sysex_buffer_ptr++ = sysex_header[i];
 
 	// device ID
-	//*sysex_buffer_ptr++ = MIOS32_MIDI_DeviceIDGet();
+	//*sysex_buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
 
 	// send ack code and argument
 	*sysex_buffer_ptr++ = ack_code;
@@ -474,14 +474,14 @@ static s32 TR5X6_SYSEX_SendAck(mios32_midi_port_t port, u8 ack_code, u8 ack_arg)
 	*sysex_buffer_ptr++ = 0xf7;
 
 	// finally send SysEx stream
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
 // This function sends an upload request
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_SendUploadReq(mios32_midi_port_t port)
+s32 TR5X6_SYSEX_SendUploadReq(adios_midi_port_t port)
 {
 	u8 sysex_buffer[32]; // should be enough?
 	u8 *sysex_buffer_ptr = &sysex_buffer[0];
@@ -491,7 +491,7 @@ s32 TR5X6_SYSEX_SendUploadReq(mios32_midi_port_t port)
 		*sysex_buffer_ptr++ = sysex_header[i];
 
 	// device ID
-	*sysex_buffer_ptr++ = MIOS32_MIDI_DeviceIDGet();
+	*sysex_buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
 
 	// send 0x01 to request code upload
 	*sysex_buffer_ptr++ = 0x01;
@@ -500,7 +500,7 @@ s32 TR5X6_SYSEX_SendUploadReq(mios32_midi_port_t port)
 	*sysex_buffer_ptr++ = 0xf7;
 
 	// finally send SysEx stream
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
 }
 
 
@@ -508,7 +508,7 @@ s32 TR5X6_SYSEX_SendUploadReq(mios32_midi_port_t port)
 // This function sends a SysEx dump of the requested memory address range
 // We expect that address and length are aligned to 16
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
+s32 TR5X6_SYSEX_SendMem(adios_midi_port_t port, u32 addr, u32 len)
 {
 	int i;
 	u8 checksum = 0;
@@ -519,7 +519,7 @@ s32 TR5X6_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
 		*sysex_buffer_ptr++ = sysex_header[i];
 
 	// device ID
-	*sysex_buffer_ptr++ = MIOS32_MIDI_DeviceIDGet();
+	*sysex_buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
 
 	// "write mem" command (so that dump could be sent back to overwrite the memory w/o modifications)
 	*sysex_buffer_ptr++ = 0x02;
@@ -565,7 +565,7 @@ s32 TR5X6_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
 	*sysex_buffer_ptr++ = 0xf7;
 
 	// finally send SysEx stream
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
 }
 
 
@@ -575,38 +575,38 @@ s32 TR5X6_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
 /////////////////////////////////////////////////////////////////////////////
 static s32 TR5X6_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 {
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-	MIOS32_MIDI_SendDebugMessage("Write begin @0x%08x for %d bytes\n", addr, len);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+	ADIOS_MIDI_SendDebugMessage("Write begin @0x%08x for %d bytes\n", addr, len);
 #endif
 	// check for flash memory range
 	if( addr >= ROM_START_ADDR && addr <= ROM_END_ADDR ) {
 
 		// check for alignment
 		if( (addr % 8) || (len % 8) )
-			return -MIOS32_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
+			return -ADIOS_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
 		tr5x6_rom_status status;
 		int i;
 		for(i=0; i<len; addr++, i++) {
-			//MIOS32_IRQ_Disable();
+			//ADIOS_IRQ_Disable();
 
 			if( (addr % TR5X6_ROM_SECTOR_SIZE) == 0 ) {
 				if((status=TR5X6_ROM_Sector_Erase(addr, 1000))!=TR5X6_ROM_OK) {
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-					MIOS32_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+					ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
 #endif
-					return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+					return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 				}
 			}
 
 			if( (status=TR5X6_ROM_Write(addr, buffer[i], 1000)) != TR5X6_ROM_OK ) {
-				//MIOS32_IRQ_Enable();
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-				MIOS32_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", buffer[i], addr, status);
+				//ADIOS_IRQ_Enable();
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+				ADIOS_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", buffer[i], addr, status);
 #endif
 				//FLASH->SR = LL_FLASH_SR_CLEAR;
-				return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+				return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 			}
-			//MIOS32_IRQ_Enable();
+			//ADIOS_IRQ_Enable();
 			//LL_FLASH_FlushCaches();
 			// TODO: verify programmed code
 		}
@@ -615,7 +615,7 @@ static s32 TR5X6_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 	}else{
 
 	// invalid address
-	return -MIOS32_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE;
+	return -ADIOS_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE;
 	}
 
 }

@@ -1,14 +1,14 @@
 # defines additional rules for integrating the module
 
 # enhance include path
-C_INCLUDE += -I $(MIOS32_PATH)/modules/force_to_scale
+C_INCLUDE += -I $(ADIOS_PATH)/modules/force_to_scale
 
 
 # add modules to thumb sources (TODO: provide makefile option to add code to ARM sources)
 THUMB_SOURCE += \
-	$(MIOS32_PATH)/modules/force_to_scale/force_to_scale.c
+	$(ADIOS_PATH)/modules/force_to_scale/force_to_scale.c
 
 
 # directories and files that should be part of the distribution (release) package
-DIST += $(MIOS32_PATH)/modules/force_to_scale
+DIST += $(ADIOS_PATH)/modules/force_to_scale
 

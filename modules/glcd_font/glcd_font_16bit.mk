@@ -1,12 +1,12 @@
 # defines the rule for creating the glcd_font_*.o objects,
 
 # enhance include path
-C_INCLUDE +=	-I $(MIOS32_PATH)/modules/glcd_font
+C_INCLUDE +=	-I $(ADIOS_PATH)/modules/glcd_font
 
 # add modules to thumb sources
 THUMB_SOURCE += \
-	$(MIOS32_PATH)/modules/glcd_font/glcd_font_16bit_pix.c \
+	$(ADIOS_PATH)/modules/glcd_font/glcd_font_16bit_pix.c \
 
 
 # directories and files that should be part of the distribution (release) package
-DIST += $(MIOS32_PATH)/modules/glcd_font
+DIST += $(ADIOS_PATH)/modules/glcd_font

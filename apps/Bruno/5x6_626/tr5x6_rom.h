@@ -23,7 +23,7 @@
 
 
 /* Includes ------------------------------------------------------------------*/
-#include <mios32.h>
+#include <adios.h>
 
 /* Defines ------------------------------------------------------------------*/
 /* sound datas ROM */
@@ -38,9 +38,9 @@
 /* names, colors and misc ROM */
 #define TR5X6_FLASH_PAGE_SIZE 0x800	// 2K
 // We use the last 4 pages of the internal flash as ROM, 8K
-#define TR5X6_FLASH_START_ADDR  (0x08000000 + MIOS32_SYS_FlashSizeGet() - 0x2000)	//0x0801E000
-#define TR5X6_FLASH_END_ADDR    (0x08000000 + MIOS32_SYS_FlashSizeGet() - 1)		//0x0801FFFF
-#define TR5X6_FLASH_PAGE_BASE	((MIOS32_SYS_FlashSizeGet() - 0x2000)/TR5X6_FLASH_PAGE_SIZE)	// 2K
+#define TR5X6_FLASH_START_ADDR  (0x08000000 + ADIOS_SYS_FlashSizeGet() - 0x2000)	//0x0801E000
+#define TR5X6_FLASH_END_ADDR    (0x08000000 + ADIOS_SYS_FlashSizeGet() - 1)		//0x0801FFFF
+#define TR5X6_FLASH_PAGE_BASE	((ADIOS_SYS_FlashSizeGet() - 0x2000)/TR5X6_FLASH_PAGE_SIZE)	// 2K
 
 #define TR5X6_MAGIC_NUMBER				77
 #define TR5X6_FLASH_INFO_SIZE 			28

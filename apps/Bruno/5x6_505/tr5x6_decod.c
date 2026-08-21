@@ -189,8 +189,8 @@ void TR5X6_DECOD_Init()
 	LL_EXTI_Init(&EXTI_InitStruct);
 
 	/* EXTI interrupt init*/
-	MIOS32_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
-	MIOS32_IRQ_Install(EXTI2_3_IRQn, TR5X6_DECOD_IRQ_PRIOR);
+	ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
+	ADIOS_IRQ_Install(EXTI2_3_IRQn, TR5X6_DECOD_IRQ_PRIOR);
 
 
 	//temp
@@ -203,7 +203,7 @@ void TR5X6_DECOD_Init()
 	  // init IO mode
 	  LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-	  MIOS32_SYS_STM_PINSET(GPIOC, LL_GPIO_PIN_7, 0);
+	  ADIOS_SYS_STM_PINSET(GPIOC, LL_GPIO_PIN_7, 0);
 
 	tr5x6_decod_segments[0]=0;
 	decoding =0;
@@ -225,20 +225,20 @@ void TR5X6_DECOD_EXTI_BUTT_Callback(void)
 	if (LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_3) != RESET)
 		//if(EXTI->FPR1 & EXTI_FPR1_FPIF3)
 	{
-		//MIOS32_BOARD_LED_Set(1, 1);
+		//ADIOS_BOARD_LED_Set(1, 1);
 		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_3);
-		//MIOS32_DELAY_Wait_uS(5);
+		//ADIOS_DELAY_Wait_uS(5);
 		tr5x6_decod_buttons.ALL=(u8)(TR5X6_DECOD_BUTT_PORT->IDR & 0xf);
 		//if(tr5x6_decod_buttons.ALL)
-		//		tr5x6_decod_buttons.last = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_LAST)?0:1;
-		//		//tr5x6_decod_buttons.inst = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INST)?0:1;
-		//		tr5x6_decod_buttons.inc = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INC)?0:1;
-		//		tr5x6_decod_buttons.dec = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_DEC)?0:1;
-		//		//s32 led =  MIOS32_BOARD_LED_Get();
+		//		tr5x6_decod_buttons.last = ADIOS_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_LAST)?0:1;
+		//		//tr5x6_decod_buttons.inst = ADIOS_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INST)?0:1;
+		//		tr5x6_decod_buttons.inc = ADIOS_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INC)?0:1;
+		//		tr5x6_decod_buttons.dec = ADIOS_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_DEC)?0:1;
+		//		//s32 led =  ADIOS_BOARD_LED_Get();
 
 
 		//EXTI->FPR1 |=EXTI_FPR1_FPIF3;
-		//MIOS32_BOARD_LED_Set(1, 0);
+		//ADIOS_BOARD_LED_Set(1, 0);
 	}
 
 }
@@ -263,8 +263,8 @@ void TR5X6_DECOD_EXTI_LCD_Callback(void)
 		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_15);
 #if TR5X6_UNIT_SELECT==505
 		if(segment>31 || !cs_active)return;
-		//MIOS32_IRQ_Disable();
-		if(MIOS32_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
+		//ADIOS_IRQ_Disable();
+		if(ADIOS_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
 			tr5x6_decod_segments[segment] |= (0x80>>seg_bit);
 		else
 			tr5x6_decod_segments[segment] &= ~(0x80>>seg_bit);
@@ -281,9 +281,9 @@ void TR5X6_DECOD_EXTI_LCD_Callback(void)
 #else
 #if 0
 		if(!cs_active)return;
-		//MIOS32_IRQ_Disable();
+		//ADIOS_IRQ_Disable();
 		if(decod_reg!=NULL){
-			if(MIOS32_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
+			if(ADIOS_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
 				*decod_reg |= (0x80>>seg_bit);
 			else
 				*decod_reg &= ~(0x80>>seg_bit);
@@ -297,9 +297,9 @@ void TR5X6_DECOD_EXTI_LCD_Callback(void)
 #else
 		if(decoding)return;
 		if(!cs_active || (segment>=47) )return;
-		//MIOS32_IRQ_Disable();
+		//ADIOS_IRQ_Disable();
 		//if(decod_reg!=NULL){
-		if(MIOS32_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
+		if(ADIOS_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
 			tr5x6_decod_buff[segment] |= (0x80>>seg_bit);
 		else
 			tr5x6_decod_buff[segment] &= ~(0x80>>seg_bit);
@@ -386,13 +386,13 @@ void TR5X6_DECOD_EXTI_LCD_Callback(void)
 
 			// if valid and changes, decoding request;
 			if(decoding==1){
-				MIOS32_SYS_STM_PINSET(GPIOC, LL_GPIO_PIN_7, 1);
+				ADIOS_SYS_STM_PINSET(GPIOC, LL_GPIO_PIN_7, 1);
 				memcpy(&tr5x6_decod_blinks[0], &tr5x6_decod_buff[0], sizeof(u8)*15);
 				memcpy(&tr5x6_decod_segments[0], &tr5x6_decod_buff[15], sizeof(u8)*32);
 				memcpy(&tr5x6_decod_buff_shadow[0], &tr5x6_decod_buff[0], sizeof(u8)*47);
 				TR5X6_DECOD_blinks_func();
 				TR5X6_DECOD_segments_func();
-				MIOS32_SYS_STM_PINSET(GPIOC, LL_GPIO_PIN_7, 0);
+				ADIOS_SYS_STM_PINSET(GPIOC, LL_GPIO_PIN_7, 0);
 				//decoding = 0;
 			}
 
@@ -408,18 +408,18 @@ void TR5X6_DECOD_blinks_func(void){
 #if 0
 	//if(!(decoding & 2))return;
 	decoding=1;
-	MIOS32_IRQ_DeInstall(EXTI4_15_IRQn);
+	ADIOS_IRQ_DeInstall(EXTI4_15_IRQn);
 	decod_reg = NULL;
 	if(tr5x6_decod_blinks[0]!=0xf2){
 		//decoding &=0xfd;
-		MIOS32_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
+		ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
 		decoding=0;
 		return;
 	}
 	for(int i=1;i<15;i++){
 		if((tr5x6_decod_blinks[i]&0xf0)!=0xc0){
 			//decoding &=0xfe;
-			MIOS32_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
+			ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
 			decoding =0;
 			return;
 		}
@@ -450,7 +450,7 @@ void TR5X6_DECOD_blinks_func(void){
 		tr5x6_decod_blinks_shadow[i]=tr5x6_decod_blinks[i];
 	}
 #if 0
-	MIOS32_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
+	ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
 	//decoding &=0xfd;
 #endif
 	//decoding=0;
@@ -469,13 +469,13 @@ void TR5X6_DECOD_segments_func(void){
 	tr5x6_decod_digits[3]= ((tr5x6_decod_segments[6]&0xf)<<3) | ((tr5x6_decod_segments[7]&0xe)>>1);
 	tr5x6_decod_digits[4]= ((tr5x6_decod_segments[10]&0xf)<<3) | ((tr5x6_decod_segments[11]&0xe)>>1);
 	tr5x6_decod_digits[5]= ((tr5x6_decod_segments[12]&0xf)<<3) | ((tr5x6_decod_segments[13]&0xe)>>1);
-	//#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+	//#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 	//					if((tr5x6_decod_digits[0]!= 0x03)){
 	//						tft_ready=0;
 	////						for(int i =0;i<15;i++)
-	////						MIOS32_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_blinks[i]);
+	////						ADIOS_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_blinks[i]);
 	//						for(int i =0;i<32;i++)
-	//						MIOS32_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_segments[i]);
+	//						ADIOS_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_segments[i]);
 	//					}
 	//#endif
 	for(int i=0;i<6;i++){
@@ -582,12 +582,12 @@ void TR5X6_DECOD_segments_func(void){
 
 #if 0
 	decoding=1;
-	MIOS32_IRQ_DeInstall(EXTI4_15_IRQn);
+	ADIOS_IRQ_DeInstall(EXTI4_15_IRQn);
 	decod_reg = NULL;
 	for(int i=0;i<32;i++){
 		if((tr5x6_decod_segments[i]&0xf0)!=0xd0){
 			//decoding &=0xfe;
-			MIOS32_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
+			ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
 			decoding =0;
 			return;
 		}
@@ -611,13 +611,13 @@ void TR5X6_DECOD_segments_func(void){
 		}
 	}
 
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 	//	if((tr5x6_decod_digits[0]!= 0x03)){
 	//		tft_ready=0;
 	////		for(int i =0;i<15;i++)
-	////		MIOS32_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_blinks[i]);
+	////		ADIOS_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_blinks[i]);
 	//		for(int i =0;i<32;i++)
-	//		MIOS32_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_segments[i]);
+	//		ADIOS_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_segments[i]);
 	//	}
 #endif
 	// Instruments select
@@ -699,10 +699,10 @@ void TR5X6_DECOD_segments_func(void){
 		if(tr5x6_decod_segments[i]!=tr5x6_decod_segments_shadow[i])segment_test_flag=1;
 		tr5x6_decod_segments_shadow[i]=tr5x6_decod_segments[i];
 	}
-	//MIOS32_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
+	//ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
 	//decoding &=0xfe;
 	decoding=0;
-	//MIOS32_BOARD_LED_Set(1, 0);
+	//ADIOS_BOARD_LED_Set(1, 0);
 
 #endif
 	//	for(int i=0;i<32;i++){
@@ -731,7 +731,7 @@ s32 TR5X6_DECOD_PatternChange(void)
 	if((pattern=TR5X6_DECOD_Pattern_Get())<0)return -1;
 	//tr5x6_flash_mem_Bank_t bank_mem = TR5X6_FLASH_MemBank_Get(group, pattern);
 	// optional hook to application
-	MIOS32_MIDI_SendDebugMessage("pattern %X%u\n", group+10, pattern+1);
+	ADIOS_MIDI_SendDebugMessage("pattern %X%u\n", group+10, pattern+1);
 	if( pattern_change_callback_func != NULL )
 		pattern_change_callback_func(group, pattern);
 

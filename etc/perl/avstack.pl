@@ -48,10 +48,10 @@
 #
 ###############################################################################
 #
-# This is a modified version for MIOS32
+# This is a modified version for ADIOS
 #
 # Changes:
-# - uses MIOS32_GCC_PREFIX to select the compiler
+# - uses ADIOS_GCC_PREFIX to select the compiler
 # - searches for all .o files in ./project_build
 #   (no need to specify the files in the command line)
 #
@@ -63,7 +63,7 @@ use File::Find;
 # Configuration: set these as appropriate for your architecture/project.
 
 # TK: for Cortex M
-my $objdump = "$ENV{MIOS32_GCC_PREFIX}-objdump";
+my $objdump = "$ENV{ADIOS_GCC_PREFIX}-objdump";
 my $call_cost = 4;
 
 # First, we need to read all object and corresponding .su files. We're
@@ -174,7 +174,7 @@ foreach (keys %call_graph) {
 # Create fake edges and nodes to account for dynamic behaviour.
 #
 # TK: original avstack.pl targeted AVR-GCC, where ISR entry points are named
-# "__vector_N" (avr-libc convention). MIOS32's Cortex-M ports (STM32G0xx/F4xx)
+# "__vector_N" (avr-libc convention). ADIOS's Cortex-M ports (STM32G0xx/F4xx)
 # name theirs "XXX_IRQHandler" (peripheral IRQs) or "XXX_Handler" (core
 # exceptions: NMI_Handler, HardFault_Handler, SysTick_Handler, ...) - see the
 # vector tables in etc/startup/*/startup_*.c. Matched here instead.

@@ -1,0 +1,149 @@
+/*
+ * Header file for MMC/SD Card Driver
+ *
+ * ==========================================================================
+ *
+ *  Copyright (C) 2026 Bruno Dupeyron (addictive.instruments@gmail.com)
+ *  Licensed under MIT License.
+ *  See the LICENSE file in the project root for full licence information.
+ *
+ * ==========================================================================
+ */
+
+#ifndef _ADIOS_SDCARD_H
+#define _ADIOS_SDCARD_H
+
+/////////////////////////////////////////////////////////////////////////////
+// Global definitions
+/////////////////////////////////////////////////////////////////////////////
+
+// An SD card is not a peripheral of the chip: it is a device at the end of an
+// SPI bus, and this driver only knows how to move 512-byte sectors over it.
+// Everything file-shaped lives above, in modules/ - a filesystem such as
+// FatFs binds to the four entry points SectorRead, SectorWrite,
+// CheckAvailable and CSDRead, and offers open/read/write on top of them.
+//
+// HOW TO USE IT
+// -------------
+// 1. In your adios_config.h, ask for the driver and name the SPI port the
+//    card is wired to. The SPI port has to be declared as well:
+//
+//      #define ADIOS_USE_SDCARD 1
+//      #define ADIOS_USE_SPI0   1
+//      #define ADIOS_SDCARD_SPI 0
+//
+// 2. Power the card up and see whether one is actually there. This is not
+//    done for you at startup, because a card can be inserted much later:
+//
+//      ADIOS_SDCARD_PowerOn();                  // < 0 if no card answers
+//      if( ADIOS_SDCARD_CheckAvailable(1) > 0 ) { ... }
+//
+//    Call CheckAvailable() periodically with 0 to notice a card being
+//    removed, and with 1 to re-detect one that has just been inserted.
+//
+// 3. Move sectors, 512 bytes at a time, addressed by sector number:
+//
+//      u8 sector[512];
+//      ADIOS_SDCARD_SectorRead(0, sector);
+//
+// If you want files rather than sectors, stop here and use a filesystem
+// module instead - it calls these functions for you.
+
+// Which SPI port carries the card. The port itself must be declared too
+// (ADIOS_USE_SPI0 / ADIOS_USE_SPI1) - see the #error in adios_sdcard.c,
+// which says so at compile time rather than letting the link fail on four
+// missing ADIOS_SPI_* symbols.
+#ifndef ADIOS_SDCARD_SPI
+#define ADIOS_SDCARD_SPI 0
+#endif
+
+// The chip select line is not named here: a port has one, declared as
+// ADIOS_SPIn_CS_PORT/_PIN in the family driver, and this driver drives it
+// through ADIOS_SPI_CS_PinSet(port, level).
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Global Types
+/////////////////////////////////////////////////////////////////////////////
+
+// structure taken from Mass Storage Driver example provided by STM
+typedef struct
+{
+  u8  CSDStruct;            /* CSD structure */
+  u8  SysSpecVersion;       /* System specification version */
+  u8  Reserved1;            /* Reserved */
+  u8  TAAC;                 /* Data read access-time 1 */
+  u8  NSAC;                 /* Data read access-time 2 in CLK cycles */
+  u8  MaxBusClkFrec;        /* Max. bus clock frequency */
+  u16 CardComdClasses;      /* Card command classes */
+  u8  RdBlockLen;           /* Max. read data block length */
+  u8  PartBlockRead;        /* Partial blocks for read allowed */
+  u8  WrBlockMisalign;      /* Write block misalignment */
+  u8  RdBlockMisalign;      /* Read block misalignment */
+  u8  DSRImpl;              /* DSR implemented */
+  u8  Reserved2;            /* Reserved */
+  u32 DeviceSize;           /* Device Size */
+  u8  MaxRdCurrentVDDMin;   /* Max. read current @ VDD min */
+  u8  MaxRdCurrentVDDMax;   /* Max. read current @ VDD max */
+  u8  MaxWrCurrentVDDMin;   /* Max. write current @ VDD min */
+  u8  MaxWrCurrentVDDMax;   /* Max. write current @ VDD max */
+  u8  DeviceSizeMul;        /* Device size multiplier */
+  u8  EraseGrSize;          /* Erase group size */
+  u8  EraseGrMul;           /* Erase group size multiplier */
+  u8  WrProtectGrSize;      /* Write protect group size */
+  u8  WrProtectGrEnable;    /* Write protect group enable */
+  u8  ManDeflECC;           /* Manufacturer default ECC */
+  u8  WrSpeedFact;          /* Write speed factor */
+  u8  MaxWrBlockLen;        /* Max. write data block length */
+  u8  WriteBlockPaPartial;  /* Partial blocks for write allowed */
+  u8  Reserved3;            /* Reserded */
+  u8  ContentProtectAppli;  /* Content protection application */
+  u8  FileFormatGrouop;     /* File format group */
+  u8  CopyFlag;             /* Copy flag (OTP) */
+  u8  PermWrProtect;        /* Permanent write protection */
+  u8  TempWrProtect;        /* Temporary write protection */
+  u8  FileFormat;           /* File Format */
+  u8  ECC;                  /* ECC code */
+  u8  msd_CRC;                  /* CRC */
+  u8  Reserved4;            /* always 1*/
+} adios_sdcard_csd_t;
+
+// structure taken from Mass Storage Driver example provided by STM
+typedef struct
+{
+  u8  ManufacturerID;       /* ManufacturerID */
+  u16 OEM_AppliID;          /* OEM/Application ID */
+  char ProdName[6];         /* Product Name */
+  u8  ProdRev;              /* Product Revision */
+  u32 ProdSN;               /* Product Serial Number */
+  u8  Reserved1;            /* Reserved1 */
+  u16 ManufactDate;         /* Manufacturing Date */
+  u8  msd_CRC;              /* CRC */
+  u8  Reserved2;            /* always 1*/
+} adios_sdcard_cid_t;
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Prototypes
+/////////////////////////////////////////////////////////////////////////////
+
+extern s32 ADIOS_SDCARD_Init(u32 mode);
+
+extern s32 ADIOS_SDCARD_PowerOn(void);
+extern s32 ADIOS_SDCARD_PowerOff(void);
+extern s32 ADIOS_SDCARD_CheckAvailable(u8 was_available);
+
+extern s32 ADIOS_SDCARD_SendSDCCmd(u8 cmd, u32 addr, u8 crc);
+extern s32 ADIOS_SDCARD_SectorRead(u32 sector, u8 *buffer);
+extern s32 ADIOS_SDCARD_SectorWrite(u32 sector, u8 *buffer);
+
+extern s32 ADIOS_SDCARD_CIDRead(adios_sdcard_cid_t *cid);
+extern s32 ADIOS_SDCARD_CSDRead(adios_sdcard_csd_t *csd);
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Export global variables
+/////////////////////////////////////////////////////////////////////////////
+
+
+#endif /* _ADIOS_SDCARD_H */

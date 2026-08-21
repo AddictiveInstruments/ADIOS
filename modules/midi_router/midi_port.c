@@ -14,7 +14,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <string.h>
 #include <osc_client.h>
 
@@ -25,7 +25,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 typedef struct {
-  mios32_midi_port_t port;
+  adios_midi_port_t port;
   char name[5];
 } midi_port_entry_t;
 
@@ -197,10 +197,10 @@ static const midi_port_entry_t clk_ports[MIDI_PORT_NUM_CLK_PORTS] = {
 
 // for MIDI In/Out monitor
 static u8 midi_out_ctr[MIDI_PORT_NUM_OUT_PORTS];
-static mios32_midi_package_t midi_out_package[MIDI_PORT_NUM_OUT_PORTS];
+static adios_midi_package_t midi_out_package[MIDI_PORT_NUM_OUT_PORTS];
 
 static u8 midi_in_ctr[MIDI_PORT_NUM_IN_PORTS];
-static mios32_midi_package_t midi_in_package[MIDI_PORT_NUM_IN_PORTS];
+static adios_midi_package_t midi_in_package[MIDI_PORT_NUM_IN_PORTS];
 
 static midi_port_mon_filter_t midi_port_mon_filter;
 
@@ -280,10 +280,10 @@ char *MIDI_PORT_ClkNameGet(u8 port_ix)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Returns the MIOS32 MIDI Port ID of a MIDI IN/OUT port
+// Returns the ADIOS MIDI Port ID of a MIDI IN/OUT port
 // port_ix is within 0..MIDI_PORT_In/OutNumGet()-1
 /////////////////////////////////////////////////////////////////////////////
-mios32_midi_port_t MIDI_PORT_InPortGet(u8 port_ix)
+adios_midi_port_t MIDI_PORT_InPortGet(u8 port_ix)
 {
   if( port_ix >= MIDI_PORT_NUM_IN_PORTS )
     return 0xff; // dummy interface
@@ -291,7 +291,7 @@ mios32_midi_port_t MIDI_PORT_InPortGet(u8 port_ix)
     return in_ports[port_ix].port;
 }
 
-mios32_midi_port_t MIDI_PORT_OutPortGet(u8 port_ix)
+adios_midi_port_t MIDI_PORT_OutPortGet(u8 port_ix)
 {
   if( port_ix >= MIDI_PORT_NUM_OUT_PORTS )
     return 0xff; // dummy interface
@@ -299,7 +299,7 @@ mios32_midi_port_t MIDI_PORT_OutPortGet(u8 port_ix)
     return out_ports[port_ix].port;
 }
 
-mios32_midi_port_t MIDI_PORT_ClkPortGet(u8 port_ix)
+adios_midi_port_t MIDI_PORT_ClkPortGet(u8 port_ix)
 {
   if( port_ix >= MIDI_PORT_NUM_CLK_PORTS )
     return 0xff; // dummy interface
@@ -309,9 +309,9 @@ mios32_midi_port_t MIDI_PORT_ClkPortGet(u8 port_ix)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Returns the MBSEQ MIDI Port Index of a MIOS32 MIDI IN/OUT port
+// Returns the MBSEQ MIDI Port Index of a ADIOS MIDI IN/OUT port
 /////////////////////////////////////////////////////////////////////////////
-u8 MIDI_PORT_InIxGet(mios32_midi_port_t port)
+u8 MIDI_PORT_InIxGet(adios_midi_port_t port)
 {
   u8 ix;
   for(ix=0; ix<MIDI_PORT_NUM_IN_PORTS; ++ix) {
@@ -322,7 +322,7 @@ u8 MIDI_PORT_InIxGet(mios32_midi_port_t port)
   return 0; // return first ix if not found
 }
 
-u8 MIDI_PORT_OutIxGet(mios32_midi_port_t port)
+u8 MIDI_PORT_OutIxGet(adios_midi_port_t port)
 {
   u8 ix;
   for(ix=0; ix<MIDI_PORT_NUM_OUT_PORTS; ++ix) {
@@ -333,7 +333,7 @@ u8 MIDI_PORT_OutIxGet(mios32_midi_port_t port)
   return 0; // return first ix if not found
 }
 
-u8 MIDI_PORT_ClkIxGet(mios32_midi_port_t port)
+u8 MIDI_PORT_ClkIxGet(adios_midi_port_t port)
 {
   u8 ix;
   for(ix=0; ix<MIDI_PORT_NUM_CLK_PORTS; ++ix) {
@@ -346,9 +346,9 @@ u8 MIDI_PORT_ClkIxGet(mios32_midi_port_t port)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Returns 1 if MIOS32 MIDI In/Out Port is available
+// Returns 1 if ADIOS MIDI In/Out Port is available
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_PORT_InCheckAvailable(mios32_midi_port_t port)
+s32 MIDI_PORT_InCheckAvailable(adios_midi_port_t port)
 {
   u8 ix;
   for(ix=0; ix<MIDI_PORT_NUM_IN_PORTS; ++ix) {
@@ -358,13 +358,13 @@ s32 MIDI_PORT_InCheckAvailable(mios32_midi_port_t port)
       else if( (port & 0xf0) == OSC0 )
 	return 1; // TODO: check for ethernet connection here
       else
-	return MIOS32_MIDI_CheckAvailable(port);
+	return ADIOS_MIDI_CheckAvailable(port);
     }
   }
   return 0; // port not available
 }
 
-s32 MIDI_PORT_OutCheckAvailable(mios32_midi_port_t port)
+s32 MIDI_PORT_OutCheckAvailable(adios_midi_port_t port)
 {
   u8 ix;
   for(ix=0; ix<MIDI_PORT_NUM_OUT_PORTS; ++ix) {
@@ -377,13 +377,13 @@ s32 MIDI_PORT_OutCheckAvailable(mios32_midi_port_t port)
       else if( (port & 0xf0) == OSC0 )
 	return 1; // TODO: check for ethernet connection here
       else
-	return MIOS32_MIDI_CheckAvailable(port);
+	return ADIOS_MIDI_CheckAvailable(port);
     }
   }
   return 0; // port not available
 }
 
-s32 MIDI_PORT_ClkCheckAvailable(mios32_midi_port_t port)
+s32 MIDI_PORT_ClkCheckAvailable(adios_midi_port_t port)
 {
   u8 ix;
   for(ix=0; ix<MIDI_PORT_NUM_CLK_PORTS; ++ix) {
@@ -396,7 +396,7 @@ s32 MIDI_PORT_ClkCheckAvailable(mios32_midi_port_t port)
       else if( (port & 0xf0) == OSC0 )
 	return 1; // TODO: check for ethernet connection here
       else
-	return MIOS32_MIDI_CheckAvailable(port);
+	return ADIOS_MIDI_CheckAvailable(port);
     }
   }
   return 0; // port not available
@@ -405,10 +405,10 @@ s32 MIDI_PORT_ClkCheckAvailable(mios32_midi_port_t port)
 /////////////////////////////////////////////////////////////////////////////
 // Returns the last sent MIDI package of given output port
 /////////////////////////////////////////////////////////////////////////////
-mios32_midi_package_t MIDI_PORT_OutPackageGet(mios32_midi_port_t port)
+adios_midi_package_t MIDI_PORT_OutPackageGet(adios_midi_port_t port)
 {
   u8 port_ix = 0;
-  mios32_midi_package_t empty;
+  adios_midi_package_t empty;
   empty.ALL = 0;
 
   if( port != DEFAULT ) {
@@ -428,10 +428,10 @@ mios32_midi_package_t MIDI_PORT_OutPackageGet(mios32_midi_port_t port)
 /////////////////////////////////////////////////////////////////////////////
 // Returns the last received MIDI package of given input port
 /////////////////////////////////////////////////////////////////////////////
-mios32_midi_package_t MIDI_PORT_InPackageGet(mios32_midi_port_t port)
+adios_midi_package_t MIDI_PORT_InPackageGet(adios_midi_port_t port)
 {
   u8 port_ix = 0;
-  mios32_midi_package_t empty;
+  adios_midi_package_t empty;
   empty.ALL = 0;
 
   if( port != DEFAULT ) {
@@ -494,7 +494,7 @@ s32 MIDI_PORT_Period1mS(void)
 // Allows to provide additional MIDI ports
 // If 1 is returned, package will be filtered!
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_PORT_NotifyMIDITx(mios32_midi_port_t port, mios32_midi_package_t package)
+s32 MIDI_PORT_NotifyMIDITx(adios_midi_port_t port, adios_midi_package_t package)
 {
   // MIDI Out monitor function
   u8 mon_filtered = 0;
@@ -537,7 +537,7 @@ s32 MIDI_PORT_NotifyMIDITx(mios32_midi_port_t port, mios32_midi_package_t packag
 /////////////////////////////////////////////////////////////////////////////
 // Called by MIDI Rx Notificaton hook in app.c if a MIDI event is received
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_PORT_NotifyMIDIRx(mios32_midi_port_t port, mios32_midi_package_t package)
+s32 MIDI_PORT_NotifyMIDIRx(adios_midi_port_t port, adios_midi_package_t package)
 {
   // MIDI In monitor function
   u8 mon_filtered = 0;
@@ -569,7 +569,7 @@ s32 MIDI_PORT_NotifyMIDIRx(mios32_midi_port_t port, mios32_midi_package_t packag
 // Returns the name of an event in a string
 // num_chars: currently only 5 supported, long event names could be added later
 /////////////////////////////////////////////////////////////////////////////
-s32 MIDI_PORT_EventNameGet(mios32_midi_package_t package, char *label, u8 num_chars)
+s32 MIDI_PORT_EventNameGet(adios_midi_package_t package, char *label, u8 num_chars)
 {
   // currently only 5 chars supported...
   if( package.type == 0xf || package.evnt0 >= 0xf8 ) {

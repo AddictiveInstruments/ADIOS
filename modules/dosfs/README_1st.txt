@@ -10,12 +10,12 @@ Version 1.03 from 9/30/06 is used.
 
 
 dfs_sdcard has been added as access layer between DFS functions (located
-in dosemu.c) and MIOS32_SDCARD functions (located in ../mios32/mios32_sdcard.c)
+in dosemu.c) and ADIOS_SDCARD functions (located in ../adios/adios_sdcard.c)
 
 The original usage examples can be found under unused/main.c
 
-MIOS32 based usage examples can be found under
-   $MIOS32_PATH/apps/examples/sdcard
+ADIOS based usage examples can be found under
+   $ADIOS_PATH/apps/examples/sdcard
 
 
 Addendum:

@@ -42,13 +42,13 @@
 #      erase unit above the largest bootloader that boundary must hold. On
 #      F4xx the erase unit IS the minimum (one 16K sector). On G0xx, 0x2000
 #      with roughly 600 bytes to spare at the time of writing.
-#   4) writes mios32_bsl_boundary.h into bootloader/src AND the project dir
+#   4) writes adios_bsl_boundary.h into bootloader/src AND the project dir
 #   5) rebuilds the bootloader - pass 2, now with the final boundary baked in
 #      (bsl_sysex.c's protection check AND main.c's jump-to-app address both
-#      read MIOS32_APP_FLASH_START_ADDR from the generated header)
-#   6) regenerates the embedded bootloader blob (mios32_bsl_<CHIP>.inc, in
-#      the chip's own mios32/<FAMILY> folder - included by mios32_bsl.c via
-#      MIOS32_BSL_INC_FILE) from this final pass-2 binary, sized to match
+#      read ADIOS_APP_FLASH_START_ADDR from the generated header)
+#   6) regenerates the embedded bootloader blob (adios_bsl_<CHIP>.inc, in
+#      the chip's own adios/<FAMILY> folder - included by adios_bsl.c via
+#      ADIOS_BSL_INC_FILE) from this final pass-2 binary, sized to match
 #      the final boundary exactly
 #   7) writes bootloader/src/cpu_bsl.ld: the same per-chip template, with
 #      the FLASH_BSL line removed entirely (the bootloader doesn't reserve
@@ -59,9 +59,9 @@
 #      same final boundary
 #
 # Also relays an optional project-level BSL_HOLD pin override
-# (MIOS32_BSL_HOLD_PORT_OVERRIDE / MIOS32_BSL_HOLD_PIN_OVERRIDE, defined by
-# the project's own mios32_config.h) into the bootloader's copy of the
-# generated header only, via the same channel as MIOS32_APP_FLASH_START_ADDR -
+# (ADIOS_BSL_HOLD_PORT_OVERRIDE / ADIOS_BSL_HOLD_PIN_OVERRIDE, defined by
+# the project's own adios_config.h) into the bootloader's copy of the
+# generated header only, via the same channel as ADIOS_APP_FLASH_START_ADDR -
 # see step 4/6 above.
 #
 # Usage:
@@ -84,8 +84,8 @@
 # rounding - safety margin for future bootloader growth, or for testing that
 # the boundary genuinely propagates end-to-end with a different value.
 #
-# Requires MIOS32_PATH and MIOS32_GCC_PREFIX to already be exported (same as
-# for a normal MIOS32 build).
+# Requires ADIOS_PATH and ADIOS_GCC_PREFIX to already be exported (same as
+# for a normal ADIOS build).
 
 set -e
 
@@ -101,7 +101,7 @@ PROJECT_DIR="$3"
 # It is given everything from there to the top of usable flash. There used
 # to be a fixed-size window as well, and it was a leftover: the only thing
 # that ever needed protecting up there is the application's own data area,
-# and MIOS32_USERDATA_PAGES already carves that out - for the updater as for
+# and ADIOS_USERDATA_PAGES already carves that out - for the updater as for
 # the application, both being relayed the same page count. A hand-picked
 # length on top of that protected nothing and merely capped the tool, which
 # is how a tool that grew a USB stack stopped fitting.
@@ -136,7 +136,7 @@ case "$CHIP" in
 esac
 
 PAGE_SIZE="${4:-$DEFAULT_PAGE_SIZE}"
-# Also settable from the project's Makefile as MIOS32_BSL_PADDING, relayed
+# Also settable from the project's Makefile as ADIOS_BSL_PADDING, relayed
 # through the environment like the other project facts. It MUST reach every
 # pass that computes a boundary - the application's and the updater's - or
 # the two would size the same bootloader differently and the tool would
@@ -149,8 +149,8 @@ if [ -z "$PROJECT_DIR" ]; then
     exit 1
 fi
 
-if [ -z "$MIOS32_PATH" ]; then
-    echo "MIOS32_PATH must be exported first"
+if [ -z "$ADIOS_PATH" ]; then
+    echo "ADIOS_PATH must be exported first"
     exit 1
 fi
 
@@ -173,7 +173,7 @@ case "$LD_TEMPLATE" in
         LD_TEMPLATE_SRC="$LD_TEMPLATE"
         LD_TEMPLATE="${TMPDIR:-/tmp}/adios_ld_${CHIP}_$$.ld"
         LD_CHIP_FALLBACK=$(echo "$CHIP" | sed -E 's/^(.{9}).(.)$/\1x\2/')
-        "${MIOS32_GCC_PREFIX:-arm-none-eabi}-gcc" -E -x assembler-with-cpp -P \
+        "${ADIOS_GCC_PREFIX:-arm-none-eabi}-gcc" -E -x assembler-with-cpp -P \
             -I "$(dirname "$LD_TEMPLATE_SRC")" \
             -DADIOS_LD_CHIP_"$CHIP" -DADIOS_LD_CHIP_"$LD_CHIP_FALLBACK" \
             "$LD_TEMPLATE_SRC" -o "$LD_TEMPLATE" || {
@@ -199,10 +199,10 @@ TOTAL_FLASH=$(( TOTAL_FLASH_K * 1024 ))
 # canonicalize to an absolute path for OUR OWN file operations (write_header,
 # log redirection, etc) - a deeply relative BSL_DIR (e.g.
 # "../../../bootloader/src", the case for a project 3 levels below
-# MIOS32_PATH) has been observed to fail redirection ("> $BSL_DIR/....log")
+# ADIOS_PATH) has been observed to fail redirection ("> $BSL_DIR/....log")
 # under some sh.exe builds, even though the same relative path works fine
 # for plain `cd`/`make -f`.
-BSL_DIR="$(cd "$MIOS32_PATH/bootloader/src" && pwd)"
+BSL_DIR="$(cd "$ADIOS_PATH/bootloader/src" && pwd)"
 # ONE generic bootloader Makefile for every chip/family (2026-08-05, replaced
 # the per-chip Makefile.bsl_STM32xxx copies) - the chip is passed to it as a
 # make variable instead of being baked into a separate file per SKU, so a new
@@ -266,8 +266,8 @@ write_ld () {
     if [ "$VARIANT" = "updater" ]; then
         # the BSL-update tool: linked in its own dedicated window above the
         # normal app origin (see UPDATER_ORIGIN_OFF above) - FLASH_BSL region
-        # dropped and .mios32_bsl section remapped for the same reason as the
-        # bsl variant below (the updater build defines MIOS32_DONT_INCLUDE_BSL)
+        # dropped and .adios_bsl section remapped for the same reason as the
+        # bsl variant below (the updater build defines ADIOS_DONT_INCLUDE_BSL)
         sed \
             -e '/^[[:space:]]*FLASH_BSL[[:space:]]*(rx)/d' \
             -e "s/^\([[:space:]]*\)FLASH[[:space:]]*(rx)[[:space:]]*:.*/\1FLASH (rx)     : ORIGIN = $UPDATER_ORIGIN_HEX, LENGTH = $UPDATER_REGION_LEN/" \
@@ -277,9 +277,9 @@ write_ld () {
         # the bootloader doesn't reserve a separate FLASH_BSL region for
         # itself - drop that line entirely, and FLASH becomes exactly the
         # bootloader's own reserved window starting at the base of flash.
-        # The .mios32_bsl OUTPUT SECTION (SECTIONS block) is retargeted from
+        # The .adios_bsl OUTPUT SECTION (SECTIONS block) is retargeted from
         # >FLASH_BSL to >FLASH too - it stays empty here (the bootloader
-        # build defines MIOS32_DONT_INCLUDE_BSL, it never embeds a copy of
+        # build defines ADIOS_DONT_INCLUDE_BSL, it never embeds a copy of
         # itself), but with FLASH_BSL gone as a declared region, leaving the
         # old mapping causes ld to warn "memory region not declared" and mis-size
         # the surrounding sections.
@@ -296,27 +296,27 @@ write_ld () {
     fi
 }
 
-# the bootloader's own sub-make needs MIOS32_PATH relative to ITS OWN
+# the bootloader's own sub-make needs ADIOS_PATH relative to ITS OWN
 # directory (bootloader/src is always exactly 2 levels below the repo
 # root) - NOT the inherited value, which is relative to whatever depth the
 # CALLING project sits at (e.g. "../../.." for a project 3 levels deep) and
 # would resolve one directory too far up once this script cd's into
-# bootloader/src. An absolute MIOS32_PATH would avoid that mismatch too, but
+# bootloader/src. An absolute ADIOS_PATH would avoid that mismatch too, but
 # GNU Make's rule parser chokes on a Windows drive-letter colon ("E:/...")
-# embedded in the absolute source paths mios32.mk builds from it.
+# embedded in the absolute source paths adios.mk builds from it.
 #
 # A literal relative value ("../..") doesn't work either though: THUMB_SOURCE
-# paths built from it (e.g. "../../mios32/STM32G0xx/mios32_sys.c") carry
+# paths built from it (e.g. "../../adios/STM32G0xx/adios_sys.c") carry
 # real ".." segments, and common.mk's object rule just prefixes $(PROJECT_OUT)
 # onto whatever source path it's given - it doesn't textually contain that
 # ".."; mkdir -p/gcc -o resolve it as a real upward directory walk, scattering
-# mios32/etc/drivers directories one level above bootloader/src on every
+# adios/etc/drivers directories one level above bootloader/src on every
 # single build (found & fixed 2026-08-04, after being found once already
 # earlier this project and mistakenly assumed fixed).
 #
 # Fix: a same-directory symlink, bootstrapped once if missing, standing in
-# for the repo root - "REPO_ROOT_LINK/mios32/..." has the same "path depth"
-# as "../../mios32/..." to the OS, but contains no ".." token for Make/mkdir
+# for the repo root - "REPO_ROOT_LINK/adios/..." has the same "path depth"
+# as "../../adios/..." to the OS, but contains no ".." token for Make/mkdir
 # to walk out on, so the mirrored object tree stays correctly inside
 # $(PROJECT_OUT). Falls back to a literal ".." value on platforms where a
 # symlink can't be created (e.g. Windows without Developer Mode/admin) -
@@ -333,20 +333,20 @@ if [ ! -e "$REPO_ROOT_LINK" ]; then
     # script) - falls through to the ".." fallback below if that's not
     # available either.
     # the link target must be resolved to an ABSOLUTE path first: a relative
-    # MIOS32_PATH (e.g. "../../..", the app Makefiles' self-locating default
+    # ADIOS_PATH (e.g. "../../..", the app Makefiles' self-locating default
     # since 2026-08-09) is relative to THIS script's cwd (the app dir), but a
     # relative symlink target is resolved against the link's OWN directory
     # (bootloader/src) - storing it as-is would point outside the repo.
-    MSYS=winsymlinks:nativestrict ln -s "$(cd "$MIOS32_PATH" && pwd)" "$REPO_ROOT_LINK" 2>/dev/null || true
+    MSYS=winsymlinks:nativestrict ln -s "$(cd "$ADIOS_PATH" && pwd)" "$REPO_ROOT_LINK" 2>/dev/null || true
 fi
 if [ -L "$REPO_ROOT_LINK" ]; then
-    BSL_SUBMAKE_MIOS32_PATH=".repo_root"
+    BSL_SUBMAKE_ADIOS_PATH=".repo_root"
 else
-    BSL_SUBMAKE_MIOS32_PATH="../.."
+    BSL_SUBMAKE_ADIOS_PATH="../.."
 fi
 
 build_bootloader () {
-    ( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
+    ( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
         echo "Bootloader build failed, see $BSL_DIR/gen_bsl_boundary_build.log"
         exit 1
     }
@@ -364,7 +364,7 @@ build_bootloader () {
 #     compile larger than MIN_BOUNDARY (that's exactly why pass 1 measures it
 #     instead of trusting a hardcoded constant), so seeding at MIN_BOUNDARY
 #     itself is not reliably enough room to link pass 1 in the first place.
-#     32K comfortably fits any MIOS32 bootloader variant built so far
+#     32K comfortably fits any ADIOS bootloader variant built so far
 #     (including the heavier F4+USB ones) and is discarded immediately once
 #     the real size is known.
 #     MUST be unconditional (not "only if missing"): a leftover cpu_bsl.ld
@@ -380,13 +380,13 @@ build_bootloader () {
 # longer match. Always start from a clean slate - and BEFORE the bootstrap
 # seed below, not after: cleanall's `clean:` target is `rm -rf $(PROJECT_OUT)`,
 # which would otherwise delete the cpu_bsl.ld the seed step just wrote, now
-# --- BSL_HOLD pin override (optional): if the project's own mios32_config.h
-#     defines MIOS32_BSL_HOLD_PORT_OVERRIDE / MIOS32_BSL_HOLD_PIN_OVERRIDE,
+# --- BSL_HOLD pin override (optional): if the project's own adios_config.h
+#     defines ADIOS_BSL_HOLD_PORT_OVERRIDE / ADIOS_BSL_HOLD_PIN_OVERRIDE,
 #     relay them into the BOOTLOADER's copy of the generated header only -
-#     never into the project's own copy, since the project's mios32_config.h
+#     never into the project's own copy, since the project's adios_config.h
 #     already defines them itself and including them there too would just be
 #     a duplicate #define in the same translation unit. This is the same
-#     two-pass-build channel already used for MIOS32_APP_FLASH_START_ADDR,
+#     two-pass-build channel already used for ADIOS_APP_FLASH_START_ADDR,
 #     just carrying one more project-level compile-time constant. Not a
 #     runtime/flash mechanism - both binaries are compiled together, so a
 #     plain preprocessor relay is enough (see 2026-08-01 plan review).
@@ -394,18 +394,18 @@ build_bootloader () {
 #     own directory, which holds no board facts (see the relay block below).
 RELAY_SRC_DIR="${BSL_RELAY_SRC:-$PROJECT_DIR}"
 HOLD_PIN_OVERRIDES=""
-if [ -f "$RELAY_SRC_DIR/mios32_config.h" ]; then
-    HOLD_PIN_OVERRIDES=$(grep -E '^[[:space:]]*#define[[:space:]]+MIOS32_BSL_HOLD_(PORT|PIN)_OVERRIDE\b' "$RELAY_SRC_DIR/mios32_config.h" || true)
+if [ -f "$RELAY_SRC_DIR/adios_config.h" ]; then
+    HOLD_PIN_OVERRIDES=$(grep -E '^[[:space:]]*#define[[:space:]]+ADIOS_BSL_HOLD_(PORT|PIN)_OVERRIDE\b' "$RELAY_SRC_DIR/adios_config.h" || true)
 fi
 
 # --- board MIDI wiring relay (same channel, larger payload): a bootloader and
 #     its application share one physical MIDI connector, so which port the
 #     bootloader talks on, its TX polarity and its pin drive mode are facts
 #     about the BOARD, not about the bootloader. Hardcoding them in
-#     bootloader/src/mios32_config.h made that file describe exactly one
+#     bootloader/src/adios_config.h made that file describe exactly one
 #     instrument - any other board got a bootloader driving the wrong pins,
 #     or a peripheral its chip doesn't even have (a G030K6 has no USART3).
-#     A project marks the relevant lines of its own mios32_config.h with
+#     A project marks the relevant lines of its own adios_config.h with
 #     BSL_RELAY_BEGIN/END and they are copied VERBATIM into the bootloader's
 #     and the updater's generated header. Verbatim on purpose: no whitelist
 #     of macro names to keep in sync, and the project stays the single place
@@ -413,24 +413,24 @@ fi
 #     Exactly ONE block is allowed, deliberately: relaying by macro name
 #     would pick up every family branch of a config that has several and
 #     quietly emit contradictory #defines.
-#     BSL_RELAY_SRC names the directory whose mios32_config.h carries the
+#     BSL_RELAY_SRC names the directory whose adios_config.h carries the
 #     block. It is PROJECT_DIR for a normal app build, but the updater builds
 #     from bootloader/updater/ - its own directory holds no board wiring, so
 #     common.mk points it back at the application being built.
 BSL_RELAY_BLOCK=""
-if [ -f "$RELAY_SRC_DIR/mios32_config.h" ]; then
-    RELAY_BEGINS=$(grep -c '^[[:space:]]*//[[:space:]]*BSL_RELAY_BEGIN' "$RELAY_SRC_DIR/mios32_config.h" || true)
-    RELAY_ENDS=$(grep -c '^[[:space:]]*//[[:space:]]*BSL_RELAY_END' "$RELAY_SRC_DIR/mios32_config.h" || true)
+if [ -f "$RELAY_SRC_DIR/adios_config.h" ]; then
+    RELAY_BEGINS=$(grep -c '^[[:space:]]*//[[:space:]]*BSL_RELAY_BEGIN' "$RELAY_SRC_DIR/adios_config.h" || true)
+    RELAY_ENDS=$(grep -c '^[[:space:]]*//[[:space:]]*BSL_RELAY_END' "$RELAY_SRC_DIR/adios_config.h" || true)
     if [ "$RELAY_BEGINS" != "$RELAY_ENDS" ]; then
-        echo "ERROR: $RELAY_SRC_DIR/mios32_config.h has $RELAY_BEGINS BSL_RELAY_BEGIN marker(s) for $RELAY_ENDS BSL_RELAY_END - they must be balanced."
+        echo "ERROR: $RELAY_SRC_DIR/adios_config.h has $RELAY_BEGINS BSL_RELAY_BEGIN marker(s) for $RELAY_ENDS BSL_RELAY_END - they must be balanced."
         exit 1
     fi
     if [ "$RELAY_BEGINS" -gt 1 ]; then
-        echo "ERROR: $RELAY_SRC_DIR/mios32_config.h has $RELAY_BEGINS BSL_RELAY blocks - exactly one is allowed, or the bootloader would receive contradictory wiring."
+        echo "ERROR: $RELAY_SRC_DIR/adios_config.h has $RELAY_BEGINS BSL_RELAY blocks - exactly one is allowed, or the bootloader would receive contradictory wiring."
         exit 1
     fi
     if [ "$RELAY_BEGINS" = "1" ]; then
-        BSL_RELAY_BLOCK=$(sed -n '/^[[:space:]]*\/\/[[:space:]]*BSL_RELAY_BEGIN/,/^[[:space:]]*\/\/[[:space:]]*BSL_RELAY_END/p' "$RELAY_SRC_DIR/mios32_config.h" | sed '1d;$d')
+        BSL_RELAY_BLOCK=$(sed -n '/^[[:space:]]*\/\/[[:space:]]*BSL_RELAY_BEGIN/,/^[[:space:]]*\/\/[[:space:]]*BSL_RELAY_END/p' "$RELAY_SRC_DIR/adios_config.h" | sed '1d;$d')
     fi
 fi
 
@@ -441,28 +441,28 @@ write_header () {
         echo "// AUTO-GENERATED by etc/gen_bsl_boundary.sh - do not edit by hand."
         echo "// Computed from the real compiled size of the $CHIP bootloader,"
         echo "// rounded up to a $PAGE_SIZE byte flash erase-granularity boundary (min $MIN_BOUNDARY)."
-        echo "#ifndef _MIOS32_BSL_BOUNDARY_H"
-        echo "#define _MIOS32_BSL_BOUNDARY_H"
-        echo "#define MIOS32_APP_FLASH_START_ADDR $BOUNDARY_HEX"
+        echo "#ifndef _ADIOS_BSL_BOUNDARY_H"
+        echo "#define _ADIOS_BSL_BOUNDARY_H"
+        echo "#define ADIOS_APP_FLASH_START_ADDR $BOUNDARY_HEX"
         # names the embedded-bootloader image written beside this header by
         # the same pass. A fixed name: there is only ever one, and it is
         # rewritten whenever this project is built.
-        echo "#define MIOS32_BSL_INC_FILE \"mios32_bsl_image.inc\""
+        echo "#define ADIOS_BSL_INC_FILE \"adios_bsl_image.inc\""
         # the persistent device-ID opt-in, relayed from the project's Makefile:
         # WITHOUT it the bootloader looks for no ID at all and answers on the
         # compile-time default. It has to arrive this way rather than through
         # the BSL_RELAY block because the reservation it depends on is a
         # Makefile matter (the linker script needs it at preprocessing time).
-        if [ "${MIOS32_DEVICE_ID_PERSIST:-0}" = "1" ]; then
-            echo "#define MIOS32_DEVICE_ID_PERSIST 1"
+        if [ "${ADIOS_DEVICE_ID_PERSIST:-0}" = "1" ]; then
+            echo "#define ADIOS_DEVICE_ID_PERSIST 1"
         fi
         if [ "$WITH_OVERRIDES" = "yes" ] && [ -n "$HOLD_PIN_OVERRIDES" ]; then
-            echo "// BSL_HOLD pin override relayed from the project's mios32_config.h:"
+            echo "// BSL_HOLD pin override relayed from the project's adios_config.h:"
             echo "$HOLD_PIN_OVERRIDES"
         fi
         if [ "$WITH_OVERRIDES" = "yes" ] && [ -n "$BSL_RELAY_BLOCK" ]; then
             echo "// Board MIDI wiring, copied verbatim from the BSL_RELAY block of"
-            echo "// the project's mios32_config.h - the bootloader talks on the same"
+            echo "// the project's adios_config.h - the bootloader talks on the same"
             echo "// connector as its application, so the project owns these facts:"
             echo "$BSL_RELAY_BLOCK"
         fi
@@ -471,7 +471,7 @@ write_header () {
 }
 
 # that it lives inside project_build/ too (2026-08-04).
-( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" cleanall > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
+( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" cleanall > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
     echo "Bootloader cleanall failed, see $BSL_DIR/gen_bsl_boundary_build.log"
     exit 1
 }
@@ -489,7 +489,7 @@ write_ld "$BSL_LD_FILE" "bsl"
 # measure a bootloader missing its whole UART transport and derive a boundary
 # too small for the real pass-2 build. The boundary written here is the
 # placeholder; the real one overwrites this file after the measurement.
-write_header "$BSL_DIR/mios32_bsl_boundary.h" "yes"
+write_header "$BSL_DIR/adios_bsl_boundary.h" "yes"
 
 echo "=== Pass 1: building bootloader for $CHIP to measure its real size ==="
 build_bootloader
@@ -505,7 +505,7 @@ if [ "$BOUNDARY" -lt "$MIN_BOUNDARY" ]; then
     BOUNDARY=$MIN_BOUNDARY
 fi
 # Pages the application reserves for its own data at the TOP of flash
-# (MIOS32_USERDATA_PAGES, relayed through the environment by
+# (ADIOS_USERDATA_PAGES, relayed through the environment by
 # core.mk). The linker template already carves them out of its
 # FLASH region - but the rewrite further down recomputes that length from the
 # chip's TOTAL flash, so the same pages have to come off here too or the
@@ -528,8 +528,8 @@ fi
 
 # --- generated header for the BOOTLOADER's own build (so bsl_sysex.c's
 #     protection check and main.c's jump-to-app address use the same value) ---
-write_header "$BSL_DIR/mios32_bsl_boundary.h" "yes"
-echo "Wrote $BSL_DIR/mios32_bsl_boundary.h"
+write_header "$BSL_DIR/adios_bsl_boundary.h" "yes"
+echo "Wrote $BSL_DIR/adios_bsl_boundary.h"
 if [ -n "$HOLD_PIN_OVERRIDES" ]; then
     echo "Relayed BSL_HOLD pin override into bootloader build:"
     echo "$HOLD_PIN_OVERRIDES"
@@ -538,7 +538,7 @@ if [ -n "$BSL_RELAY_BLOCK" ]; then
     echo "Relayed board MIDI wiring into bootloader build:"
     echo "$BSL_RELAY_BLOCK" | sed 's/^/    /'
 else
-    echo "NOTE: no BSL_RELAY block in $RELAY_SRC_DIR/mios32_config.h - the bootloader gets no board wiring from this project."
+    echo "NOTE: no BSL_RELAY block in $RELAY_SRC_DIR/adios_config.h - the bootloader gets no board wiring from this project."
 fi
 
 # Pass 2 must recompile EVERYTHING, not just relink. The boundary the
@@ -553,7 +553,7 @@ fi
 #
 # Before write_ld below, never after: clean wipes project_build/, and that is
 # where the linker script it writes lives.
-( cd "$BSL_DIR" && MIOS32_PATH=$BSL_SUBMAKE_MIOS32_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" clean > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
+( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" clean > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
     echo "Bootloader clean before pass 2 failed, see $BSL_DIR/gen_bsl_boundary_build.log"
     exit 1
 }
@@ -572,17 +572,17 @@ if [ "$BSL_SIZE_FINAL" -gt "$BOUNDARY" ]; then
     exit 1
 fi
 
-# --- regenerate the embedded bootloader blob (mios32_bsl.c includes this via
-#     MIOS32_BSL_INC_FILE) ---
+# --- regenerate the embedded bootloader blob (adios_bsl.c includes this via
+#     ADIOS_BSL_INC_FILE) ---
 #
-# It lands in the PROJECT's own directory, beside the mios32_bsl_boundary.h
+# It lands in the PROJECT's own directory, beside the adios_bsl_boundary.h
 # written by the same pass, and carries a FIXED name. The bootloader is built
 # per project - it takes that project's board wiring, and its boundary is
 # measured from the result - so this image belongs to the project, not to the
 # chip, and it is rewritten at every build of that project. A name keyed on
 # the chip preserved nothing and scattered copies through the OS sources.
-INC_FILE="$PROJECT_DIR/mios32_bsl_image.inc"
-perl "$BSL_DIR/gen_inc_file.pl" "$BIN_FILE" "$INC_FILE" mios32_bsl_image mios32_bsl -size="$BOUNDARY"
+INC_FILE="$PROJECT_DIR/adios_bsl_image.inc"
+perl "$BSL_DIR/gen_inc_file.pl" "$BIN_FILE" "$INC_FILE" adios_bsl_image adios_bsl -size="$BOUNDARY"
 echo "Regenerated $INC_FILE ($BOUNDARY bytes, matches final boundary)"
 
 if [ "$BSL_BOUNDARY_MODE" = "updater" ]; then
@@ -613,37 +613,37 @@ if [ "$BSL_BOUNDARY_MODE" = "updater" ]; then
 
     {
         echo "// AUTO-GENERATED by etc/gen_bsl_boundary.sh (updater mode) - do not edit by hand."
-        echo "#ifndef _MIOS32_BSL_BOUNDARY_H"
-        echo "#define _MIOS32_BSL_BOUNDARY_H"
+        echo "#ifndef _ADIOS_BSL_BOUNDARY_H"
+        echo "#define _ADIOS_BSL_BOUNDARY_H"
         echo "// the CURRENT boundary of the bootloader being shipped - the ceiling of"
         echo "// the region this updater writes, and its answer to query 0x0a"
-        echo "#define MIOS32_APP_FLASH_START_ADDR $BOUNDARY_HEX"
+        echo "#define ADIOS_APP_FLASH_START_ADDR $BOUNDARY_HEX"
         echo "// where this updater itself is linked (entry override target for Studio,"
         echo "// and the upper bound of the old-info-block scan)"
-        echo "#define MIOS32_UPDATER_ORIGIN_ADDR $UPDATER_ORIGIN_HEX"
+        echo "#define ADIOS_UPDATER_ORIGIN_ADDR $UPDATER_ORIGIN_HEX"
         # The persistent device-ID opt-in, relayed exactly as it is to the
         # bootloader (see write_header): this tool answers the host on the
         # instrument's own SysEx ID, so it has to know where that ID is kept.
         # Without it the tool comes up on the compile-time default and a host
         # addressing the instrument cannot reach it.
-        if [ "${MIOS32_DEVICE_ID_PERSIST:-0}" = "1" ]; then
-            echo "#define MIOS32_DEVICE_ID_PERSIST 1"
+        if [ "${ADIOS_DEVICE_ID_PERSIST:-0}" = "1" ]; then
+            echo "#define ADIOS_DEVICE_ID_PERSIST 1"
         fi
         if [ -n "$BSL_RELAY_BLOCK" ]; then
             echo "// Board MIDI wiring, copied verbatim from the BSL_RELAY block of the"
-            echo "// application's mios32_config.h (BSL_RELAY_SRC): this tool must come"
+            echo "// application's adios_config.h (BSL_RELAY_SRC): this tool must come"
             echo "// up on the same connector as the bootloader it installs."
             echo "$BSL_RELAY_BLOCK"
         fi
         echo "#endif"
-    } > "$PROJECT_DIR/mios32_bsl_boundary.h"
-    echo "Wrote $PROJECT_DIR/mios32_bsl_boundary.h (updater origin $UPDATER_ORIGIN_HEX)"
+    } > "$PROJECT_DIR/adios_bsl_boundary.h"
+    echo "Wrote $PROJECT_DIR/adios_bsl_boundary.h (updater origin $UPDATER_ORIGIN_HEX)"
 else
-    # --- generated header consumed by the project's own mios32_config.h ---
+    # --- generated header consumed by the project's own adios_config.h ---
     # (no pin override relayed here: the project already defines it itself,
     # relaying it back would be a duplicate #define in the same file)
-    write_header "$PROJECT_DIR/mios32_bsl_boundary.h" "no"
-    echo "Wrote $PROJECT_DIR/mios32_bsl_boundary.h"
+    write_header "$PROJECT_DIR/adios_bsl_boundary.h" "no"
+    echo "Wrote $PROJECT_DIR/adios_bsl_boundary.h"
 
     # --- generated linker script for the project's own app build ---
     write_ld "$APP_LD_FILE" "app"

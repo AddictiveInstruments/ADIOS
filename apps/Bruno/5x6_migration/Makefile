@@ -15,20 +15,20 @@ LCD       =	dummy
 
 # self-locating repo root: apps live at a fixed depth inside the repo, so a
 # plain `make` works with no environment setup at all (any exported
-# MIOS32_PATH - e.g. from a CubeIDE workspace - still overrides this default)
-MIOS32_PATH ?= ../../..
+# ADIOS_PATH - e.g. from a CubeIDE workspace - still overrides this default)
+ADIOS_PATH ?= ../../..
 
 # same boundary mechanism as the firmware: this tool is uploaded through the
 # very bootloader the update just installed, so it has to be linked where that
 # bootloader expects an application to start
-MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
+ADIOS_USE_DYNAMIC_BSL_BOUNDARY = 1
 
 # It WRITES the device-ID record, so it needs the same view of flash as the
 # firmware: the record's address, and the four sound-ROM pages kept out of the
 # linker's reach. Same two values as 5x6_505's Makefile - they describe the
 # instrument, not the program.
-MIOS32_DEVICE_ID_PERSIST = 1
-MIOS32_USERDATA_PAGES = 4
+ADIOS_DEVICE_ID_PERSIST = 1
+ADIOS_USERDATA_PAGES = 4
 
 
 ################################################################################
@@ -64,11 +64,11 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 ################################################################################
 
 # sources of programming model
-include $(MIOS32_PATH)/core/core.mk
+include $(ADIOS_PATH)/core/core.mk
 
 # application specific LCD driver (selected via makefile variable)
-include $(MIOS32_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk
+include $(ADIOS_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk
 
 # common make rules
 # Please keep this include statement at the end of this Makefile. Add new modules above.
-include $(MIOS32_PATH)/include/makefile/common.mk
+include $(ADIOS_PATH)/include/makefile/common.mk

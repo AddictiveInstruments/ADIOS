@@ -15,11 +15,11 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <app.h>
 
 // ===========================================================================
-// MIOS32_CORE_USE_FREERTOS (see mios32_sys.h for the auto-derived default,
+// ADIOS_CORE_USE_FREERTOS (see adios_sys.h for the auto-derived default,
 // tiered by RAM/FLASH budget - RAM<=8K or FLASH<=32K defaults this OFF):
 // decides how the application Hooks below are scheduled.
 //
@@ -30,9 +30,9 @@
 //     TASK_MIDI_Hooks can still preempt it.
 //
 //   - 0: a bare-metal super-loop, no FreeRTOS kernel involved at all here
-//     (see MIOS32_APP_USE_FREERTOS for the kernel-presence switch,
+//     (see ADIOS_APP_USE_FREERTOS for the kernel-presence switch,
 //     independent of this one) - timed by a dedicated SysTick handler
-//     instead of the FreeRTOS tick (MIOS32_STOPWATCH is deliberately NOT
+//     instead of the FreeRTOS tick (ADIOS_STOPWATCH is deliberately NOT
 //     used for this: it must stay free for the application's own timing
 //     needs). The two Hooks collapse into ONE sequential 1mS block - THIS
 //     REMOVES THE ISOLATION DESCRIBED ABOVE: a slow/blocking application
@@ -41,17 +41,17 @@
 //     Worth it on the smallest chips only because of what FreeRTOS itself
 //     costs there - measured empirically at ~83% of a full G030K6 build,
 //     and roughly half the total RAM on G031K8 (heap alone, before any
-//     application code) - see apps/templates/app_skeleton/mios32_config.h
+//     application code) - see apps/templates/app_skeleton/adios_config.h
 //     for the full writeup.
 //
 // Both switches are numeric (0/1), not plain #define presence - checked
 // with "#if", not "#ifdef" - specifically so a project CAN override either
 // one to 0 even where the RAM/FLASH tier would otherwise default it to 1
 // (a bare #undef can't express "explicitly off" vs. "undecided, apply the
-// tier default"). Override in your own mios32_config.h, e.g.
-// "#define MIOS32_CORE_USE_FREERTOS 0".
+// tier default"). Override in your own adios_config.h, e.g.
+// "#define ADIOS_CORE_USE_FREERTOS 0".
 // ===========================================================================
-#if MIOS32_CORE_USE_FREERTOS
+#if ADIOS_CORE_USE_FREERTOS
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
@@ -66,16 +66,16 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Task Priorities and stack sizes (MIOS32_CORE_USE_FREERTOS only - a bare
+// Task Priorities and stack sizes (ADIOS_CORE_USE_FREERTOS only - a bare
 // super-loop has no separate task stacks, everything runs on the single
 // main() stack sized by the linker script)
 /////////////////////////////////////////////////////////////////////////////
 
-#if MIOS32_CORE_USE_FREERTOS
+#if ADIOS_CORE_USE_FREERTOS
 #define PRIORITY_TASK_HOOKS		( tskIDLE_PRIORITY + 3 )
 
-#ifndef MIOS32_TASK_HOOKS_STACK_SIZE
-# if defined(MIOS32_USE_USB_HOST_MIDI) || defined(MIOS32_USE_USB_HOST_HID) || defined(MIOS32_USE_USB_HOST_MSC)
+#ifndef ADIOS_TASK_HOOKS_STACK_SIZE
+# if defined(ADIOS_USE_USB_HOST_MIDI) || defined(ADIOS_USE_USB_HOST_HID) || defined(ADIOS_USE_USB_HOST_MSC)
 // The USB HOST stack runs from this task, and its enumeration path is deep:
 // control transfers, descriptor parsing, hub, class drivers. The device stack
 // is nothing like as demanding - it only ever reacts to what a host asks - so
@@ -86,17 +86,17 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 // fires, vApplicationStackOverflowHook() calls _abort(), and EVERY task stops
 // while interrupts keep running. The machine then still enumerates over USB
 // and answers nothing - a symptom that points nowhere near a stack.
-// Expressed with MIOS32_MINIMAL_STACK_SIZE, which is a plain number of BYTES,
+// Expressed with ADIOS_MINIMAL_STACK_SIZE, which is a plain number of BYTES,
 // and not with configMINIMAL_STACK_SIZE, which is words AND carries a cast -
 // a cast the preprocessor cannot evaluate, so the check further down could
 // not be written against it.
-#  define MIOS32_TASK_HOOKS_STACK_SIZE (3*(MIOS32_MINIMAL_STACK_SIZE))
+#  define ADIOS_TASK_HOOKS_STACK_SIZE (3*(ADIOS_MINIMAL_STACK_SIZE))
 # else
-#  define MIOS32_TASK_HOOKS_STACK_SIZE (MIOS32_MINIMAL_STACK_SIZE)
+#  define ADIOS_TASK_HOOKS_STACK_SIZE (ADIOS_MINIMAL_STACK_SIZE)
 # endif
 #endif
-#ifndef MIOS32_TASK_MIDI_HOOKS_STACK_SIZE
-# if defined(MIOS32_USE_USB_HOST_MIDI) || defined(MIOS32_USE_USB_HOST_HID) || defined(MIOS32_USE_USB_HOST_MSC)
+#ifndef ADIOS_TASK_MIDI_HOOKS_STACK_SIZE
+# if defined(ADIOS_USE_USB_HOST_MIDI) || defined(ADIOS_USE_USB_HOST_HID) || defined(ADIOS_USE_USB_HOST_MSC)
 // This is the task that does the deep work on a request: SysEx parser,
 // building the reply, sprintf, and the whole USB write path underneath. A
 // host-enabled build pushes that path just past one minimal stack - and a
@@ -104,9 +104,9 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 // looks at the stack pointer on a context switch, so a spike that recedes in
 // time is never seen, it just corrupts whatever the heap placed next door.
 // (Check mode 2, set in FreeRTOSConfig.h, does catch these - keep it there.)
-#  define MIOS32_TASK_MIDI_HOOKS_STACK_SIZE (2*(MIOS32_MINIMAL_STACK_SIZE))
+#  define ADIOS_TASK_MIDI_HOOKS_STACK_SIZE (2*(ADIOS_MINIMAL_STACK_SIZE))
 # else
-#  define MIOS32_TASK_MIDI_HOOKS_STACK_SIZE (MIOS32_MINIMAL_STACK_SIZE)
+#  define ADIOS_TASK_MIDI_HOOKS_STACK_SIZE (ADIOS_MINIMAL_STACK_SIZE)
 # endif
 #endif
 
@@ -118,9 +118,9 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 //
 // The idle task takes one minimal stack; the rest is control blocks, queues
 // and the allocator's own overhead.
-#define MIOS32_TASK_STACK_TOTAL ((MIOS32_TASK_HOOKS_STACK_SIZE) + (MIOS32_TASK_MIDI_HOOKS_STACK_SIZE) + (MIOS32_MINIMAL_STACK_SIZE))
-#if (MIOS32_HEAP_SIZE) < ((MIOS32_TASK_STACK_TOTAL) + 1024)
-# error "MIOS32_HEAP_SIZE is too small for the task stacks this build asks for: raise it in your mios32_config.h. Asking for a USB HOST class enlarges the Hooks stack, which is the usual reason to land here."
+#define ADIOS_TASK_STACK_TOTAL ((ADIOS_TASK_HOOKS_STACK_SIZE) + (ADIOS_TASK_MIDI_HOOKS_STACK_SIZE) + (ADIOS_MINIMAL_STACK_SIZE))
+#if (ADIOS_HEAP_SIZE) < ((ADIOS_TASK_STACK_TOTAL) + 1024)
+# error "ADIOS_HEAP_SIZE is too small for the task stacks this build asks for: raise it in your adios_config.h. Asking for a USB HOST class enlarges the Hooks stack, which is the usual reason to land here."
 #endif
 #endif
 
@@ -128,14 +128,14 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 /////////////////////////////////////////////////////////////////////////////
 // Local prototypes
 /////////////////////////////////////////////////////////////////////////////
-#if MIOS32_CORE_USE_FREERTOS
+#if ADIOS_CORE_USE_FREERTOS
 static void TASK_Hooks(void *pvParameters);
 static void TASK_MIDI_Hooks(void *pvParameters);
 #endif
-static void MIOS32_CORE_NonMIDI_Tick(void);
-static void MIOS32_CORE_MIDI_Tick(void);
-#if !MIOS32_CORE_USE_FREERTOS
-static void MIOS32_CORE_BareLoop_Run(void);
+static void ADIOS_CORE_NonMIDI_Tick(void);
+static void ADIOS_CORE_MIDI_Tick(void);
+#if !ADIOS_CORE_USE_FREERTOS
+static void ADIOS_CORE_BareLoop_Run(void);
 #endif
 
 
@@ -144,13 +144,13 @@ static void MIOS32_CORE_BareLoop_Run(void);
 /////////////////////////////////////////////////////////////////////////////
 
 #if configAPPLICATION_ALLOCATED_HEAP
-# if defined(MIOS32_FAMILY_LPC17xx) && !defined(MIOS32_FREERTOS_HEAP_SECTION)
-#  define MIOS32_FREERTOS_HEAP_SECTION __attribute__ ((section (".bss_ahb")))
+# if defined(ADIOS_FAMILY_LPC17xx) && !defined(ADIOS_FREERTOS_HEAP_SECTION)
+#  define ADIOS_FREERTOS_HEAP_SECTION __attribute__ ((section (".bss_ahb")))
 # else
-#  define MIOS32_FREERTOS_HEAP_SECTION
+#  define ADIOS_FREERTOS_HEAP_SECTION
 # endif
 
-uint8_t MIOS32_FREERTOS_HEAP_SECTION ucHeap[configTOTAL_HEAP_SIZE];
+uint8_t ADIOS_FREERTOS_HEAP_SECTION ucHeap[configTOTAL_HEAP_SIZE];
 #endif
 
 
@@ -172,58 +172,58 @@ __attribute__ ((weak)) void APP_MIDI_Tick(void)
 /////////////////////////////////////////////////////////////////////////////
 int main(void)
 {
-  // initialize hardware and MIOS32 modules
-#ifndef MIOS32_DONT_USE_SYS
-  MIOS32_SYS_Init(0);
+  // initialize hardware and ADIOS modules
+#ifndef ADIOS_DONT_USE_SYS
+  ADIOS_SYS_Init(0);
 #endif
-#ifndef MIOS32_DONT_USE_DELAY
-  MIOS32_DELAY_Init(0);
+#ifndef ADIOS_DONT_USE_DELAY
+  ADIOS_DELAY_Init(0);
 #endif
-#ifdef MIOS32_USE_TIMESTAMP
-  MIOS32_TIMESTAMP_Init(0);
+#ifdef ADIOS_USE_TIMESTAMP
+  ADIOS_TIMESTAMP_Init(0);
 #endif
-#ifdef MIOS32_USE_SOL
-  // sign-of-life LED: opt in with MIOS32_USE_SOL and name the pin with
-  // MIOS32_SOL_PORT / MIOS32_SOL_PIN, see mios32_utils.h
-  MIOS32_SOL_Init();
+#ifdef ADIOS_USE_SOL
+  // sign-of-life LED: opt in with ADIOS_USE_SOL and name the pin with
+  // ADIOS_SOL_PORT / ADIOS_SOL_PIN, see adios_utils.h
+  ADIOS_SOL_Init();
 #endif
-#ifdef MIOS32_USE_SPI
-  MIOS32_SPI_Init(0);
+#ifdef ADIOS_USE_SPI
+  ADIOS_SPI_Init(0);
 #endif
-#ifdef MIOS32_USE_I2C
-  // auto-derived in mios32_i2c.h from any MIOS32_USE_I2C0/1/2 or
-  // MIOS32_USE_FMPI2C0 the project declared
-  MIOS32_I2C_Init(0);
+#ifdef ADIOS_USE_I2C
+  // auto-derived in adios_i2c.h from any ADIOS_USE_I2C0/1/2 or
+  // ADIOS_USE_FMPI2C0 the project declared
+  ADIOS_I2C_Init(0);
 #endif
-#ifdef MIOS32_USE_SRIO
-  MIOS32_SRIO_Init(0);
+#ifdef ADIOS_USE_SRIO
+  ADIOS_SRIO_Init(0);
 #endif
-#ifdef MIOS32_USE_SRIN
-  MIOS32_SRIN_Init(0);
+#ifdef ADIOS_USE_SRIN
+  ADIOS_SRIN_Init(0);
 #endif
-#ifdef MIOS32_USE_SROUT
-  MIOS32_SROUT_Init(0);
+#ifdef ADIOS_USE_SROUT
+  ADIOS_SROUT_Init(0);
 #endif
-#ifdef MIOS32_USE_ENC
-  MIOS32_ENC_Init(0);
+#ifdef ADIOS_USE_ENC
+  ADIOS_ENC_Init(0);
 #endif
-#ifdef MIOS32_USE_ADC
-  MIOS32_ADC_Init(0);
+#ifdef ADIOS_USE_ADC
+  ADIOS_ADC_Init(0);
 #endif
-#ifdef MIOS32_USE_DAC
-  MIOS32_DAC_Init(0);
+#ifdef ADIOS_USE_DAC
+  ADIOS_DAC_Init(0);
 #endif
   // the MIDI core is always initialized - it is not optional (2026-08-09,
-  // see mios32_midi.c): only the transports underneath are opt-in
-  MIOS32_MIDI_Init(0);
-#ifndef MIOS32_DONT_USE_USB
-  MIOS32_USB_Init(0);
+  // see adios_midi.c): only the transports underneath are opt-in
+  ADIOS_MIDI_Init(0);
+#ifndef ADIOS_DONT_USE_USB
+  ADIOS_USB_Init(0);
 #endif
   // NO DISPLAY IS INITIALISED HERE. A screen is the application's business:
   // call APP_LCD_Init(0) from APP_Init(), at the point in your own sequence
   // where it belongs - see the commented line in the template's app.c.
-#ifdef MIOS32_USE_I2S
-  MIOS32_I2S_Init(0);
+#ifdef ADIOS_USE_I2S
+  ADIOS_I2S_Init(0);
 #endif
 
   // call C++ constructors
@@ -235,22 +235,22 @@ int main(void)
   // (no boot screen and no startup delay: an application that wants to
   // greet the user does it from APP_Init(), where it also decides how long
   // to wait. Its name and version are reported over MIDI regardless - see
-  // MIOS32_APP_NAME1/2 in mios32_midi.h.)
+  // ADIOS_APP_NAME1/2 in adios_midi.h.)
 
-#if MIOS32_CORE_USE_FREERTOS
+#if ADIOS_CORE_USE_FREERTOS
   // start the task which calls the application hooks
-  xTaskCreate(TASK_Hooks, "Hooks", (MIOS32_TASK_HOOKS_STACK_SIZE)/4, NULL, PRIORITY_TASK_HOOKS, NULL);
-  xTaskCreate(TASK_MIDI_Hooks, "MIDI_Hooks", (MIOS32_TASK_MIDI_HOOKS_STACK_SIZE)/4, NULL, PRIORITY_TASK_HOOKS, NULL);
-  //MIOS32_BOARD_LED_Set(1, 1);
+  xTaskCreate(TASK_Hooks, "Hooks", (ADIOS_TASK_HOOKS_STACK_SIZE)/4, NULL, PRIORITY_TASK_HOOKS, NULL);
+  xTaskCreate(TASK_MIDI_Hooks, "MIDI_Hooks", (ADIOS_TASK_MIDI_HOOKS_STACK_SIZE)/4, NULL, PRIORITY_TASK_HOOKS, NULL);
+  //ADIOS_BOARD_LED_Set(1, 1);
   // start the scheduler
   vTaskStartScheduler();
 
   // Will only get here if there was not enough heap space to create the idle task
   return 0;
 #else
-  // bare-metal super-loop - see the MIOS32_CORE_USE_FREERTOS module-level
+  // bare-metal super-loop - see the ADIOS_CORE_USE_FREERTOS module-level
   // comment above for what this trades away.
-  MIOS32_CORE_BareLoop_Run(); // never returns
+  ADIOS_CORE_BareLoop_Run(); // never returns
   return 0; // never reached
 #endif
 }
@@ -261,11 +261,11 @@ int main(void)
 /////////////////////////////////////////////////////////////////////////////
 void SRIO_ServiceFinish(void)
 {
-#ifdef MIOS32_USE_SRIO
+#ifdef ADIOS_USE_SRIO
 
-# ifdef MIOS32_USE_ENC
+# ifdef ADIOS_USE_ENC
   // update encoder states
-  MIOS32_ENC_UpdateStates();
+  ADIOS_ENC_UpdateStates();
 # endif
 
   // notify application about finished SRIO scan
@@ -273,19 +273,19 @@ void SRIO_ServiceFinish(void)
 #endif
 }
 
-#if MIOS32_CORE_USE_FREERTOS
+#if ADIOS_CORE_USE_FREERTOS
 void vApplicationTickHook(void)
 {
-#ifdef MIOS32_USE_TIMESTAMP
-  MIOS32_TIMESTAMP_Inc();
+#ifdef ADIOS_USE_TIMESTAMP
+  ADIOS_TIMESTAMP_Inc();
 #endif
 
-#if defined(MIOS32_USE_SRIO) && !defined(MIOS32_DONT_SERVICE_SRIO_SCAN)
+#if defined(ADIOS_USE_SRIO) && !defined(ADIOS_DONT_SERVICE_SRIO_SCAN)
   // notify application about SRIO scan start
   APP_SRIO_ServicePrepare();
 
   // start next SRIO scan - IRQ notification to SRIO_ServiceFinish()
-  MIOS32_SRIO_ScanStart(SRIO_ServiceFinish);
+  ADIOS_SRIO_ScanStart(SRIO_ServiceFinish);
 #endif
 }
 
@@ -304,48 +304,48 @@ void vApplicationIdleHook(void)
 /////////////////////////////////////////////////////////////////////////////
 // Shared 1mS hook bodies - the ONE place that defines what runs each
 // millisecond, called from either the FreeRTOS tasks below or the
-// bare-metal super-loop further down (MIOS32_CORE_USE_FREERTOS=0) -
+// bare-metal super-loop further down (ADIOS_CORE_USE_FREERTOS=0) -
 // deliberately factored out so the two scheduling modes can never drift
 // apart from each other.
 /////////////////////////////////////////////////////////////////////////////
-static void MIOS32_CORE_MIDI_Tick(void)
+static void ADIOS_CORE_MIDI_Tick(void)
 {
   // handle timeout/expire counters and USB packages
-  MIOS32_MIDI_Periodic_mS();
+  ADIOS_MIDI_Periodic_mS();
 
   // check for incoming MIDI packages and call hook
-  MIOS32_MIDI_Receive_Handler(APP_MIDI_NotifyPackage);
+  ADIOS_MIDI_Receive_Handler(APP_MIDI_NotifyPackage);
 
   // optional application specific hook
   // helps to save memory (re-use the TASK_Hooks for other purposes...)
   APP_MIDI_Tick();
 }
 
-static void MIOS32_CORE_NonMIDI_Tick(void)
+static void ADIOS_CORE_NonMIDI_Tick(void)
 {
-#if defined(MIOS32_USE_USB_MIDI)
+#if defined(ADIOS_USE_USB_MIDI)
   // Drive the USB stack. One call whatever a port is doing - device or host,
   // one port or several: deciding what to run is the USB layer's job, not
   // this loop's.
-  MIOS32_USB_Handler();
+  ADIOS_USB_Handler();
 #endif
 
-#ifdef MIOS32_USE_SRIN
+#ifdef ADIOS_USE_SRIN
   // check for input shift register pin changes, call APP_SRIN_NotifyToggle on
   // each toggled pin. The application-facing hook keeps its DIN name on
   // purpose: what an app sees is still a digital input pin, whatever the
   // driver that scans the chain is called.
-  MIOS32_SRIN_Handler(APP_SRIN_NotifyToggle);
+  ADIOS_SRIN_Handler(APP_SRIN_NotifyToggle);
 
   // check for encoder changes, call APP_ENC_NotifyChanged on each change
-# ifdef MIOS32_USE_ENC
-  MIOS32_ENC_Handler(APP_ENC_NotifyChange);
+# ifdef ADIOS_USE_ENC
+  ADIOS_ENC_Handler(APP_ENC_NotifyChange);
 # endif
 #endif
 
-#if defined(MIOS32_USE_ADC) && !defined(MIOS32_DONT_SERVICE_ADC)
+#if defined(ADIOS_USE_ADC) && !defined(ADIOS_DONT_SERVICE_ADC)
   // check for ADC channel changes, call APP_ADC_NotifyChange on each change
-  MIOS32_ADC_Handler(APP_ADC_NotifyChange);
+  ADIOS_ADC_Handler(APP_ADC_NotifyChange);
 #endif
 
   // optional APP_Tick() hook
@@ -354,7 +354,7 @@ static void MIOS32_CORE_NonMIDI_Tick(void)
 }
 
 
-#if MIOS32_CORE_USE_FREERTOS
+#if ADIOS_CORE_USE_FREERTOS
 /////////////////////////////////////////////////////////////////////////////
 // MIDI task (separated from TASK_Hooks() to ensure parallel handling of
 // MIDI events if a hook in TASK_Hooks() blocks)
@@ -375,7 +375,7 @@ static void TASK_MIDI_Hooks(void *pvParameters)
     if( xLastExecutionTime < (xCurrentTickCount-5) )
       xLastExecutionTime = xCurrentTickCount;
 
-    MIOS32_CORE_MIDI_Tick();
+    ADIOS_CORE_MIDI_Tick();
   }
 }
 
@@ -400,45 +400,45 @@ static void TASK_Hooks(void *pvParameters)
     if( xLastExecutionTime < (xCurrentTickCount-5) )
       xLastExecutionTime = xCurrentTickCount;
 
-    MIOS32_CORE_NonMIDI_Tick();
+    ADIOS_CORE_NonMIDI_Tick();
   }
 }
 #endif
 
 
-#if !MIOS32_CORE_USE_FREERTOS
+#if !ADIOS_CORE_USE_FREERTOS
 /////////////////////////////////////////////////////////////////////////////
-// Bare-metal super-loop (MIOS32_CORE_USE_FREERTOS=0) - replaces
+// Bare-metal super-loop (ADIOS_CORE_USE_FREERTOS=0) - replaces
 // vTaskStartScheduler()/TASK_Hooks/TASK_MIDI_Hooks/vApplicationTickHook/
 // vApplicationIdleHook above. Timed by a dedicated SysTick handler rather
-// than FreeRTOS's tick or MIOS32_STOPWATCH (kept free for the application -
+// than FreeRTOS's tick or ADIOS_STOPWATCH (kept free for the application -
 // see the module-level comment near the top of this file).
 /////////////////////////////////////////////////////////////////////////////
 
-static volatile u32 mios32_core_tick_ms;
+static volatile u32 adios_core_tick_ms;
 
-// dedicated to this super-loop's own timebase - nothing else in mios32/
-// common or the family drivers touches SysTick (MIOS32_DELAY uses a TIM
-// peripheral, MIOS32_STOPWATCH another, MIOS32_TIMER its own table), so
-// this can't collide with anything the application or MIOS32 itself does.
+// dedicated to this super-loop's own timebase - nothing else in adios/
+// common or the family drivers touches SysTick (ADIOS_DELAY uses a TIM
+// peripheral, ADIOS_STOPWATCH another, ADIOS_TIMER its own table), so
+// this can't collide with anything the application or ADIOS itself does.
 void SysTick_Handler(void)
 {
-  ++mios32_core_tick_ms;
+  ++adios_core_tick_ms;
 }
 
 extern void _abort(void); // defined further below in this file
 
-#if MIOS32_CORE_USE_CANARI
+#if ADIOS_CORE_USE_CANARI
 // Stack-overflow canary - the bare-metal replacement for FreeRTOS's
-// configCHECK_FOR_STACK_OVERFLOW (see MIOS32_CORE_USE_CANARI in
-// mios32_sys.h). Only ONE canary needed: only one stack left once tasks
+// configCHECK_FOR_STACK_OVERFLOW (see ADIOS_CORE_USE_CANARI in
+// adios_sys.h). Only ONE canary needed: only one stack left once tasks
 // are gone, unlike FreeRTOS's per-task watermarking.
-#define MIOS32_CORE_CANARY_PATTERN 0xa5a5a5a5
+#define ADIOS_CORE_CANARY_PATTERN 0xa5a5a5a5
 
 extern u32 _estack;      // top of stack (linker symbol, see the .ld file)
 extern u32 __Stack_Init; // bottom of the reserved stack region (ditto)
 
-static void MIOS32_CORE_Canary_Init(void)
+static void ADIOS_CORE_Canary_Init(void)
 {
   // fill everything below the CURRENT stack pointer with the pattern -
   // deliberately stops there rather than filling the whole region blindly,
@@ -447,55 +447,55 @@ static void MIOS32_CORE_Canary_Init(void)
   u32 *p = &__Stack_Init;
   u32 *sp = (u32 *)__get_MSP();
   while( p < sp )
-    *p++ = MIOS32_CORE_CANARY_PATTERN;
+    *p++ = ADIOS_CORE_CANARY_PATTERN;
 }
 
-static void MIOS32_CORE_Canary_Check(void)
+static void ADIOS_CORE_Canary_Check(void)
 {
-  if( __Stack_Init != MIOS32_CORE_CANARY_PATTERN ) {
-    MIOS32_MIDI_SendDebugMessage("======================\n");
-    MIOS32_MIDI_SendDebugMessage("!!! STACK OVERFLOW !!!\n");
-    MIOS32_MIDI_SendDebugMessage("(bare-metal canary, MIOS32_CORE_USE_CANARI)\n");
-    MIOS32_MIDI_SendDebugMessage("======================\n");
+  if( __Stack_Init != ADIOS_CORE_CANARY_PATTERN ) {
+    ADIOS_MIDI_SendDebugMessage("======================\n");
+    ADIOS_MIDI_SendDebugMessage("!!! STACK OVERFLOW !!!\n");
+    ADIOS_MIDI_SendDebugMessage("(bare-metal canary, ADIOS_CORE_USE_CANARI)\n");
+    ADIOS_MIDI_SendDebugMessage("======================\n");
     _abort();
   }
 }
 #endif
 
-static void MIOS32_CORE_BareLoop_Run(void)
+static void ADIOS_CORE_BareLoop_Run(void)
 {
   // 1mS tick, matching FreeRTOS's own configTICK_RATE_HZ=1000 in the other
-  // mode - MIOS32_SYS_CPU_FREQUENCY (not the runtime SystemCoreClock
+  // mode - ADIOS_SYS_CPU_FREQUENCY (not the runtime SystemCoreClock
   // variable) to stay consistent with how FreeRTOSConfig.h's own
   // configCPU_CLOCK_HZ is derived.
-  SysTick_Config(MIOS32_SYS_CPU_FREQUENCY / 1000);
+  SysTick_Config(ADIOS_SYS_CPU_FREQUENCY / 1000);
 
-#if MIOS32_CORE_USE_CANARI
-  MIOS32_CORE_Canary_Init();
+#if ADIOS_CORE_USE_CANARI
+  ADIOS_CORE_Canary_Init();
 #endif
 
-  u32 last_tick = mios32_core_tick_ms;
+  u32 last_tick = adios_core_tick_ms;
   while( 1 ) {
-    u32 now = mios32_core_tick_ms;
+    u32 now = adios_core_tick_ms;
     if( now != last_tick ) {
       // catches up to "now" in one shot rather than replaying every missed
       // mS if a previous iteration ran long - same intent as the
       // "skip delay gap" logic in TASK_Hooks/TASK_MIDI_Hooks above.
       last_tick = now;
 
-#ifdef MIOS32_USE_TIMESTAMP
-      MIOS32_TIMESTAMP_Inc();
+#ifdef ADIOS_USE_TIMESTAMP
+      ADIOS_TIMESTAMP_Inc();
 #endif
-#if defined(MIOS32_USE_SRIO) && !defined(MIOS32_DONT_SERVICE_SRIO_SCAN)
+#if defined(ADIOS_USE_SRIO) && !defined(ADIOS_DONT_SERVICE_SRIO_SCAN)
       APP_SRIO_ServicePrepare();
-      MIOS32_SRIO_ScanStart(SRIO_ServiceFinish);
+      ADIOS_SRIO_ScanStart(SRIO_ServiceFinish);
 #endif
 
-      MIOS32_CORE_NonMIDI_Tick();
-      MIOS32_CORE_MIDI_Tick();
+      ADIOS_CORE_NonMIDI_Tick();
+      ADIOS_CORE_MIDI_Tick();
 
-#if MIOS32_CORE_USE_CANARI
-      MIOS32_CORE_Canary_Check();
+#if ADIOS_CORE_USE_CANARI
+      ADIOS_CORE_Canary_Check();
 #endif
     }
 
@@ -522,17 +522,17 @@ void _abort(void)
 
     if( (delay_ctr % 100) == 0 ) {
       // handle timeout/expire counters and USB packages
-      MIOS32_MIDI_Periodic_mS();
+      ADIOS_MIDI_Periodic_mS();
     }
 
     // check for incoming MIDI packages and call hook
-    MIOS32_MIDI_Receive_Handler(APP_MIDI_NotifyPackage);
+    ADIOS_MIDI_Receive_Handler(APP_MIDI_NotifyPackage);
 
     if( (delay_ctr % 10000) == 0 ) {
-#ifdef MIOS32_USE_SOL
+#ifdef ADIOS_USE_SOL
       // heartbeat. The board module offered a read-back to invert the LED;
       // the sign-of-life pin toggles itself, so nothing has to be read.
-      MIOS32_SOL_Tog();
+      ADIOS_SOL_Tog();
 #endif
     }
   }
@@ -546,7 +546,7 @@ void vApplicationMallocFailedHook(void)
 {
 
   // Note: message won't be sent if MIDI task cannot be created!
-  MIOS32_MIDI_SendDebugMessage("FATAL: FreeRTOS Malloc Error!!!\n");
+  ADIOS_MIDI_SendDebugMessage("FATAL: FreeRTOS Malloc Error!!!\n");
 
   _abort();
 }
@@ -558,32 +558,32 @@ void vApplicationMallocFailedHook(void)
 #if configSUPPORT_STATIC_ALLOCATION && configUSE_IDLE_HOOK
 
 // default:
-#ifndef MIOS32_APP_BACKGROUND_STACK_SIZE
-#define MIOS32_APP_BACKGROUND_SIZE ((MIOS32_MINIMAL_STACK_SIZE)/4)
-#warning "MIOS32_APP_BACKGROUND_SIZE hasn't been defined in mios32_config.h --- using default MIOS32_MINIMAL_STACK_SIZE"
+#ifndef ADIOS_APP_BACKGROUND_STACK_SIZE
+#define ADIOS_APP_BACKGROUND_SIZE ((ADIOS_MINIMAL_STACK_SIZE)/4)
+#warning "ADIOS_APP_BACKGROUND_SIZE hasn't been defined in adios_config.h --- using default ADIOS_MINIMAL_STACK_SIZE"
 #endif
 
 static StaticTask_t xIdleTaskTCBBuffer;
-static StackType_t xIdleStack[MIOS32_APP_BACKGROUND_SIZE];
+static StackType_t xIdleStack[ADIOS_APP_BACKGROUND_SIZE];
  
 void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize)
 {
   *ppxIdleTaskTCBBuffer = &xIdleTaskTCBBuffer;
   *ppxIdleTaskStackBuffer = &xIdleStack[0];
-  *pulIdleTaskStackSize = MIOS32_APP_BACKGROUND_SIZE;
+  *pulIdleTaskStackSize = ADIOS_APP_BACKGROUND_SIZE;
 }
 #endif
 
 #if configSUPPORT_STATIC_ALLOCATION && configUSE_TIMERS
 
 // default:
-#ifndef MIOS32_FREERTOS_TIMER_TASK_STACK_SIZE
-#define MIOS32_FREERTOS_TIMER_TASK_STACK_SIZE ((MIOS32_MINIMAL_STACK_SIZE)/4)
-#warning "MIOS32_FREERTOS_TIMER_TASK_STACK_SIZE hasn't been defined in mios32_config.h --- using default MIOS32_MINIMAL_STACK_SIZE"
+#ifndef ADIOS_FREERTOS_TIMER_TASK_STACK_SIZE
+#define ADIOS_FREERTOS_TIMER_TASK_STACK_SIZE ((ADIOS_MINIMAL_STACK_SIZE)/4)
+#warning "ADIOS_FREERTOS_TIMER_TASK_STACK_SIZE hasn't been defined in adios_config.h --- using default ADIOS_MINIMAL_STACK_SIZE"
 #endif
 
 static StaticTask_t xTimerTaskTCBBuffer;
-static StackType_t xTimerStack[MIOS32_FREERTOS_TIMER_TASK_STACK_SIZE];
+static StackType_t xTimerStack[ADIOS_FREERTOS_TIMER_TASK_STACK_SIZE];
  
 /* If static allocation is supported then the application must provide the
    following callback function - which enables the application to optionally
@@ -593,7 +593,7 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer, StackT
 {
   *ppxTimerTaskTCBBuffer = &xTimerTaskTCBBuffer;
   *ppxTimerTaskStackBuffer = &xTimerStack[0];
-  *pulTimerTaskStackSize = MIOS32_FREERTOS_TIMER_TASK_STACK_SIZE;
+  *pulTimerTaskStackSize = ADIOS_FREERTOS_TIMER_TASK_STACK_SIZE;
 }
 #endif
 
@@ -605,7 +605,7 @@ void exit(int par)
 {
 
   // Note: message won't be sent if MIDI task cannot be created!
-  MIOS32_MIDI_SendDebugMessage("Goodbye!\n");
+  ADIOS_MIDI_SendDebugMessage("Goodbye!\n");
 
   // pro forma: since this is a noreturn function, loop endless and call _abort (which will never exit)
   while( 1 )
@@ -641,23 +641,23 @@ void HardFault_Handler_c(unsigned int * hardfault_args)
   stacked_lr = ((unsigned long) hardfault_args[5]);
   stacked_pc = ((unsigned long) hardfault_args[6]);
   stacked_psr = ((unsigned long) hardfault_args[7]);
-  MIOS32_MIDI_SendDebugMessage("Hard Fault PC = %08x\n", stacked_pc); // ensure that at least the PC will be sent
-  MIOS32_MIDI_SendDebugMessage("==================\n");
-  MIOS32_MIDI_SendDebugMessage("!!! HARD FAULT !!!\n");
-  MIOS32_MIDI_SendDebugMessage("==================\n");
-  MIOS32_MIDI_SendDebugMessage("R0 = %08x\n", stacked_r0);
-  MIOS32_MIDI_SendDebugMessage("R1 = %08x\n", stacked_r1);
-  MIOS32_MIDI_SendDebugMessage("R2 = %08x\n", stacked_r2);
-  MIOS32_MIDI_SendDebugMessage("R3 = %08x\n", stacked_r3);
-  MIOS32_MIDI_SendDebugMessage("R12 = %08x\n", stacked_r12);
-  MIOS32_MIDI_SendDebugMessage("LR = %08x\n", stacked_lr);
-  MIOS32_MIDI_SendDebugMessage("PC = %08x\n", stacked_pc);
-  MIOS32_MIDI_SendDebugMessage("PSR = %08x\n", stacked_psr);
-  MIOS32_MIDI_SendDebugMessage("BFAR = %08x\n", (*((volatile unsigned long *)(0xE000ED38))));
-  MIOS32_MIDI_SendDebugMessage("CFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED28))));
-  MIOS32_MIDI_SendDebugMessage("HFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED2C))));
-  MIOS32_MIDI_SendDebugMessage("DFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED30))));
-  MIOS32_MIDI_SendDebugMessage("AFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED3C))));
+  ADIOS_MIDI_SendDebugMessage("Hard Fault PC = %08x\n", stacked_pc); // ensure that at least the PC will be sent
+  ADIOS_MIDI_SendDebugMessage("==================\n");
+  ADIOS_MIDI_SendDebugMessage("!!! HARD FAULT !!!\n");
+  ADIOS_MIDI_SendDebugMessage("==================\n");
+  ADIOS_MIDI_SendDebugMessage("R0 = %08x\n", stacked_r0);
+  ADIOS_MIDI_SendDebugMessage("R1 = %08x\n", stacked_r1);
+  ADIOS_MIDI_SendDebugMessage("R2 = %08x\n", stacked_r2);
+  ADIOS_MIDI_SendDebugMessage("R3 = %08x\n", stacked_r3);
+  ADIOS_MIDI_SendDebugMessage("R12 = %08x\n", stacked_r12);
+  ADIOS_MIDI_SendDebugMessage("LR = %08x\n", stacked_lr);
+  ADIOS_MIDI_SendDebugMessage("PC = %08x\n", stacked_pc);
+  ADIOS_MIDI_SendDebugMessage("PSR = %08x\n", stacked_psr);
+  ADIOS_MIDI_SendDebugMessage("BFAR = %08x\n", (*((volatile unsigned long *)(0xE000ED38))));
+  ADIOS_MIDI_SendDebugMessage("CFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED28))));
+  ADIOS_MIDI_SendDebugMessage("HFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED2C))));
+  ADIOS_MIDI_SendDebugMessage("DFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED30))));
+  ADIOS_MIDI_SendDebugMessage("AFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED3C))));
 
   _abort();
 }
@@ -677,19 +677,19 @@ void HardFault_Handler(void)
 // Which task overflowed, readable over SWD after the crash. The MIDI debug
 // message below rarely gets out: the overflow stops the very machinery that
 // would send it. This buffer survives where the message does not.
-char mios32_stack_overflow_task[16];
+char adios_stack_overflow_task[16];
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
   u8 i;
   for(i=0; i<15 && pcTaskName[i]; ++i)
-    mios32_stack_overflow_task[i] = pcTaskName[i];
-  mios32_stack_overflow_task[i] = 0;
+    adios_stack_overflow_task[i] = pcTaskName[i];
+  adios_stack_overflow_task[i] = 0;
 
-  MIOS32_MIDI_SendDebugMessage("======================\n");
-  MIOS32_MIDI_SendDebugMessage("!!! STACK OVERFLOW !!!\n");
-  MIOS32_MIDI_SendDebugMessage("======================\n");
-  MIOS32_MIDI_SendDebugMessage("Function: %s\n", pcTaskName);
+  ADIOS_MIDI_SendDebugMessage("======================\n");
+  ADIOS_MIDI_SendDebugMessage("!!! STACK OVERFLOW !!!\n");
+  ADIOS_MIDI_SendDebugMessage("======================\n");
+  ADIOS_MIDI_SendDebugMessage("Function: %s\n", pcTaskName);
 
   _abort();
 }

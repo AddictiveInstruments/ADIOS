@@ -19,8 +19,8 @@
 
 // don't touch these defines
 // instead, overrule them from external during gcc is called
-// or write the defines into your mios32_config.h file
-#include <mios32_config.h>
+// or write the defines into your adios_config.h file
+#include <adios_config.h>
 
 /////////////////////////////////////////////////////////////////////////////
 // Global Types

@@ -53,20 +53,20 @@
 
 /* Device selection - NOTHING IS SELECTED HERE ANY MORE.
    The device macro (STM32G030xx, STM32G0B1xx, ...) is derived from
-   PROCESSOR and passed with -D by mios32/mios32.mk, exactly the way the
+   PROCESSOR and passed with -D by adios/adios.mk, exactly the way the
    .ld and startup files are derived in core.mk. See the long
    comment there for the naming rule. If none is defined, the #error at the
    end of the include chain below (ST's own) stops the build.
 
    HISTORY, kept because it cost a day to find. This spot used to hold a
-   hand-written #if/#elif table over MIOS32_PROCESSOR_xxx, and before that a
-   bare "MIOS32_PROCESSOR==STM32G070CB" style value comparison. That
-   comparison was silently WRONG: MIOS32_PROCESSOR (no suffix) and the bare
+   hand-written #if/#elif table over ADIOS_PROCESSOR_xxx, and before that a
+   bare "ADIOS_PROCESSOR==STM32G070CB" style value comparison. That
+   comparison was silently WRONG: ADIOS_PROCESSOR (no suffix) and the bare
    RHS tokens are never defined as macros in the real build, so it evaluated
    as 0==0 - true for EVERY G0 build regardless of the chip selected, and
    every non-G070CB part (G030K6, G031K8, G050K8) was compiled against
    STM32G070xx's peripheral set instead of its own. Found via a G030K6 build
-   referencing TIM6 (the family's default MIOS32_STOPWATCH timer, absent from
+   referencing TIM6 (the family's default ADIOS_STOPWATCH timer, absent from
    that chip's silicon) without a compile error - the preprocessed output
    showed TIM6 resolving to a real address, proving the wrong device header
    was in effect. The table that replaced it was correct but knew only four

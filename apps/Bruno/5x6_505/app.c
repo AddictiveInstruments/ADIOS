@@ -1,5 +1,5 @@
 /*
- * MIOS32 Application Template
+ * ADIOS Application Template
  *
  * ==========================================================================
  *
@@ -14,7 +14,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include "app.h"
 #include "app_lcd.h"
 #include "glcd_font.h"
@@ -34,7 +34,7 @@
 #include <string.h>
 
 // define priority level for SPI Handler task:
-// use same priority as MIOS32 specific tasks (3)
+// use same priority as ADIOS specific tasks (3)
 #define PRIORITY_TASK_TFT_HANDLER	( tskIDLE_PRIORITY + 3 )
 #define PRIORITY_TASK_ROM_HANDLER	( tskIDLE_PRIORITY + 2 )
 #define x_offset	8
@@ -59,8 +59,8 @@ static void TASK_SettingsMenu(void *pvParameters);
 static void TASK_TFT_Periodic(void *pvParameters);
 static void TASK_ROM_Periodic(void *pvParameters);
 static void APP_TFT_Background(void);
-static s32 NOTIFY_MIDI_TimeOut(mios32_midi_port_t port);
-static s32 NOTIFY_MIDI_Rx(mios32_midi_port_t port, u8 byte);
+static s32 NOTIFY_MIDI_TimeOut(adios_midi_port_t port);
+static s32 NOTIFY_MIDI_Rx(adios_midi_port_t port, u8 byte);
 
 TaskHandle_t xSettings = NULL;
 TaskHandle_t xTFTRefresh = NULL;
@@ -86,7 +86,7 @@ static u8 beat_flag=0;
 static u8 beat_enabled=1;
 static u32 midi_clock_ctr;
 static u16 beat_color = APP_LCD_DARKGREY;
-mios32_lcd_bitmap_t bmp;		//dummy bitmap
+adios_lcd_bitmap_t bmp;		//dummy bitmap
 //static u8 uart1_act=0;
 static u8 menu_pos = 0;
 static u8 menu_edit = 0;
@@ -95,10 +95,10 @@ static u8 curr_id = 0;
 static u8 formatting=0;
 
 // Mutex serializing every SPI user of this app (TFT drawing on port 1, sound
-// ROM flash on port 0): MIOS32_SPI has no internal locking, and a second task
+// ROM flash on port 0): ADIOS_SPI has no internal locking, and a second task
 // entering TransferByte/TransferBlock while a blocking DMA transfer is in
 // flight steals RX bytes from it - the transfer then never completes and the
-// caller spins forever in MIOS32_SPI_TransferBlock, starving every lower/equal
+// caller spins forever in ADIOS_SPI_TransferBlock, starving every lower/equal
 // priority task (hardware-diagnosed 2026-08-09 on the frozen 505: RX DMA stuck
 // 7 bytes short of its counter, TX long done, no overrun).
 // Recursive, so nested drawing helpers stay safe. Priority inheritance keeps
@@ -133,7 +133,7 @@ void APP_Init(void)
 	TR5X6_ROM_Init();
 	TR5X6_ROM_HOST();
 	// initialize all LEDs
-	MIOS32_SOL_Init();
+	ADIOS_SOL_Init();
 
 	// initialize LCD Bus Decoder.
 	TR5X6_DECOD_Init();
@@ -157,7 +157,7 @@ void APP_Init(void)
 	if((*((volatile u8*)(TR5X6_FLASH_MAGIC_ADDR)))!=TR5X6_MAGIC_NUMBER)rom_empty = 1;
 	if( (tr5x6_decod_buttons.ALL==0x0a) || rom_empty ){
 		tr5x6_decod_buttons_flags.ALL=0;
-		curr_id = MIOS32_MIDI_DeviceIDGet();
+		curr_id = ADIOS_MIDI_DeviceIDGet();
 		last_id = curr_id;
 		if(rom_empty){
 			APP_LCD_Lite(1);	// swwitch on
@@ -167,8 +167,8 @@ void APP_Init(void)
 			formatting = 1;
 			APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Format   BANKs");
 			Formatting_Page();
-			for(u16 d=0; d<2000; d++)MIOS32_DELAY_Wait_uS(1000);		// wait 2s
-			MIOS32_SYS_Reset();
+			for(u16 d=0; d<2000; d++)ADIOS_DELAY_Wait_uS(1000);		// wait 2s
+			ADIOS_SYS_Reset();
 			//TR5X6_MEM_Format();
 		}else{
 			SettingsMenu_Draw();
@@ -179,10 +179,10 @@ void APP_Init(void)
 		}
 
 	}else {
-		mios32_lcd_bitmap_t logo_bmp = APP_LCD_BitmapInit((u8*)tr5x6_logo, 400, 56, 400, Is1BIT);
+		adios_lcd_bitmap_t logo_bmp = APP_LCD_BitmapInit((u8*)tr5x6_logo, 400, 56, 400, Is1BIT);
 		for (int w=0; w<400;w++){
 			u8* bmp_mem_ptr = logo_bmp.memory +w;
-			mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 56, 400, Is1BIT);
+			adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 56, 400, Is1BIT);
 			APP_LCD_SendBitmap(bmp2print, 40+w, y_offset+110);
 		}
 		APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
@@ -191,13 +191,13 @@ void APP_Init(void)
 		// initialize SysEx mgnt.
 		MIDIO_SYSEX_Init(0);
 		// install Direct MIDI RX callback
-		MIOS32_MIDI_DirectRxCallback_Init(&NOTIFY_MIDI_Rx);
+		ADIOS_MIDI_DirectRxCallback_Init(&NOTIFY_MIDI_Rx);
 
 		// install SysEx callback
-		MIOS32_MIDI_SysExCallback_Init(APP_SYSEX_Parser);
+		ADIOS_MIDI_SysExCallback_Init(APP_SYSEX_Parser);
 
 		// install timeout callback function
-		MIOS32_MIDI_TimeOutCallback_Init(NOTIFY_MIDI_TimeOut);
+		ADIOS_MIDI_TimeOutCallback_Init(NOTIFY_MIDI_TimeOut);
 
 		// TFT
 
@@ -216,7 +216,7 @@ void APP_Init(void)
 	{
 		int ms;
 		for(ms=0; ms<APP_SPLASH_MS; ++ms)
-			MIOS32_DELAY_Wait_uS(1000);
+			ADIOS_DELAY_Wait_uS(1000);
 	}
 }
 
@@ -235,7 +235,7 @@ void APP_Background(void)
 // and AIN events. You could add more jobs here, but they shouldn't consume
 // more than 300 uS to ensure the responsiveness of buttons, encoders, pots.
 // Alternatively you could create a dedicated task for application specific
-// jobs as explained in $MIOS32_PATH/apps/tutorials/006_rtos_tasks
+// jobs as explained in $ADIOS_PATH/apps/tutorials/006_rtos_tasks
 /////////////////////////////////////////////////////////////////////////////
 void APP_Tick(void)
 {
@@ -262,19 +262,19 @@ void APP_MIDI_Tick(void)
 /////////////////////////////////////////////////////////////////////////////
 // This hook is called when a MIDI package has been received
 /////////////////////////////////////////////////////////////////////////////
-void APP_MIDI_NotifyPackage(mios32_midi_port_t port, mios32_midi_package_t midi_package)
+void APP_MIDI_NotifyPackage(adios_midi_port_t port, adios_midi_package_t midi_package)
 {
 	if(port==DIN0){
-		if(normal_start)MIOS32_MIDI_SendPackage(DIN2,  midi_package);
+		if(normal_start)ADIOS_MIDI_SendPackage(DIN2,  midi_package);
 	}
 }
 
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Installed via MIOS32_MIDI_DirectRxCallback_Init
+// Installed via ADIOS_MIDI_DirectRxCallback_Init
 /////////////////////////////////////////////////////////////////////////////
-static s32 NOTIFY_MIDI_Rx(mios32_midi_port_t port, u8 midi_byte)
+static s32 NOTIFY_MIDI_Rx(adios_midi_port_t port, u8 midi_byte)
 {
 //#if 0
 	// check for MIDI clock fom TR
@@ -329,15 +329,15 @@ static s32 NOTIFY_MIDI_Rx(mios32_midi_port_t port, u8 midi_byte)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// This function parses an incoming sysex stream for MIOS32 commands
+// This function parses an incoming sysex stream for ADIOS commands
 /////////////////////////////////////////////////////////////////////////////
-s32 APP_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in)
+s32 APP_SYSEX_Parser(adios_midi_port_t port, u8 midi_in)
 {
 	// host passthrough: whatever the TR-505 sends (DIN0 = UART0 = USART1) is
 	// merged straight onto the instrument's physical MIDI OUT (UART2 =
 	// USART3) - raw UART index here, not a MIDI port number
 	if(port==DIN0){
-		MIOS32_UART_TxBufferPut(2, midi_in);
+		ADIOS_UART_TxBufferPut(2, midi_in);
 	}else{
 		// App sysex parser
 		MIDIO_SYSEX_Parser(port, midi_in);
@@ -396,7 +396,7 @@ void APP_TFT_Background(void){
 #if 1
 	APP_LCD_Clear();	// clear the TFT
 	// background
-	//mios32_lcd_bitmap_t bmp;		// dummy bitmap: todo remove
+	//adios_lcd_bitmap_t bmp;		// dummy bitmap: todo remove
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 	APP_LCD_FColourSet(APP_LCD_WHITE);
 	APP_LCD_Rectangle(x_offset, y_offset, w_max, 91, 2, APP_LCD_DARKGREY, 0, 0);
@@ -506,7 +506,7 @@ static void TFT_XferSlotInfoReceived(void)
 	if(bank_progress>=0){
 		height = xfer_bmp_slot_height;
 	}
-	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, height, xfer_bmp_width, Is1BIT);
+	adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, height, xfer_bmp_width, Is1BIT);
 
 	//memset(sysex_bmp.memory, 0x00, size);
 	u8 cmd = MIDIO_SYSEX_Cmd_Current();
@@ -531,14 +531,14 @@ static void TFT_XferSlotInfoReceived(void)
 	APP_LCD_BColourSetRGB(0x7f3030);
 	for (int w=0; w<xfer_bmp_width;w++){
 		u8* bmp_mem_ptr = xfer_bmp.memory +w;
-		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, height, xfer_bmp_width, Is1BIT);
+		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, height, xfer_bmp_width, Is1BIT);
 		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
 	}
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 
 	if(bank_progress>=0){
 		for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;	// adds top line separation
-		mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width, Is1BIT);
+		adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width, Is1BIT);
 		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8-1, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u - %u%s", MIDIO_SYSEX_Bank_Current()+1, bank_progress, "%");
 		u8 r=0x7f-(40*bank_progress/100);u8 g=40*bank_progress/100;u8 b=40*bank_progress/100;
 		APP_LCD_PrintProgress(xfer_bmp, (u32)((r<<16)|(g<<8)|b), x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height+1, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width*bank_progress/100);
@@ -561,7 +561,7 @@ static void TFT_XferSlotProgress(u8 _progress)
 	if(bank_progress>=0){
 		height = xfer_bmp_slot_height;
 	}
-	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, height, xfer_bmp_width, Is1BIT);
+	adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, height, xfer_bmp_width, Is1BIT);
 
 	// prints messages in bitmap
 	if(bank_progress>=0){
@@ -592,14 +592,14 @@ static void TFT_XferSlotProgress(u8 _progress)
 		//APP_LCD_FColourSet(APP_LCD_RED);
 		  for (int w=0; w<xfer_bmp_width;w++){
 			  u8* bmp_mem_ptr = xfer_bmp.memory +w;
-			  mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_slot_height, height, Is1BIT);
+			  adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_slot_height, height, Is1BIT);
 			  APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
 		  }
 	}
 
 	if(bank_progress>=0){
 		for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;	// adds top line separation
-		mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width, Is1BIT);
+		adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width, Is1BIT);
 		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8-1, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u - %u%s", MIDIO_SYSEX_Bank_Current()+1, bank_progress, "%");
 		u8 r=0x7f-(40*bank_progress/100);u8 g=40*bank_progress/100;u8 b=40*bank_progress/100;
 		APP_LCD_PrintProgress(xfer_bmp, (u32)((r<<16)|(g<<8)|b), x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height+1, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width*bank_progress/100);
@@ -615,7 +615,7 @@ static void TFT_Slotinfo(void)
 #if 0
 	u8 xfer_bmp_array[xfer_bmp_size];
 	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
-	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_height, xfer_bmp_width, Is1BIT);
+	adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_height, xfer_bmp_width, Is1BIT);
 	//memset(sysex_bmp.memory, 0x00, size);
 	s8 selected = -1;
 	for(int i=0; i<16; i++)if(tr5x6_decod_inst_sel &(1<<i)){selected = i; break;}
@@ -628,7 +628,7 @@ static void TFT_Slotinfo(void)
 	//APP_LCD_FColourSet(APP_LCD_RED);
 	for (int w=0; w<xfer_bmp_width;w++){
 		u8* bmp_mem_ptr = xfer_bmp.memory +w;
-		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_height, xfer_bmp_width, Is1BIT);
+		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_height, xfer_bmp_width, Is1BIT);
 		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
 	}
 	APP_LCD_BColourSet(APP_LCD_BLACK);
@@ -636,7 +636,7 @@ static void TFT_Slotinfo(void)
 
 	u8 xfer_bmp_array[xfer_bmp_size];
 	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
-	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_height, xfer_bmp_width, Is1BIT);
+	adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_height, xfer_bmp_width, Is1BIT);
 	//memset(sysex_bmp.memory, 0x00, size);
 	s8 selected = -1;
 	for(int i=0; i<16; i++){
@@ -663,7 +663,7 @@ static void TFT_Slotinfo(void)
 	//APP_LCD_FColourSet(APP_LCD_RED);
 	for (int w=0; w<xfer_bmp_width;w++){
 		u8* bmp_mem_ptr = xfer_bmp.memory +w;
-		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_height, xfer_bmp_width, Is1BIT);
+		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_height, xfer_bmp_width, Is1BIT);
 		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
 	}
 	//APP_LCD_BColourSet(APP_LCD_BLACK);
@@ -677,7 +677,7 @@ static void TFT_XferError(u8 _error)
 {
 	u8 xfer_bmp_array[xfer_bmp_size];
 	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
-	mios32_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_slot_height, xfer_bmp_width, Is1BIT);
+	adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_slot_height, xfer_bmp_width, Is1BIT);
 	//memset(sysex_bmp.memory, 0x00, size);
 
 	// prints messages in bitmap
@@ -688,7 +688,7 @@ static void TFT_XferError(u8 _error)
 	//APP_LCD_FColourSet(APP_LCD_RED);
 	for (int w=0; w<xfer_bmp_width;w++){
 		u8* bmp_mem_ptr = xfer_bmp.memory +w;
-		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_slot_height, xfer_bmp_width, Is1BIT);
+		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_slot_height, xfer_bmp_width, Is1BIT);
 		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
 	}
 
@@ -703,7 +703,7 @@ static void TFT_InstChange(u8 inst)
 	u8 x=inst%8; u8 y=inst/8;
 	u8 bmp_array[45*3];
 	for(int i =0; i<(45*3); i++)bmp_array[i] = 0x00;
-	mios32_lcd_bitmap_t bmp = APP_LCD_BitmapInit((u8*)bmp_array, 45, 20, 45, Is1BIT);
+	adios_lcd_bitmap_t bmp = APP_LCD_BitmapInit((u8*)bmp_array, 45, 20, 45, Is1BIT);
 	//memset(sysex_bmp.memory, 0x00, size);
 
 	// prints messages in bitmap
@@ -725,7 +725,7 @@ static void TFT_InstChange(u8 inst)
 	//APP_LCD_FColourSet(APP_LCD_RED);
 	for (int w=0; w<45;w++){
 		u8* bmp_mem_ptr = bmp.memory +w;
-		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 20, 45, Is1BIT);
+		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 20, 45, Is1BIT);
 		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-369+x*46+w, y_offset+95+(21*y));
 	}
 
@@ -737,7 +737,7 @@ static void TFT_BankChange(u8 bank_num)
 {
 	u8 bmp_array[229*2];
 	for(int i =0; i<(229*2); i++)bmp_array[i] = 0x00;
-	mios32_lcd_bitmap_t bmp = APP_LCD_BitmapInit((u8*)bmp_array, 229, 16, 229, Is1BIT);
+	adios_lcd_bitmap_t bmp = APP_LCD_BitmapInit((u8*)bmp_array, 229, 16, 229, Is1BIT);
 	tr5x6_flash_info_t slot;
 	slot.bank=bank_num;
 	slot.slot=0;
@@ -749,7 +749,7 @@ static void TFT_BankChange(u8 bank_num)
 	//APP_LCD_FColourSet(APP_LCD_RED);
 	for (int w=0; w<229;w++){
 		u8* bmp_mem_ptr = bmp.memory +w;
-		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 16, 229, Is1BIT);
+		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 16, 229, Is1BIT);
 		APP_LCD_SendBitmap(bmp2print, x_offset+95+w, y_offset+141);
 	}
 
@@ -831,13 +831,13 @@ static void TASK_TFT_Periodic(void *pvParameters)
 					}
 					if((newCH_cnt++)>50){
 						newCH_cnt=51;
-						if(MIOS32_MIDI_DeviceIDGet()!=devId){
-							MIOS32_MIDI_DeviceIDSet(devId);
+						if(ADIOS_MIDI_DeviceIDGet()!=devId){
+							ADIOS_MIDI_DeviceIDSet(devId);
 							// BSL_ID_Update();
 						}
 
 					}
-					if(MIOS32_MIDI_DeviceIDGet()==devId)newCH_flag=1;
+					if(ADIOS_MIDI_DeviceIDGet()==devId)newCH_flag=1;
 				}
 			}else{
 				if(newCH_cnt){
@@ -907,14 +907,14 @@ static void TASK_TFT_Periodic(void *pvParameters)
 					xfer_flag=0;
 					TFT_XferSlotInfoReceived();
 					xfer_delay=0;
-					//MIOS32_MIDI_SendDebugMessage("Info\n");
+					//ADIOS_MIDI_SendDebugMessage("Info\n");
 					//xfer_time_out=1000;
 				}else if(tr5x6_xfer_state.FLAG_BEGIN){
 					tr5x6_xfer_state.FLAG_BEGIN=0;
 					xfer_flag=0;
 					TFT_XferSlotProgress(0);
 					xfer_delay=0;
-					//MIOS32_MIDI_SendDebugMessage("Begin\n");
+					//ADIOS_MIDI_SendDebugMessage("Begin\n");
 					//xfer_time_out=1000;
 
 				}else if(tr5x6_xfer_state.FLAG_CONT){
@@ -922,12 +922,12 @@ static void TASK_TFT_Periodic(void *pvParameters)
 					xfer_flag=0;
 					TFT_XferSlotProgress(MIDIO_SYSEX_Slot_Progression());
 					xfer_delay=0;
-					//MIOS32_MIDI_SendDebugMessage("get progress %u \n",MIDIO_SYSEX_BlockProgression() );
+					//ADIOS_MIDI_SendDebugMessage("get progress %u \n",MIDIO_SYSEX_BlockProgression() );
 					//xfer_time_out=1000;
 				}else if(tr5x6_xfer_state.FLAG_END){
 					tr5x6_xfer_state.FLAG_END=0;
 					///xfer_time_out=-1;
-					//MIOS32_MIDI_SendDebugMessage("End detected\n");
+					//ADIOS_MIDI_SendDebugMessage("End detected\n");
 					xfer_flag=0;
 					if(tr5x6_xfer_state.STAT==XFER_INFO){
 						xfer_delay=16;
@@ -943,7 +943,7 @@ static void TASK_TFT_Periodic(void *pvParameters)
 				}else if(tr5x6_xfer_state.FLAG_ERROR){
 					tr5x6_xfer_state.FLAG_ERROR=0;
 					//xfer_time_out=-1;
-					//MIOS32_MIDI_SendDebugMessage("xfer error\n");
+					//ADIOS_MIDI_SendDebugMessage("xfer error\n");
 					xfer_flag=0;
 					TFT_XferError(0);	// default error, toDo: Error handling
 					tr5x6_decod_inst_acc_flags=tr5x6_decod_inst_acc;
@@ -954,7 +954,7 @@ static void TASK_TFT_Periodic(void *pvParameters)
 			
 			if( ((tr5x6_xfer_state.STAT==XFER_END) || (tr5x6_xfer_state.STAT==XFER_ERROR)) && (xfer_delay>0) ){
 				xfer_delay--;
-				//MIOS32_MIDI_SendDebugMessage("delay end %u\n", xfer_delay);
+				//ADIOS_MIDI_SendDebugMessage("delay end %u\n", xfer_delay);
 				if(xfer_delay==0){
 					tr5x6_xfer_state.STAT=XFER_IDLE;
 					xfer_flag=1;
@@ -1209,8 +1209,8 @@ static void TASK_TFT_Periodic(void *pvParameters)
 			//   UART2 (USART3) = the instrument's MIDI IN
 			//   UART0 (USART1) = the TR-505 host link
 			//   MIDIO_SYSEX_Act() = application-level SysEx transfers
-			u8 act_midi_in = MIOS32_MIDI_ActGet(DIN2) & MIOS32_MIDI_ACT_RX;
-			u8 act_host    = MIOS32_MIDI_ActGet(DIN0) & MIOS32_MIDI_ACT_RX;
+			u8 act_midi_in = ADIOS_MIDI_ActGet(DIN2) & ADIOS_MIDI_ACT_RX;
+			u8 act_host    = ADIOS_MIDI_ActGet(DIN0) & ADIOS_MIDI_ACT_RX;
 			u8 act_sysex   = MIDIO_SYSEX_Act() & 0x2;
 			if(act_midi_in)APP_LCD_Rectangle(x_offset+335, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 			else APP_LCD_Rectangle(x_offset+335, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
@@ -1234,7 +1234,7 @@ static void TASK_TFT_Periodic(void *pvParameters)
 #if 1
 
 				if(tr5x6_decod_digits_flags){
-					MIOS32_MIDI_SendDebugMessage("0x%02x/0x%02x/0x%02x/0x%02x/0x%02x\n",tr5x6_decod_digits[2], tr5x6_decod_digits[3], tr5x6_decod_digits[4], tr5x6_decod_digits[5], tr5x6_decod_digits[6]);
+					ADIOS_MIDI_SendDebugMessage("0x%02x/0x%02x/0x%02x/0x%02x/0x%02x\n",tr5x6_decod_digits[2], tr5x6_decod_digits[3], tr5x6_decod_digits[4], tr5x6_decod_digits[5], tr5x6_decod_digits[6]);
 				}
 #else
 			// Catch the Basic Channel of the unit(Sysex Device ID).
@@ -1262,13 +1262,13 @@ static void TASK_TFT_Periodic(void *pvParameters)
 					}
 					if((newCH_cnt++)>50){
 						newCH_cnt=51;
-						//if(MIOS32_MIDI_DeviceIDGet()!=devId){
-						//	MIOS32_MIDI_DeviceIDSet(devId);
+						//if(ADIOS_MIDI_DeviceIDGet()!=devId){
+						//	ADIOS_MIDI_DeviceIDSet(devId);
 							// BSL_ID_Update();
 						//}
 
 					}
-					//if(MIOS32_MIDI_DeviceIDGet()==devId)newCH_flag=1;
+					//if(ADIOS_MIDI_DeviceIDGet()==devId)newCH_flag=1;
 				}
 			}else{
 				if(newCH_cnt){
@@ -1287,7 +1287,7 @@ static void TASK_TFT_Periodic(void *pvParameters)
 					if((i==0) && (tr5x6_decod_digits[0]!= 0x03)){
 					//	normal_start=0;
 						for(int j =0;j<32;j++)
-						MIOS32_MIDI_SendDebugMessage("digit#%d=x%02x\n",j, tr5x6_decod_segments[j]);
+						ADIOS_MIDI_SendDebugMessage("digit#%d=x%02x\n",j, tr5x6_decod_segments[j]);
 					}
 #endif
 					APP_LCD_Digits_draw(tr5x6_decod_digits[i], x_offset + tr5x6_decod_digits_pos[i], y_offset+197, 1, ((i>0) && newCH_flag)?APP_LCD_GREEN:APP_LCD_WHITE, APP_LCD_BLACK);
@@ -1417,14 +1417,14 @@ static void TASK_TFT_Periodic(void *pvParameters)
 						xfer_flag=0;
 						TFT_XferSlotInfoReceived();
 						xfer_delay=0;
-						//MIOS32_MIDI_SendDebugMessage("Info\n");
+						//ADIOS_MIDI_SendDebugMessage("Info\n");
 						//xfer_time_out=1000;
 					}else if(tr5x6_xfer_state.FLAG_BEGIN){
 						tr5x6_xfer_state.FLAG_BEGIN=0;
 						xfer_flag=0;
 						TFT_XferSlotProgress(0);
 						xfer_delay=0;
-						//MIOS32_MIDI_SendDebugMessage("Begin\n");
+						//ADIOS_MIDI_SendDebugMessage("Begin\n");
 						//xfer_time_out=1000;
 
 					}else if(tr5x6_xfer_state.FLAG_CONT){
@@ -1432,12 +1432,12 @@ static void TASK_TFT_Periodic(void *pvParameters)
 						xfer_flag=0;
 						TFT_XferSlotProgress(MIDIO_SYSEX_Slot_Progression());
 						xfer_delay=0;
-						//MIOS32_MIDI_SendDebugMessage("get progress %u \n",MIDIO_SYSEX_BlockProgression() );
+						//ADIOS_MIDI_SendDebugMessage("get progress %u \n",MIDIO_SYSEX_BlockProgression() );
 						//xfer_time_out=1000;
 					}else if(tr5x6_xfer_state.FLAG_END){
 						tr5x6_xfer_state.FLAG_END=0;
 						///xfer_time_out=-1;
-						//MIOS32_MIDI_SendDebugMessage("End detected\n");
+						//ADIOS_MIDI_SendDebugMessage("End detected\n");
 						xfer_flag=0;
 						if(tr5x6_xfer_state.STAT==XFER_INFO){
 							xfer_delay=16;
@@ -1453,7 +1453,7 @@ static void TASK_TFT_Periodic(void *pvParameters)
 					}else if(tr5x6_xfer_state.FLAG_ERROR){
 						tr5x6_xfer_state.FLAG_ERROR=0;
 						//xfer_time_out=-1;
-						//MIOS32_MIDI_SendDebugMessage("xfer error\n");
+						//ADIOS_MIDI_SendDebugMessage("xfer error\n");
 						xfer_flag=0;
 						TFT_XferError(0);	// default error, toDo: Error handling
 						tr5x6_decod_inst_sel_flags=tr5x6_decod_inst_sel;
@@ -1464,7 +1464,7 @@ static void TASK_TFT_Periodic(void *pvParameters)
 				
 				if( ((tr5x6_xfer_state.STAT==XFER_END) || (tr5x6_xfer_state.STAT==XFER_ERROR)) && (xfer_delay>0) ){
 					xfer_delay--;
-					//MIOS32_MIDI_SendDebugMessage("delay end %u\n", xfer_delay);
+					//ADIOS_MIDI_SendDebugMessage("delay end %u\n", xfer_delay);
 					if(xfer_delay==0){
 						tr5x6_xfer_state.STAT=XFER_IDLE;
 						xfer_flag=1;
@@ -1719,8 +1719,8 @@ static void TASK_TFT_Periodic(void *pvParameters)
 			// MIDI activity - same ports as the 505 branch above. NOT verified
 			// against 626 hardware: this branch has never been built or run
 			// since the UART renumbering, see the 626 project's own state.
-			u8 act_midi_in = MIOS32_MIDI_ActGet(DIN2) & MIOS32_MIDI_ACT_RX;
-			u8 act_host    = MIOS32_MIDI_ActGet(DIN0) & MIOS32_MIDI_ACT_RX;
+			u8 act_midi_in = ADIOS_MIDI_ActGet(DIN2) & ADIOS_MIDI_ACT_RX;
+			u8 act_host    = ADIOS_MIDI_ActGet(DIN0) & ADIOS_MIDI_ACT_RX;
 			u8 act_sysex   = MIDIO_SYSEX_Act() & 0x2;
 			if(act_midi_in)APP_LCD_Rectangle(x_offset+350, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 			else APP_LCD_Rectangle(x_offset+350, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
@@ -1745,24 +1745,24 @@ void EXTI2_3_IRQHandler(void){
 	TR5X6_DECOD_EXTI_BUTT_Callback();
 	//if(EXTI->FPR1 & EXTI_FPR1_FPIF3)
 	//{
-		//MIOS32_SOL_Set();
+		//ADIOS_SOL_Set();
 
 	//	tr5x6_decod_buttons.ALL=(u8)(GPIOD->IDR & 0xf);
 		//if(tr5x6_decod_buttons.ALL)
-//		tr5x6_decod_buttons.last = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_LAST)?0:1;
-//		//tr5x6_decod_buttons.inst = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INST)?0:1;
-//		tr5x6_decod_buttons.inc = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INC)?0:1;
-//		tr5x6_decod_buttons.dec = MIOS32_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_DEC)?0:1;
-//		//s32 led =  MIOS32_BOARD_LED_Get();
+//		tr5x6_decod_buttons.last = ADIOS_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_LAST)?0:1;
+//		//tr5x6_decod_buttons.inst = ADIOS_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INST)?0:1;
+//		tr5x6_decod_buttons.inc = ADIOS_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_INC)?0:1;
+//		tr5x6_decod_buttons.dec = ADIOS_SYS_STM_PINGET(TR5X6_DECOD_BUTT_PORT, TR5X6_DECOD_BUTT_DEC)?0:1;
+//		//s32 led =  ADIOS_BOARD_LED_Get();
 
 		//LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_3);
 	//	EXTI->FPR1 |=EXTI_FPR1_FPIF3;
-		//MIOS32_SOL_Clr();
+		//ADIOS_SOL_Clr();
 	//}
 }
 
-s32 NOTIFY_MIDI_TimeOut(mios32_midi_port_t port){
-	MIOS32_MIDI_SendDebugMessage("midi time out!\n");
+s32 NOTIFY_MIDI_TimeOut(adios_midi_port_t port){
+	ADIOS_MIDI_SendDebugMessage("midi time out!\n");
 	return 0;
 }
 
@@ -1895,10 +1895,10 @@ void About_Page(void)
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 	APP_LCD_FColourSet(APP_LCD_WHITE);
 	//APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
-	mios32_lcd_bitmap_t logo_bmp = APP_LCD_BitmapInit((u8*)tr5x6_logo, 400, 56, 400, Is1BIT);
+	adios_lcd_bitmap_t logo_bmp = APP_LCD_BitmapInit((u8*)tr5x6_logo, 400, 56, 400, Is1BIT);
 	for (int w=0; w<400;w++){
 		u8* bmp_mem_ptr = logo_bmp.memory +w;
-		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 56, 400, Is1BIT);
+		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 56, 400, Is1BIT);
 		APP_LCD_SendBitmap(bmp2print, 40+w, y_offset+25);
 	}
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
@@ -1907,13 +1907,13 @@ void About_Page(void)
 	logo_bmp = APP_LCD_BitmapInit((u8*)ai_logo, 49, 32, 49, Is1BIT);
 	for (int w=0; w<49;w++){
 		u8* bmp_mem_ptr = logo_bmp.memory +w;
-		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 32, 49, Is1BIT);
+		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 32, 49, Is1BIT);
 		APP_LCD_SendBitmap(bmp2print, 90+w, y_offset+110);
 	}
 	logo_bmp = APP_LCD_BitmapInit((u8*)ai_name, 246, 24, 246, Is1BIT);
 	for (int w=0; w<246;w++){
 		u8* bmp_mem_ptr = logo_bmp.memory +w;
-		mios32_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 24, 246, Is1BIT);
+		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, 24, 246, Is1BIT);
 		APP_LCD_SendBitmap(bmp2print, 144+w, y_offset+114);
 	}
 	APP_LCD_PrintString(240, y_offset+140, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "(C)2024 B.Dupeyron");
@@ -1954,7 +1954,7 @@ void TASK_SettingsMenu(void *pvParameters){
 				SettingsMenu_Legend();
 				tr5x6_decod_buttons_flags.inst=0;
 			}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
-				MIOS32_SYS_Reset();
+				ADIOS_SYS_Reset();
 			}
 		}else if(menu_edit){
 			if(menu_pos==0){
@@ -1970,7 +1970,7 @@ void TASK_SettingsMenu(void *pvParameters){
 					tr5x6_decod_buttons_flags.dec = 0;
 				}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
 					last_id = curr_id;
-					MIOS32_MIDI_DeviceIDSet(curr_id);
+					ADIOS_MIDI_DeviceIDSet(curr_id);
 					// ...and make it stick. DeviceIDSet only touches a RAM
 					// variable, so until now a new ID was forgotten at the
 					// next power-up and the menu was purely cosmetic.
@@ -1981,7 +1981,7 @@ void TASK_SettingsMenu(void *pvParameters){
 					tr5x6_decod_buttons_flags.inst=0;
 				}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
 					curr_id= last_id;
-					MIOS32_MIDI_DeviceIDSet(curr_id);
+					ADIOS_MIDI_DeviceIDSet(curr_id);
 					menu_edit=0;
 					SettingsMenu_Draw();
 					SettingsMenu_Legend();
@@ -2042,7 +2042,7 @@ void TASK_SettingsMenu(void *pvParameters){
 				SettingsMenu_Legend();
 				tr5x6_decod_buttons_flags.inst=0;
 			}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
-				MIOS32_SYS_Reset();
+				ADIOS_SYS_Reset();
 			}
 		}
 		MUTEX_SPI_GIVE;

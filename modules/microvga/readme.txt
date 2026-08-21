@@ -1,14 +1,14 @@
-This is the MicroVGA module for MIOS32
+This is the MicroVGA module for ADIOS
 
 Installation
 --------------------------------------------------------------------------------
 
-To use this module, just link microvga.mk to your MIOS32 project
+To use this module, just link microvga.mk to your ADIOS project
 
 
 Hardware
 --------------------------------------------------------------------------------
-Connect MicroVGA-TEXT to your MIOS32 as follows and set the jumper to 5V:
+Connect MicroVGA-TEXT to your ADIOS as follows and set the jumper to 5V:
 
 1 GND  -> J19:Vs
 2 +5V  -> J19:5V

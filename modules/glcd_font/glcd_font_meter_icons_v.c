@@ -1,6 +1,6 @@
 // converted with 'convpix_c.pl glcd_font_meter_icons_v.xpm -icons 28 -height 32'
 
-#include <mios32.h>
+#include <adios.h>
 
 const u8 GLCD_FONT_METER_ICONS_V[] = {
 8, 4*8, 0, 8, // width, height, X0 offset, char offset

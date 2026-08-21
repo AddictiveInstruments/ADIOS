@@ -9,9 +9,9 @@
 // Include files & defines
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 
-// this module has to be enabled in a local mios32_config.h file (included from mios32.h)
+// this module has to be enabled in a local adios_config.h file (included from adios.h)
 #if defined(APP_LCD_USE_BMP_EXPORT)
 
 #include <stdio.h>
@@ -19,7 +19,7 @@
 #include "app_lcd_bmp.h"
 
 #ifndef DEBUG_MSG
-#define DEBUG_MSG MIOS32_MIDI_SendDebugMessage
+#define DEBUG_MSG ADIOS_MIDI_SendDebugMessage
 #endif
 
 #define DEBUG_BMP_VERBOSE_LEVEL 0

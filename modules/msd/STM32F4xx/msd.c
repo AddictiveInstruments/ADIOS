@@ -1,6 +1,6 @@
 // Dummy
 
-#include <mios32.h>
+#include <adios.h>
 #include "msd.h"
 
 
@@ -39,4 +39,4 @@ s32 MSD_WrLEDGet(u16 lag_ms)
   return 0;
 }
 
-#include <mios32.h>
+#include <adios.h>

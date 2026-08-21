@@ -14,7 +14,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <string.h>
 
 #include "bsl_sysex.h"
@@ -28,41 +28,41 @@
 #define MEM16(addr) (*((volatile u16 *)(addr)))
 #define MEM8(addr)  (*((volatile u8  *)(addr)))
 
-#if defined(MIOS32_FAMILY_STM32G0xx)
+#if defined(ADIOS_FAMILY_STM32G0xx)
 // STM32: determine page size (mid density devices: 1k, high density devices: 2k)
 // TODO: find a proper way, as there could be high density devices with less than 256k?)
 # define FLASH_PAGE_SIZE   (0x800)
 
-// STM32: flash memory range (BSL range excluded, size defined per-project in mios32_config.h)
-#ifndef MIOS32_APP_FLASH_START_ADDR
-# error "Please define MIOS32_APP_FLASH_START_ADDR in mios32_config.h (see Template/mios32_config.h)"
+// STM32: flash memory range (BSL range excluded, size defined per-project in adios_config.h)
+#ifndef ADIOS_APP_FLASH_START_ADDR
+# error "Please define ADIOS_APP_FLASH_START_ADDR in adios_config.h (see Template/adios_config.h)"
 #endif
-# define FLASH_START_ADDR  (0x08000000 + MIOS32_APP_FLASH_START_ADDR)
-# define FLASH_END_ADDR    (0x08000000 + MIOS32_SYS_FlashSizeGet() - 1)
+# define FLASH_START_ADDR  (0x08000000 + ADIOS_APP_FLASH_START_ADDR)
+# define FLASH_END_ADDR    (0x08000000 + ADIOS_SYS_FlashSizeGet() - 1)
 
 
 // STM32: base address of SRAM
 # define SRAM_START_ADDR   (0x20000000)
-# define SRAM_END_ADDR     (0x20000000 + MIOS32_SYS_RAMSizeGet() - 1)
+# define SRAM_END_ADDR     (0x20000000 + ADIOS_SYS_RAMSizeGet() - 1)
 
-#elif defined(MIOS32_FAMILY_STM32F10x)
+#elif defined(ADIOS_FAMILY_STM32F10x)
 // STM32: determine page size (mid density devices: 1k, high density devices: 2k)
 // TODO: find a proper way, as there could be high density devices with less than 256k?)
-# define FLASH_PAGE_SIZE   (MIOS32_SYS_FlashSizeGet() >= (256*1024) ? 0x800 : 0x400)
+# define FLASH_PAGE_SIZE   (ADIOS_SYS_FlashSizeGet() >= (256*1024) ? 0x800 : 0x400)
 
 // STM32: flash memory range - the BSL region excluded. NOT a hardcoded 16k:
 // this bootloader's size decides the boundary, and it can span more than one
 // sector. Hardcoding 0x4000 here made it erase its own tail on every upload.
 
-# define FLASH_START_ADDR  (0x08000000 + MIOS32_APP_FLASH_START_ADDR)
-# define FLASH_END_ADDR    (0x08000000 + MIOS32_SYS_FlashSizeGet() - 1)
+# define FLASH_START_ADDR  (0x08000000 + ADIOS_APP_FLASH_START_ADDR)
+# define FLASH_END_ADDR    (0x08000000 + ADIOS_SYS_FlashSizeGet() - 1)
 
 
 // STM32: base address of SRAM
 # define SRAM_START_ADDR   (0x20000000)
-# define SRAM_END_ADDR     (0x20000000 + MIOS32_SYS_RAMSizeGet() - 1)
+# define SRAM_END_ADDR     (0x20000000 + ADIOS_SYS_RAMSizeGet() - 1)
 
-#elif defined(MIOS32_FAMILY_STM32F4xx)
+#elif defined(ADIOS_FAMILY_STM32F4xx)
 
 // sector base addresses
 
@@ -96,13 +96,13 @@ static u32 flash_erase_done = 0;
 // this bootloader's size decides the boundary, and it can span more than one
 // sector. Hardcoding 0x4000 here made it erase its own tail on every upload.
 
-# define FLASH_START_ADDR  (0x08000000 + MIOS32_APP_FLASH_START_ADDR)
-# define FLASH_END_ADDR    (0x08000000 + MIOS32_SYS_FlashSizeGet() - 1)
+# define FLASH_START_ADDR  (0x08000000 + ADIOS_APP_FLASH_START_ADDR)
+# define FLASH_END_ADDR    (0x08000000 + ADIOS_SYS_FlashSizeGet() - 1)
 
 
 // STM32: base address of SRAM
 # define SRAM_START_ADDR   (0x20000000)
-# define SRAM_END_ADDR     (0x20000000 + MIOS32_SYS_RAMSizeGet() - 1)
+# define SRAM_END_ADDR     (0x20000000 + ADIOS_SYS_RAMSizeGet() - 1)
 
 
 #else
@@ -114,14 +114,14 @@ static u32 flash_erase_done = 0;
 // Internal Prototypes
 /////////////////////////////////////////////////////////////////////////////
 
-static s32 BSL_SYSEX_Cmd_ReadMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
-static s32 BSL_SYSEX_Cmd_WriteMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
+static s32 BSL_SYSEX_Cmd_ReadMem(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
+static s32 BSL_SYSEX_Cmd_WriteMem(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
 
-s32 BSL_SYSEX_Cmd_SetEntryOverride(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
+s32 BSL_SYSEX_Cmd_SetEntryOverride(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
 static s32 BSL_SYSEX_RecAddrAndLen(u8 midi_in);
 
-static s32 BSL_SYSEX_SendAck(mios32_midi_port_t port, u8 ack_code, u8 ack_arg);
-static s32 BSL_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len);
+static s32 BSL_SYSEX_SendAck(adios_midi_port_t port, u8 ack_code, u8 ack_arg);
+static s32 BSL_SYSEX_SendMem(adios_midi_port_t port, u32 addr, u32 len);
 static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer);
 #ifndef BSL_UPDATER
 static s32 BSL_SYSEX_EraseAppHead(void);
@@ -160,18 +160,18 @@ static u8 halt_state;
 // the read-back verification and MIOS Studio's block retries). Studio
 // drives the whole two-stage sequence from ONE hex and finishes with 0x7f
 // (see BSL_SYSEX_ReleaseHaltState below).
-#ifndef MIOS32_UPDATER_ORIGIN_ADDR
-# error "BSL_UPDATER build without MIOS32_UPDATER_ORIGIN_ADDR - run via bootloader/updater/Makefile (etc/gen_bsl_boundary.sh updater mode generates it)"
+#ifndef ADIOS_UPDATER_ORIGIN_ADDR
+# error "BSL_UPDATER build without ADIOS_UPDATER_ORIGIN_ADDR - run via bootloader/updater/Makefile (etc/gen_bsl_boundary.sh updater mode generates it)"
 #endif
 // scan parameters for locating the OLD device's persistent info block:
 // candidate boundaries start at the family's minimum and advance by the
 // erase granularity (same values as etc/gen_bsl_boundary.sh - a minimum
 // lowered there has to be lowered here too, or the scan starts ABOVE the
 // boundaries it is meant to find)
-#if defined(MIOS32_FAMILY_STM32G0xx)
+#if defined(ADIOS_FAMILY_STM32G0xx)
 # define BSL_UPDATER_SCAN_FIRST 8192
 # define BSL_UPDATER_SCAN_STEP  2048
-#elif defined(MIOS32_FAMILY_STM32F4xx)
+#elif defined(ADIOS_FAMILY_STM32F4xx)
 # define BSL_UPDATER_SCAN_FIRST 16384
 # define BSL_UPDATER_SCAN_STEP  16384
 #endif
@@ -186,7 +186,7 @@ static u8 info_found;
 // bootloader region - exactly the range every normal BSL protects. Same
 // check in BSL_SYSEX_WriteMem, opposite role.
 # define BSL_FLASH_WRITE_FLOOR (0x08000000)
-# define BSL_FLASH_WRITE_CEIL  (0x08000000 + MIOS32_APP_FLASH_START_ADDR - 1)
+# define BSL_FLASH_WRITE_CEIL  (0x08000000 + ADIOS_APP_FLASH_START_ADDR - 1)
 #else
 # define BSL_FLASH_WRITE_FLOOR FLASH_START_ADDR
 # define BSL_FLASH_WRITE_CEIL  FLASH_END_ADDR
@@ -249,7 +249,7 @@ s32 BSL_SYSEX_Init(u32 mode)
 	info_found = 0;
 	{
 		u32 cand;
-		for(cand=BSL_UPDATER_SCAN_FIRST; cand<=(MIOS32_UPDATER_ORIGIN_ADDR-0x08000000) && !info_found; cand+=BSL_UPDATER_SCAN_STEP) {
+		for(cand=BSL_UPDATER_SCAN_FIRST; cand<=(ADIOS_UPDATER_ORIGIN_ADDR-0x08000000) && !info_found; cand+=BSL_UPDATER_SCAN_STEP) {
 			u8 *block = (u8 *)(0x08000000 + cand - 0x100);
 			if( block[0xd0] == 0x42 || block[0xd2] == 0x42 || block[0xc0] == 0x42 ) {
 				int i;
@@ -261,8 +261,8 @@ s32 BSL_SYSEX_Init(u32 mode)
 	}
 
 	// adopt the instrument's real SysEx device ID from the captured block.
-	// MIOS32_MIDI_Init() ran BEFORE this function (see main.c) and read the
-	// ID from MIOS32_SYS_ADDR_DEVICE_ID - which, in this build, points at the
+	// ADIOS_MIDI_Init() ran BEFORE this function (see main.c) and read the
+	// ID from ADIOS_SYS_ADDR_DEVICE_ID - which, in this build, points at the
 	// NEW boundary's info block position. On a boundary MIGRATION nothing is
 	// there yet (the real block still sits at the OLD boundary, found by the
 	// scan above), so the ID silently defaulted to 0 and MIOS Studio - still
@@ -270,7 +270,7 @@ s32 BSL_SYSEX_Init(u32 mode)
 	// the second stage of the one-file update never started (found on the
 	// first real migration, 2026-08-10).
 	if( info_found && info_block[0xd0] == 0x42 )
-		MIOS32_MIDI_DeviceIDSet(info_block[0xd1] & 0x7f);
+		ADIOS_MIDI_DeviceIDSet(info_block[0xd1] & 0x7f);
 #endif
 
 	return 0; // no error
@@ -338,7 +338,7 @@ s32 BSL_SYSEX_SoftHoldGet(void)
 /////////////////////////////////////////////////////////////////////////////
 s32 BSL_SYSEX_ReleaseHaltState(void)
 {
-	const u32 boundary = MIOS32_APP_FLASH_START_ADDR;
+	const u32 boundary = ADIOS_APP_FLASH_START_ADDR;
 
 	// A) a bootloader image was written -> finalize the BSL update
 	u32 new_reset_vector = *(u32 *)(0x08000000 + 4);
@@ -346,7 +346,7 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 	    (new_reset_vector >> 24) == 0x08 &&
 	    new_reset_vector < (0x08000000 + boundary) ) {
 
-		MIOS32_IRQ_Disable();
+		ADIOS_IRQ_Disable();
 
 		// restore the info block at its NEW position (skip if the image
 		// unexpectedly extends into it - the BSL itself matters more)
@@ -354,9 +354,9 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 			BSL_SYSEX_WriteMem(0x08000000 + boundary - 0x100, 0x100, info_block);
 		}
 
-		MIOS32_SYS_AppEntryOverrideSet(0);
+		ADIOS_SYS_AppEntryOverrideSet(0);
 
-		MIOS32_IRQ_Enable();
+		ADIOS_IRQ_Enable();
 
 		// deliberately NO reset here. Resetting handed control straight back
 		// to the fresh bootloader, which looks exactly like an ordinary
@@ -376,7 +376,7 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 		// which used to be the fresh bootloader announcing itself after the
 		// reset). No peripheral reset happens here, so nothing can eat these
 		// bytes on their way out.
-		BSL_SYSEX_SendUploadReq(MIOS32_MIDI_DEFAULT_PORT);
+		BSL_SYSEX_SendUploadReq(ADIOS_MIDI_DEFAULT_PORT);
 		BSL_SYSEX_SendUploadReq(USB0);
 		return 0;
 	}
@@ -384,25 +384,25 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 	// B) nothing written -> app-load relay: step aside for the fresh
 	//    bootloader (like a normal app's reboot-to-BL), so it can receive an
 	//    application upload
-	MIOS32_SYS_AppEntryOverrideSet(0);
-	MIOS32_SYS_BootloaderModeRequest();
-	MIOS32_SYS_Reset();
+	ADIOS_SYS_AppEntryOverrideSet(0);
+	ADIOS_SYS_BootloaderModeRequest();
+	ADIOS_SYS_Reset();
 	return 0; // never reached
 }
 
 #else /* !BSL_UPDATER - the normal bootloader */
 
 /////////////////////////////////////////////////////////////////////////////
-// Used by MIOS32_MIDI to release halt state instead of triggering a reset
+// Used by ADIOS_MIDI to release halt state instead of triggering a reset
 /////////////////////////////////////////////////////////////////////////////
 s32 BSL_SYSEX_ReleaseHaltState(void)
 {
 	// always send upload request (like if we would come out of reset).
-	// MIOS32_MIDI_DEFAULT_PORT, not a hardcoded DIN0: this bootloader talks
-	// on whatever DIN port its board actually wires (see mios32_config.h) -
+	// ADIOS_MIDI_DEFAULT_PORT, not a hardcoded DIN0: this bootloader talks
+	// on whatever DIN port its board actually wires (see adios_config.h) -
 	// announcing on a port that isn't even enabled makes the core look dead
 	// to MIOS Studio while everything else works.
-	BSL_SYSEX_SendUploadReq(MIOS32_MIDI_DEFAULT_PORT);
+	BSL_SYSEX_SendUploadReq(ADIOS_MIDI_DEFAULT_PORT);
 	BSL_SYSEX_SendUploadReq(USB0);
 
 	// clear halt state
@@ -420,22 +420,22 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// This function enhances MIOS32 SysEx commands
-// it's called from MIOS32_MIDI_SYSEX_Cmd if the "MIOS32_MIDI_BSL_ENHANCEMENTS"
+// This function enhances ADIOS SysEx commands
+// it's called from ADIOS_MIDI_SYSEX_Cmd if the "ADIOS_MIDI_BSL_ENHANCEMENTS"
 // switch is set (see code there for details)
 /////////////////////////////////////////////////////////////////////////////
-s32 BSL_SYSEX_Cmd(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t cmd_state, u8 midi_in, u8 sysex_cmd)
+s32 BSL_SYSEX_Cmd(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in, u8 sysex_cmd)
 {
 	// change debug port
-	MIOS32_MIDI_DebugPortSet(port);
+	ADIOS_MIDI_DebugPortSet(port);
 
 	// wait 2 additional seconds whenever a SysEx message has been received
-	MIOS32_STOPWATCH_Reset();
+	ADIOS_STOPWATCH_Reset();
 
 	// enter the commands here
 	switch( sysex_cmd ) {
-	// case 0x00: // query command is implemented in MIOS32
-	// case 0x0f: // ping command is implemented in MIOS32
+	// case 0x00: // query command is implemented in ADIOS
+	// case 0x0f: // ping command is implemented in ADIOS
 
 	case 0x01:
 		BSL_SYSEX_Cmd_ReadMem(port, cmd_state, midi_in);
@@ -461,18 +461,18 @@ s32 BSL_SYSEX_Cmd(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t cmd_sta
 // TODO: we could provide this command also during runtime, as it isn't destructive
 // or it could be available as debug command 0D like known from MIOS8
 /////////////////////////////////////////////////////////////////////////////
-s32 BSL_SYSEX_Cmd_ReadMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t cmd_state, u8 midi_in)
+s32 BSL_SYSEX_Cmd_ReadMem(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in)
 {
 	switch( cmd_state ) {
 
-	case MIOS32_MIDI_SYSEX_CMD_STATE_BEGIN:
+	case ADIOS_MIDI_SYSEX_CMD_STATE_BEGIN:
 		// set initial receive state and address/len
 		sysex_rec_state = BSL_SYSEX_REC_A3;
 		sysex_addr = 0;
 		sysex_len = 0;
 		break;
 
-	case MIOS32_MIDI_SYSEX_CMD_STATE_CONT:
+	case ADIOS_MIDI_SYSEX_CMD_STATE_CONT:
 		if( sysex_rec_state < BSL_SYSEX_REC_PAYLOAD )
 			BSL_SYSEX_RecAddrAndLen(midi_in);
 		break;
@@ -483,7 +483,7 @@ s32 BSL_SYSEX_Cmd_ReadMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t
 		// did we reach payload state?
 		if( sysex_rec_state != BSL_SYSEX_REC_PAYLOAD ) {
 			// not enough bytes received
-			BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
+			BSL_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
 		} else {
 			// send dump
 			BSL_SYSEX_SendMem(port, sysex_addr, sysex_len);
@@ -505,34 +505,34 @@ s32 BSL_SYSEX_Cmd_ReadMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t
 // Sent by MIOS Studio right before the final 0x7f when it has uploaded an
 // application whose hex does NOT start at the app/bootloader boundary.
 /////////////////////////////////////////////////////////////////////////////
-s32 BSL_SYSEX_Cmd_SetEntryOverride(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t cmd_state, u8 midi_in)
+s32 BSL_SYSEX_Cmd_SetEntryOverride(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in)
 {
 	static u32 entry_addr;
 	static u8 entry_byte_ctr;
 
 	switch( cmd_state ) {
 
-	case MIOS32_MIDI_SYSEX_CMD_STATE_BEGIN:
+	case ADIOS_MIDI_SYSEX_CMD_STATE_BEGIN:
 		entry_addr = 0;
 		entry_byte_ctr = 0;
 		break;
 
-	case MIOS32_MIDI_SYSEX_CMD_STATE_CONT:
+	case ADIOS_MIDI_SYSEX_CMD_STATE_CONT:
 		if( entry_byte_ctr < 5 ) {
 			entry_addr = (entry_addr << 7) | (midi_in & 0x7f);
 			++entry_byte_ctr;
 		}
 		break;
 
-	default: // MIOS32_MIDI_SYSEX_CMD_STATE_END
+	default: // ADIOS_MIDI_SYSEX_CMD_STATE_END
 		if( entry_byte_ctr != 5 ) {
-			BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
+			BSL_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
 		} else if( (entry_addr >> 24) != 0x08 || (entry_addr & 3) ) {
 			// not a word-aligned flash address
-			BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE);
+			BSL_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE);
 		} else {
-			MIOS32_SYS_AppEntryOverrideSet(entry_addr);
-			BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_ACK, 0x03); // echo the command number
+			ADIOS_SYS_AppEntryOverrideSet(entry_addr);
+			BSL_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_ACK, 0x03); // echo the command number
 		}
 		break;
 	}
@@ -544,14 +544,14 @@ s32 BSL_SYSEX_Cmd_SetEntryOverride(mios32_midi_port_t port, mios32_midi_sysex_cm
 /////////////////////////////////////////////////////////////////////////////
 // Command 02: Write Memory handler
 /////////////////////////////////////////////////////////////////////////////
-s32 BSL_SYSEX_Cmd_WriteMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t cmd_state, u8 midi_in)
+s32 BSL_SYSEX_Cmd_WriteMem(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in)
 {
 	static u32 bit_ctr8 = 0;
 	static u32 value8 = 0;
 
 	switch( cmd_state ) {
 
-	case MIOS32_MIDI_SYSEX_CMD_STATE_BEGIN:
+	case ADIOS_MIDI_SYSEX_CMD_STATE_BEGIN:
 		// set initial receive state and address/len
 		sysex_rec_state = BSL_SYSEX_REC_A3;
 		sysex_addr = 0;
@@ -565,7 +565,7 @@ s32 BSL_SYSEX_Cmd_WriteMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_
 		value8 = 0;
 		break;
 
-	case MIOS32_MIDI_SYSEX_CMD_STATE_CONT:
+	case ADIOS_MIDI_SYSEX_CMD_STATE_CONT:
 		if( sysex_rec_state < BSL_SYSEX_REC_PAYLOAD ) {
 			sysex_checksum += midi_in;
 			BSL_SYSEX_RecAddrAndLen(midi_in);
@@ -596,28 +596,28 @@ s32 BSL_SYSEX_Cmd_WriteMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_
 		}
 		break;
 
-	default: // MIOS32_MIDI_SYSEX_CMD_STATE_END
+	default: // ADIOS_MIDI_SYSEX_CMD_STATE_END
 		// TODO: send 0xf7 if merger enabled
 
 		// TEMPORARY DEBUG PROBE (2026-08-01): unconditional trace of what was
 		// actually received for this WriteMem block, before any validation.
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-		MIOS32_MIDI_SendDebugMessage("[BSL_SYSEX] WriteMem END addr=0x%08x len=%d got=%d state=%d\n", sysex_addr, sysex_len, sysex_receive_ctr, sysex_rec_state);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+		ADIOS_MIDI_SendDebugMessage("[BSL_SYSEX] WriteMem END addr=0x%08x len=%d got=%d state=%d\n", sysex_addr, sysex_len, sysex_receive_ctr, sysex_rec_state);
 #endif
 
 		if( sysex_receive_ctr < sysex_len ) {
 			// for remote analysis...
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-			MIOS32_MIDI_SendDebugMessage("[BSL_SYSEX] expected %d, got %d bytes (retry)\n", sysex_len, sysex_receive_ctr);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+			ADIOS_MIDI_SendDebugMessage("[BSL_SYSEX] expected %d, got %d bytes (retry)\n", sysex_len, sysex_receive_ctr);
 #endif
 			// not enough bytes received
-			BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
+			BSL_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
 		} else if( sysex_rec_state == BSL_SYSEX_REC_INVALID ) {
 			// too many bytes received
-			BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_MORE_BYTES_THAN_EXP);
+			BSL_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_MORE_BYTES_THAN_EXP);
 		} else if( sysex_received_checksum != (-sysex_checksum & 0x7f) ) {
 			// notify that wrong checksum has been received
-			BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, MIOS32_MIDI_SYSEX_DISACK_WRONG_CHECKSUM);
+			BSL_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRONG_CHECKSUM);
 		} else {
 			// enter halt state (can only be released via BSL reset)
 			halt_state = 1;
@@ -646,15 +646,15 @@ s32 BSL_SYSEX_Cmd_WriteMem(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_
 			// the range above it - see BSL_FLASH_WRITE_FLOOR/CEIL)
 			if( error || (error = BSL_SYSEX_WriteMem(sysex_addr, sysex_len, sysex_buffer)) ) {
 				// write failed - return negated error status
-				BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_DISACK, -error);
+				BSL_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, -error);
 			} else {
 				// notify that bytes have been received by returning checksum
-				BSL_SYSEX_SendAck(port, MIOS32_MIDI_SYSEX_ACK, -sysex_checksum & 0x7f);
+				BSL_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_ACK, -sysex_checksum & 0x7f);
 			}
 
 			// enfore immediate MIDI queue flush
 			// (important for retry handling: send ack before next message is processed)
-			MIOS32_MIDI_Periodic_mS();
+			ADIOS_MIDI_Periodic_mS();
 		}
 		break;
 	}
@@ -694,17 +694,17 @@ static s32 BSL_SYSEX_RecAddrAndLen(u8 midi_in)
 // This function sends a SysEx acknowledge to notify the user about the received command
 // expects acknowledge code (e.g. 0x0f for good, 0x0e for error) and additional argument
 /////////////////////////////////////////////////////////////////////////////
-static s32 BSL_SYSEX_SendAck(mios32_midi_port_t port, u8 ack_code, u8 ack_arg)
+static s32 BSL_SYSEX_SendAck(adios_midi_port_t port, u8 ack_code, u8 ack_arg)
 {
 	u8 sysex_buffer[32]; // should be enough?
 	u8 *sysex_buffer_ptr = &sysex_buffer[0];
 	int i;
 
-	for(i=0; i<sizeof(mios32_midi_sysex_header); ++i)
-		*sysex_buffer_ptr++ = mios32_midi_sysex_header[i];
+	for(i=0; i<sizeof(adios_midi_sysex_header); ++i)
+		*sysex_buffer_ptr++ = adios_midi_sysex_header[i];
 
 	// device ID
-	*sysex_buffer_ptr++ = MIOS32_MIDI_DeviceIDGet();
+	*sysex_buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
 
 	// send ack code and argument
 	*sysex_buffer_ptr++ = ack_code;
@@ -714,24 +714,24 @@ static s32 BSL_SYSEX_SendAck(mios32_midi_port_t port, u8 ack_code, u8 ack_arg)
 	*sysex_buffer_ptr++ = 0xf7;
 
 	// finally send SysEx stream
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
 // This function sends an upload request
 /////////////////////////////////////////////////////////////////////////////
-s32 BSL_SYSEX_SendUploadReq(mios32_midi_port_t port)
+s32 BSL_SYSEX_SendUploadReq(adios_midi_port_t port)
 {
 	u8 sysex_buffer[32]; // should be enough?
 	u8 *sysex_buffer_ptr = &sysex_buffer[0];
 	int i;
 
-	for(i=0; i<sizeof(mios32_midi_sysex_header); ++i)
-		*sysex_buffer_ptr++ = mios32_midi_sysex_header[i];
+	for(i=0; i<sizeof(adios_midi_sysex_header); ++i)
+		*sysex_buffer_ptr++ = adios_midi_sysex_header[i];
 
 	// device ID
-	*sysex_buffer_ptr++ = MIOS32_MIDI_DeviceIDGet();
+	*sysex_buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
 
 	// send 0x01 to request code upload
 	*sysex_buffer_ptr++ = 0x01;
@@ -740,7 +740,7 @@ s32 BSL_SYSEX_SendUploadReq(mios32_midi_port_t port)
 	*sysex_buffer_ptr++ = 0xf7;
 
 	// finally send SysEx stream
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
 }
 
 
@@ -748,18 +748,18 @@ s32 BSL_SYSEX_SendUploadReq(mios32_midi_port_t port)
 // This function sends a SysEx dump of the requested memory address range
 // We expect that address and length are aligned to 16
 /////////////////////////////////////////////////////////////////////////////
-s32 BSL_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
+s32 BSL_SYSEX_SendMem(adios_midi_port_t port, u32 addr, u32 len)
 {
 	int i;
 	u8 checksum = 0;
 
 	// send header
 	u8 *sysex_buffer_ptr = &sysex_buffer[0];
-	for(i=0; i<sizeof(mios32_midi_sysex_header); ++i)
-		*sysex_buffer_ptr++ = mios32_midi_sysex_header[i];
+	for(i=0; i<sizeof(adios_midi_sysex_header); ++i)
+		*sysex_buffer_ptr++ = adios_midi_sysex_header[i];
 
 	// device ID
-	*sysex_buffer_ptr++ = MIOS32_MIDI_DeviceIDGet();
+	*sysex_buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
 
 	// "write mem" command (so that dump could be sent back to overwrite the memory w/o modifications)
 	*sysex_buffer_ptr++ = 0x02;
@@ -805,7 +805,7 @@ s32 BSL_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
 	*sysex_buffer_ptr++ = 0xf7;
 
 	// finally send SysEx stream
-	return MIOS32_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
 }
 
 
@@ -818,7 +818,7 @@ s32 BSL_SYSEX_SendMem(mios32_midi_port_t port, u32 addr, u32 len)
 /////////////////////////////////////////////////////////////////////////////
 static s32 BSL_SYSEX_EraseAppHead(void)
 {
-#if defined(MIOS32_FAMILY_STM32G0xx)
+#if defined(ADIOS_FAMILY_STM32G0xx)
 	LL_FLASH_Unlock();
 	// page INDEX, not the absolute address divided by the page size: the
 	// erase below writes it straight into FLASH_CR's PNB field
@@ -826,12 +826,12 @@ static s32 BSL_SYSEX_EraseAppHead(void)
 						    (FLASH_START_ADDR - 0x08000000) / FLASH_PAGE_SIZE);
 	LL_FLASH_Lock();
 	if( status != FLASH_COMPLETE ) {
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-		MIOS32_MIDI_SendDebugMessage("app head erase failed: code %d err 0x%08x\n", status, LL_FLASH_GetError());
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+		ADIOS_MIDI_SendDebugMessage("app head erase failed: code %d err 0x%08x\n", status, LL_FLASH_GetError());
 #endif
-		return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+		return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 	}
-#elif defined(MIOS32_FAMILY_STM32F4xx)
+#elif defined(ADIOS_FAMILY_STM32F4xx)
 	// find the sector the application starts in, and mark it erased in the
 	// session bookkeeping so the write path does not erase it again
 	int sector;
@@ -842,10 +842,10 @@ static s32 BSL_SYSEX_EraseAppHead(void)
 			LL_FLASH_Lock();
 			if( status != FLASH_COMPLETE ) {
 				LL_FLASH_ClearFlag(0xffffffff);
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-				MIOS32_MIDI_SendDebugMessage("app head erase failed: code %d\n", status);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+				ADIOS_MIDI_SendDebugMessage("app head erase failed: code %d\n", status);
 #endif
-				return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+				return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 			}
 			flash_erase_done |= (1 << sector);
 			break;
@@ -866,17 +866,17 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 	// check for flash memory range
 	if( addr >= BSL_FLASH_WRITE_FLOOR && addr <= BSL_FLASH_WRITE_CEIL ) {
 
-#if defined(MIOS32_FAMILY_STM32G0xx)
+#if defined(ADIOS_FAMILY_STM32G0xx)
 		// check for alignment
 		if( (addr % 8) || (len % 8) )
-			return -MIOS32_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
+			return -ADIOS_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
 		// FLASH_* routines are part of the STM32 code library
 		LL_FLASH_Unlock();
 
 		LL_FLASH_Status status;
 		int i;
 		for(i=0; i<len; addr+=8, i+=8) {
-			//MIOS32_IRQ_Disable();
+			//ADIOS_IRQ_Disable();
 
 			// erase on entering a page - EXCEPT the application's head page
 			// when this session already erased it up front: MIOS Studio
@@ -895,11 +895,11 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 				//FLASH->SR = LL_FLASH_SR_CLEAR;
 				if( (status=LL_FLASH_PageErase(LL_FLASH_BANK_1, page)) != FLASH_COMPLETE ) {
 					//LL_FLASH_ClearFlag(LL_FLASH_SR_CLEAR); // clear error flags, otherwise next program attempts will fail
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 					uint32_t error=LL_FLASH_GetError();
-					MIOS32_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
+					ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
 #endif
-					return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+					return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 				}
 			}
 			uint64_t data =
@@ -927,50 +927,50 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 			//FLASH->SR = LL_FLASH_SR_CLEAR;
 			if( (status=LL_FLASH_ProgramDoubleWord(addr, data)) != FLASH_COMPLETE ) {
 				//LL_FLASH_ClearFlag(LL_FLASH_SR_CLEAR); // clear error flags, otherwise next program attempts will fail
-				//MIOS32_IRQ_Enable();
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+				//ADIOS_IRQ_Enable();
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 				uint32_t error=LL_FLASH_GetError();
-				MIOS32_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
+				ADIOS_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
 #endif
 				//FLASH->SR = LL_FLASH_SR_CLEAR;
-				return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+				return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 			}
-			//MIOS32_IRQ_Enable();
+			//ADIOS_IRQ_Enable();
 			//LL_FLASH_FlushCaches();
 			// TODO: verify programmed code
 		}
-#elif defined(MIOS32_FAMILY_STM32F10x)
+#elif defined(ADIOS_FAMILY_STM32F10x)
 		// check for alignment
 		if( (addr % 4) || (len % 4) )
-			return -MIOS32_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
+			return -ADIOS_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
 		// FLASH_* routines are part of the STM32 code library
 		LL_FLASH_Unlock();
 
 		LL_FLASH_Status status;
 		int i;
 		for(i=0; i<len; addr+=2, i+=2) {
-			MIOS32_IRQ_Disable();
+			ADIOS_IRQ_Disable();
 			if( (addr % FLASH_PAGE_SIZE) == 0 ) {
 				if( (status=LL_FLASH_ErasePage(addr)) != FLASH_COMPLETE ) {
 					LL_FLASH_ClearFlag(FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR); // clear error flags, otherwise next program attempts will fail
-					MIOS32_IRQ_Enable();
-					return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+					ADIOS_IRQ_Enable();
+					return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 				}
 			}
 
 			if( (status=LL_FLASH_ProgramHalfWord(addr, buffer[i+0] | ((u16)buffer[i+1] << 8))) != FLASH_COMPLETE ) {
 				LL_FLASH_ClearFlag(FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR); // clear error flags, otherwise next program attempts will fail
-				MIOS32_IRQ_Enable();
-				return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+				ADIOS_IRQ_Enable();
+				return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 			}
-			MIOS32_IRQ_Enable();
+			ADIOS_IRQ_Enable();
 
 			// TODO: verify programmed code
 		}
-#elif defined(MIOS32_FAMILY_STM32F4xx)
+#elif defined(ADIOS_FAMILY_STM32F4xx)
 		// check for alignment
 		if( (addr % 4) || (len % 4) )
-			return -MIOS32_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
+			return -ADIOS_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
 		// FLASH_* routines are part of the STM32 code library
 		LL_FLASH_Unlock();
 
@@ -1018,10 +1018,10 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 						LL_FLASH_Status status = LL_FLASH_EraseSector(flash_sector_map[sector][1], LL_FLASH_VOLTRG_3);
 						if( status != FLASH_COMPLETE ) {
 							LL_FLASH_ClearFlag(0xffffffff); // clear error flags, otherwise next program attempts will fail
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-							MIOS32_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+							ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
 #endif
-							return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+							return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 						}
 					}
 					break;
@@ -1040,10 +1040,10 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 			LL_FLASH_Status status = LL_FLASH_ProgramWord(addr, data);
 			if( status != FLASH_COMPLETE ) {
 				LL_FLASH_ClearFlag(0xffffffff); // clear error flags, otherwise next program attempts will fail
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-				MIOS32_MIDI_SendDebugMessage("program flash failed for 0x%08x: code %d\n", addr, status);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+				ADIOS_MIDI_SendDebugMessage("program flash failed for 0x%08x: code %d\n", addr, status);
 #endif
-				return -MIOS32_MIDI_SYSEX_DISACK_WRITE_FAILED;
+				return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
 			}
 
 			LL_FLASH_DataCacheReset();
@@ -1069,7 +1069,7 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 	}
 
 	// invalid address
-	return -MIOS32_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE;
+	return -ADIOS_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE;
 }
 
 

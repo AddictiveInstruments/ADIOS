@@ -17,7 +17,7 @@
 // Global definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// can be overruled in mios32_config.h
+// can be overruled in adios_config.h
 #ifndef MID_PARSER_MAX_TRACKS
 #define MID_PARSER_MAX_TRACKS 32
 #endif

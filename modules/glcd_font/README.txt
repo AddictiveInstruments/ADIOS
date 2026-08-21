@@ -1,7 +1,7 @@
 
 ; ==========================================================================
 
-GLCD Fonts and Icons for MIOS32 GLCD drivers
+GLCD Fonts and Icons for ADIOS GLCD drivers
 
 ; ==========================================================================
 
@@ -32,7 +32,7 @@ C based Applications (example for glcd_font_big)
   1) Makefile: ensure that a GLCD driver has been included, e.g.
 
 ---
-include $(MIOS32_PATH)/modules/app_lcd/st7637/app_lcd.mk
+include $(ADIOS_PATH)/modules/app_lcd/st7637/app_lcd.mk
 ---
 
   2) .c program: add
@@ -41,11 +41,11 @@ include $(MIOS32_PATH)/modules/app_lcd/st7637/app_lcd.mk
 ---
      and select font with:
 ---
-  MIOS32_LCD_FontInit(GLCD_FONT_BIG);
+  ADIOS_LCD_FontInit(GLCD_FONT_BIG);
 ---
 
 
 Integration Examples
 ~~~~~~~~~~~~~~~~~~~~
 
-  -> see $MIOS32_PATH/apps/tutorials/021_glcd
+  -> see $ADIOS_PATH/apps/tutorials/021_glcd

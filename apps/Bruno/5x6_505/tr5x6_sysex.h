@@ -44,7 +44,7 @@
 extern s32 TR5X6_SYSEX_Init(u32 mode);
 extern s32 TR5X6_SYSEX_HaltStateGet(void);
 extern s32 TR5X6_SYSEX_ReleaseHaltState(void);
-extern s32 TR5X6_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in);
-extern s32 TR5X6_SYSEX_SendUploadReq(mios32_midi_port_t port);
+extern s32 TR5X6_SYSEX_Parser(adios_midi_port_t port, u8 midi_in);
+extern s32 TR5X6_SYSEX_SendUploadReq(adios_midi_port_t port);
 
 #endif /* _TR5X6_SYSEX_H */

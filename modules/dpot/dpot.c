@@ -11,11 +11,11 @@
 //! variable (32-bit wide unsigned integer).  The limit of supported DPOTs will
 //! depend upon the limitations of the data bus (SPI or IIC, for example), the
 //! limitations of the ICs that contain the DPOTs, and possibly the performance 
-//! limitations of the MIOS32 core.
+//! limitations of the ADIOS core.
 //! 
-//! This file contains the generic interface that is presented to the MIOS32 
+//! This file contains the generic interface that is presented to the ADIOS 
 //! application.  The IC-specific implementation is contained in a separate 
-//! file.  This allows the the MIOS32_DPOT implementation to be easily modified
+//! file.  This allows the the ADIOS_DPOT implementation to be easily modified
 //! for any number of DPOT ICs.
 //!
 //! DPOT output values (typically specifying the wiper pin position as a 
@@ -40,7 +40,7 @@
 //! supply the DPOT IC (5V or 3V3), and the 4x1k Pull-Up resistor array should
 //! be installed to supply the 3.3V->5V level shifting if 5V supply is used.
 //!
-//! An usage example can be found under $MIOS32_PATH/apps/tutorials/026_dpot
+//! An usage example can be found under $ADIOS_PATH/apps/tutorials/026_dpot
 //!
 //! \{
 /* ==========================================================================
@@ -56,7 +56,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include "dpot.h"
 
 
@@ -171,10 +171,10 @@ s32 DPOT_Update(void)
     u32 req = 0;
   
     // check for DPOT channel update requests
-    MIOS32_IRQ_Disable();
+    ADIOS_IRQ_Disable();
     req = dpot_update_req;
     dpot_update_req = 0;
-    MIOS32_IRQ_Enable();
+    ADIOS_IRQ_Enable();
 
     // update hardware
     if (req)

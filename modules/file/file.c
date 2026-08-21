@@ -34,7 +34,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 
 #include <ff.h>
 #include <diskio.h>
@@ -43,7 +43,7 @@
 
 #include "file.h"
 
-#ifndef MIOS32_FAMILY_EMULATION
+#ifndef ADIOS_FAMILY_EMULATION
 # include <FreeRTOS.h>
 # include <portmacro.h>
 # include <task.h>
@@ -51,7 +51,7 @@
 
 
 /////////////////////////////////////////////////////////////////////////////
-// for optional debugging messages via DEBUG_MSG (defined in mios32_config.h)
+// for optional debugging messages via DEBUG_MSG (defined in adios_config.h)
 /////////////////////////////////////////////////////////////////////////////
 
 // Note: verbose level 1 is default - it prints error messages
@@ -61,7 +61,7 @@
 #endif
 
 #ifndef DEBUG_MSG
-#define DEBUG_MSG MIOS32_MIDI_SendDebugMessage
+#define DEBUG_MSG ADIOS_MIDI_SendDebugMessage
 #endif
 
 
@@ -166,7 +166,7 @@ s32 FILE_Init(u32 mode)
   browser_upload_callback_func = NULL;
 
   // init SDCard access
-  s32 error = MIOS32_SDCARD_Init(0);
+  s32 error = ADIOS_SDCARD_Init(0);
 #if DEBUG_VERBOSE_LEVEL >= 2
   DEBUG_MSG("[FILE] SD Card interface initialized, status: %d\n", error);
 #endif
@@ -191,7 +191,7 @@ s32 FILE_CheckSDCard(void)
   // check if SD card is available
   // High-speed access if SD card was previously available
   u8 prev_sdcard_available = sdcard_available;
-  sdcard_available = MIOS32_SDCARD_CheckAvailable(prev_sdcard_available);
+  sdcard_available = ADIOS_SDCARD_CheckAvailable(prev_sdcard_available);
 
   if( sdcard_available && !prev_sdcard_available ) {
 #if DEBUG_VERBOSE_LEVEL >= 2
@@ -911,7 +911,7 @@ s32 FILE_Remove(char *path)
     return FILE_ERR_NO_VOLUME;
   }
 
-#ifdef MIOS32_FAMILY_EMULATION
+#ifdef ADIOS_FAMILY_EMULATION
   if( (file_dfs_errno=unlink(path)) != FR_OK )
     return FILE_ERR_REMOVE;
 #else
@@ -936,7 +936,7 @@ s32 FILE_Rename(char *old_path, char *new_path)
     return FILE_ERR_NO_VOLUME;
   }
 
-#ifdef MIOS32_FAMILY_EMULATION
+#ifdef ADIOS_FAMILY_EMULATION
   // toDo:
   //if( (file_dfs_errno=unlink(old_path, new_path)) != FR_OK )
     return FILE_ERR_RENAME;
@@ -1405,7 +1405,7 @@ s32 FILE_FindPreviousFile(char *path, char *filename, char *ext_filter, char *pr
 /////////////////////////////////////////////////////////////////////////////
 //! This function sends a .syx file to given MIDI out port
 /////////////////////////////////////////////////////////////////////////////
-s32 FILE_SendSyxDump(char *path, mios32_midi_port_t port, u32 ms_delay_between_dumps)
+s32 FILE_SendSyxDump(char *path, adios_midi_port_t port, u32 ms_delay_between_dumps)
 {
   s32 status = 0;
   u32 num_dumps = 0;
@@ -1449,10 +1449,10 @@ s32 FILE_SendSyxDump(char *path, mios32_midi_port_t port, u32 ms_delay_between_d
 	  break;
       }
 #if DEBUG_VERBOSE_LEVEL >= 2
-      MIOS32_MIDI_SendDebugHexDump(tmp_buffer, len);
+      ADIOS_MIDI_SendDebugHexDump(tmp_buffer, len);
 #endif
       ++num_dumps;
-#ifndef MIOS32_FAMILY_EMULATION
+#ifndef ADIOS_FAMILY_EMULATION
       if( ms_delay_between_dumps > 0 && num_dumps > 1 ) {
 	// insert delay between the Syx dumps
 	vTaskDelay(ms_delay_between_dumps);
@@ -1460,7 +1460,7 @@ s32 FILE_SendSyxDump(char *path, mios32_midi_port_t port, u32 ms_delay_between_d
       }
 #endif
 
-      MIOS32_MIDI_SendSysEx(port, tmp_buffer, len);
+      ADIOS_MIDI_SendSysEx(port, tmp_buffer, len);
       num_bytes += len;
 
       if( len != successcount ) {
@@ -1596,8 +1596,8 @@ static s32 FILE_CreateTarHeader(char *filename, char *src_path, u8 is_dir, u32 f
   //strcpy(header->linkname, "");
   strcpy(header->magic, "ustar");
   strcpy(header->version, "00");
-  strcpy(header->uname, "mios32");
-  strcpy(header->gname, "mios32");
+  strcpy(header->uname, "adios");
+  strcpy(header->gname, "adios");
   strcat(header->devmajor, "000000 ");
   strcpy(header->devminor, "000000 ");
   //strcpy(header->prefix, "");
@@ -1777,8 +1777,8 @@ s32 FILE_PrintSDCardInfos(void)
   int status = 0;
 
   // read CID data
-  mios32_sdcard_cid_t cid;
-  if( (status=MIOS32_SDCARD_CIDRead(&cid)) < 0 ) {
+  adios_sdcard_cid_t cid;
+  if( (status=ADIOS_SDCARD_CIDRead(&cid)) < 0 ) {
     DEBUG_MSG("ERROR: Reading CID failed with status %d!\n", status);
     // continue regardless if we got an error or not...
   } else {
@@ -1798,8 +1798,8 @@ s32 FILE_PrintSDCardInfos(void)
 
 
   // read CSD data
-  mios32_sdcard_csd_t csd;
-  if( (status=MIOS32_SDCARD_CSDRead(&csd)) < 0 ) {
+  adios_sdcard_csd_t csd;
+  if( (status=ADIOS_SDCARD_CSDRead(&csd)) < 0 ) {
     DEBUG_MSG("ERROR: Reading CSD failed with status %d!\n", status);
     // continue regardless if we got an error or not...
   } else {
@@ -1893,9 +1893,9 @@ s32 FILE_SendErrorMessage(s32 error_status)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Handler for MIOS Studio Filebrowser accesses.\n
-//! See $MIOS32_PATH/apps/controllers/midio128/src/terminal.c for usage example.
+//! See $ADIOS_PATH/apps/controllers/midio128/src/terminal.c for usage example.
 /////////////////////////////////////////////////////////////////////////////
-s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
+s32 FILE_BrowserHandler(adios_midi_port_t port, char *command)
 {
   s32 status = 0;
   char *separators = " ";
@@ -1907,7 +1907,7 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
   if( (parameter = strtok_r(command, separators, &brkt)) ) {
     if( strcmp(parameter, "dir") == 0 ) {
       command_taken = 1;
-      status |= MIOS32_MIDI_SendDebugStringHeader(port, 0x41, (u8)'D');
+      status |= ADIOS_MIDI_SendDebugStringHeader(port, 0x41, (u8)'D');
 
       char *path = (char *)&command[4];
       s32 status = 0;
@@ -1915,10 +1915,10 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
       FILINFO de;
 
       if( !volume_available ) {
-	status |= MIOS32_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
+	status |= ADIOS_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
       } else {
 	if( f_opendir(&di, path) != FR_OK ) {
-	  status |= MIOS32_MIDI_SendDebugStringBody(port, "-", 1); // failed to access directory
+	  status |= ADIOS_MIDI_SendDebugStringBody(port, "-", 1); // failed to access directory
 	} else {
 	  while( status == 0 && f_readdir(&di, &de) == FR_OK && de.fname[0] != 0 ) {
 	    if( de.fname[0] && de.fname[0] != '.' && !(de.fattrib & AM_HID) ) {
@@ -1926,7 +1926,7 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
 	      str[0] = ',';
 	      str[1] = (de.fattrib & AM_DIR) ? 'D' : 'F';
 	      strcpy((char *)&str[2], (char *)&de.fname[0]);
-	      status |= MIOS32_MIDI_SendDebugStringBody(port, str, strlen(str));
+	      status |= ADIOS_MIDI_SendDebugStringBody(port, str, strlen(str));
 	    }
 	  }
 	}
@@ -1934,58 +1934,58 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
 
     } else if( strcmp(parameter, "mkdir") == 0 ) {
       command_taken = 1;
-      status |= MIOS32_MIDI_SendDebugStringHeader(port, 0x41, (u8)'M');
+      status |= ADIOS_MIDI_SendDebugStringHeader(port, 0x41, (u8)'M');
 
       char *path = (char *)&command[6];
       s32 status = 0;
 
       if( !volume_available ) {
-	status |= MIOS32_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
+	status |= ADIOS_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
       } else {
 	if( FILE_MakeDir(path) < 0 ) {
-	  status |= MIOS32_MIDI_SendDebugStringBody(port, "-", 1); // failed to create directory
+	  status |= ADIOS_MIDI_SendDebugStringBody(port, "-", 1); // failed to create directory
 	} else {
-	  status |= MIOS32_MIDI_SendDebugStringBody(port, "#", 1); // success
+	  status |= ADIOS_MIDI_SendDebugStringBody(port, "#", 1); // success
 	}
       }
 
     } else if( strcmp(parameter, "del") == 0 ) {
       command_taken = 1;
-      status |= MIOS32_MIDI_SendDebugStringHeader(port, 0x41, (u8)'X');
+      status |= ADIOS_MIDI_SendDebugStringHeader(port, 0x41, (u8)'X');
 
       char *path = (char *)&command[4];
       s32 status = 0;
 
       if( !volume_available ) {
-	status |= MIOS32_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
+	status |= ADIOS_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
       } else {
 	if( FILE_Remove(path) < 0 ) {
-	  status |= MIOS32_MIDI_SendDebugStringBody(port, "-", 1); // failed to remove file/directory
+	  status |= ADIOS_MIDI_SendDebugStringBody(port, "-", 1); // failed to remove file/directory
 	} else {
-	  status |= MIOS32_MIDI_SendDebugStringBody(port, "#", 1); // success
+	  status |= ADIOS_MIDI_SendDebugStringBody(port, "#", 1); // success
 	}
       }
 
     } else if( strcmp(parameter, "read") == 0 ) {
       command_taken = 1;
-      status |= MIOS32_MIDI_SendDebugStringHeader(port, 0x41, (u8)'R');
+      status |= ADIOS_MIDI_SendDebugStringHeader(port, 0x41, (u8)'R');
 
       if( !volume_available ) {
-	status |= MIOS32_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
+	status |= ADIOS_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
       } else {
 	file_t file;
 	char *filepath = brkt;
 
 	if( FILE_ReadOpen(&file, filepath) < 0 ) {
-	  status |= MIOS32_MIDI_SendDebugStringBody(port, "-", 1); // can't access file
+	  status |= ADIOS_MIDI_SendDebugStringBody(port, "-", 1); // can't access file
 	} else {
 	  char str[64 + 20]; // at least 8 bytes address + space + 32*2 bytes payload
 	  u32 len = FILE_ReadGetCurrentSize();
 	  sprintf(str, "%d", len);
-	  status |= MIOS32_MIDI_SendDebugStringBody(port, str, strlen(str));
+	  status |= ADIOS_MIDI_SendDebugStringBody(port, str, strlen(str));
 
 	  if( len ) {
-	    status |= MIOS32_MIDI_SendDebugStringFooter(port);
+	    status |= ADIOS_MIDI_SendDebugStringFooter(port);
 	    send_footer = 0; // done
 
 	    // send 32 byte blocks
@@ -2000,7 +2000,7 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
 	      }
 
 
-	      status |= MIOS32_MIDI_SendDebugStringHeader(port, 0x41, (u8)'r');
+	      status |= ADIOS_MIDI_SendDebugStringHeader(port, 0x41, (u8)'r');
 	      sprintf(str_ptr, "%08X ", pos);
 	      str_ptr += 9;
 
@@ -2011,8 +2011,8 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
 		sprintf(str_ptr, "%02X", b);
 		str_ptr += 2;
 	      }
-	      status |= MIOS32_MIDI_SendDebugStringBody(port, str, strlen(str));
-	      status |= MIOS32_MIDI_SendDebugStringFooter(port);
+	      status |= ADIOS_MIDI_SendDebugStringBody(port, str, strlen(str));
+	      status |= ADIOS_MIDI_SendDebugStringFooter(port);
 	    }
 	    DEBUG_MSG("[FILE] Download of %d bytes finished.", len);
 	  }
@@ -2022,7 +2022,7 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
       }
     } else if( strcmp(parameter, "write") == 0 ) {
       command_taken = 1;
-      status |= MIOS32_MIDI_SendDebugStringHeader(port, 0x41, (u8)'W');
+      status |= ADIOS_MIDI_SendDebugStringHeader(port, 0x41, (u8)'W');
       u8 parameters_valid = 1;
 
 
@@ -2045,21 +2045,21 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
       }
 
       if( !parameters_valid ) {
-	status |= MIOS32_MIDI_SendDebugStringBody(port, "~", 1); // missing or invalid parameter
+	status |= ADIOS_MIDI_SendDebugStringBody(port, "~", 1); // missing or invalid parameter
       } else {
 	browser_write_file_pos = 0;
 
 	// try to open file
 	if( !volume_available ) {
-	  status |= MIOS32_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
+	  status |= ADIOS_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
 	} else {
 	  FILE_WriteClose(); // just to ensure...
 	  if( FILE_WriteOpen(filename, 1) < 0 ) {
-	    status |= MIOS32_MIDI_SendDebugStringBody(port, "-", 1); // failed to open file
+	    status |= ADIOS_MIDI_SendDebugStringBody(port, "-", 1); // failed to open file
 	  } else {
 	    // initial request
-	    status |= MIOS32_MIDI_SendDebugStringBody(port, "00000000", 8);
-	    status |= MIOS32_MIDI_SendDebugStringFooter(port);
+	    status |= ADIOS_MIDI_SendDebugStringBody(port, "00000000", 8);
+	    status |= ADIOS_MIDI_SendDebugStringFooter(port);
 	    send_footer = 0;
 
 	    DEBUG_MSG("[FILE] Uploading %s with %d bytes\n", filename, browser_write_file_size);
@@ -2071,7 +2071,7 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
       }
     } else if( strcmp(parameter, "writedata") == 0 ) {
       command_taken = 1;
-      status |= MIOS32_MIDI_SendDebugStringHeader(port, 0x41, (u8)'W');
+      status |= ADIOS_MIDI_SendDebugStringHeader(port, 0x41, (u8)'W');
       u8 parameters_valid = 1;
 
       u32 address_offset = 0;
@@ -2088,10 +2088,10 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
       }
 
       if( !parameters_valid || address_offset != browser_write_file_pos ) {
-	status |= MIOS32_MIDI_SendDebugStringBody(port, "~", 1); // missing or invalid parameter
+	status |= ADIOS_MIDI_SendDebugStringBody(port, "~", 1); // missing or invalid parameter
       } else {
 	if( !volume_available ) {
-	  status |= MIOS32_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
+	  status |= ADIOS_MIDI_SendDebugStringBody(port, "!", 1); // SD Card not mounted
 	} else {
 
 	  char *str_ptr = brkt;
@@ -2120,8 +2120,8 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
 	  browser_write_file_pos += num_bytes;
 	  if( browser_write_file_pos >= browser_write_file_size ) {
 	    FILE_WriteClose();
-	    status |= MIOS32_MIDI_SendDebugStringBody(port, "#", 1); // done
-	    status |= MIOS32_MIDI_SendDebugStringFooter(port);
+	    status |= ADIOS_MIDI_SendDebugStringBody(port, "#", 1); // done
+	    status |= ADIOS_MIDI_SendDebugStringFooter(port);
 	    send_footer = 0;
 
 	    DEBUG_MSG("[FILE] Upload of %d bytes finished.", browser_write_file_size);
@@ -2132,8 +2132,8 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
 	    // next request
 	    char str[20];
 	    sprintf(str, "%08X", browser_write_file_pos);
-	    status |= MIOS32_MIDI_SendDebugStringBody(port, str, strlen(str));
-	    status |= MIOS32_MIDI_SendDebugStringFooter(port);
+	    status |= ADIOS_MIDI_SendDebugStringBody(port, str, strlen(str));
+	    status |= ADIOS_MIDI_SendDebugStringFooter(port);
 	    send_footer = 0;
 
 	    if( (browser_write_file_pos % (320*32)) == 0 ) {
@@ -2146,11 +2146,11 @@ s32 FILE_BrowserHandler(mios32_midi_port_t port, char *command)
   }
 
   if( !command_taken ) {
-    status |= MIOS32_MIDI_SendDebugStringHeader(port, 0x41, (u8)'?');
+    status |= ADIOS_MIDI_SendDebugStringHeader(port, 0x41, (u8)'?');
   }
 
   if( send_footer ) {
-    status |= MIOS32_MIDI_SendDebugStringFooter(port);
+    status |= ADIOS_MIDI_SendDebugStringFooter(port);
   }
 
   return status;

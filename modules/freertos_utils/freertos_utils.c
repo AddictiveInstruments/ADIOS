@@ -6,7 +6,7 @@
 //! http://www.freertos.org/index.html?http://www.freertos.org/rtos-run-time-stats.html
 //!
 //! In order to enable performance measurements, add following definitions to
-//! your mios32_config.h file:
+//! your adios_config.h file:
 //! \code
 //! #define configGENERATE_RUN_TIME_STATS           1
 //! #if configGENERATE_RUN_TIME_STATS
@@ -18,7 +18,7 @@
 //! Add following include statement to your Makefile:
 //! \code
 //! # For performance measurings
-//! include $(MIOS32_PATH)/modules/freertos_utils/freertos_utils.mk
+//! include $(ADIOS_PATH)/modules/freertos_utils/freertos_utils.mk
 //! \endcode
 //!
 //! Performance stats can be sent to the MIOS Terminal via:
@@ -62,7 +62,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <FreeRTOS.h>
 #include <portmacro.h>
 #include <task.h>
@@ -91,11 +91,11 @@ static u32 perf_counter;
 //! \code
 //! #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS FREERTOS_UTILS_PerfCounterInit
 //! \endcode
-//! to your mios32_config.h file
+//! to your adios_config.h file
 //!
 //! Optionally
 //! \code
-//! // which MIOS32 timer should be used for performance measurements (0..2)
+//! // which ADIOS timer should be used for performance measurements (0..2)
 //! #define FREERTOS_UTILS_PERF_TIMER 2
 //! 
 //! // at which interval should it be called (interval should be much less than 1 mS!)
@@ -110,7 +110,7 @@ s32 FREERTOS_UTILS_PerfCounterInit(void)
 #if configGENERATE_RUN_TIME_STATS == 0
   return -1; // configGENERATE_RUN_TIME_STATS not activated
 #else
-  return MIOS32_TIMER_Init(FREERTOS_UTILS_PERF_TIMER, FREERTOS_UTILS_PERF_TIMER_PERIOD, PerfTimerIRQ, MIOS32_IRQ_PRIO_HIGHEST);
+  return ADIOS_TIMER_Init(FREERTOS_UTILS_PERF_TIMER, FREERTOS_UTILS_PERF_TIMER_PERIOD, PerfTimerIRQ, ADIOS_IRQ_PRIO_HIGHEST);
 #endif
 }
 
@@ -120,7 +120,7 @@ s32 FREERTOS_UTILS_PerfCounterInit(void)
 //! \code
 //! #define portGET_RUN_TIME_COUNTER_VALUE FREERTOS_UTILS_PerfCounterGet
 //! \endcode
-//! to your mios32_config.h file
+//! to your adios_config.h file
 //! \return 32bit counter value
 /////////////////////////////////////////////////////////////////////////////
 u32 FREERTOS_UTILS_PerfCounterGet(void)
@@ -137,28 +137,28 @@ u32 FREERTOS_UTILS_PerfCounterGet(void)
 s32 FREERTOS_UTILS_RunTimeStats(void)
 {
 #if configGENERATE_RUN_TIME_STATS == 0 && configUSE_TRACE_FACILITY == 0
-  return MIOS32_MIDI_SendDebugString("configGENERATE_RUN_TIME_STATS and configUSE_TRACE_FACILITY not activated!\n");  
+  return ADIOS_MIDI_SendDebugString("configGENERATE_RUN_TIME_STATS and configUSE_TRACE_FACILITY not activated!\n");  
 #else
   signed char buffer[400];
   s32 status = 0;
 
 #if configGENERATE_RUN_TIME_STATS
   // print stats
-  status |= MIOS32_MIDI_SendDebugString("================================================\n");
-  status |= MIOS32_MIDI_SendDebugString("Task, Abs Time, %% Time\n");
+  status |= ADIOS_MIDI_SendDebugString("================================================\n");
+  status |= ADIOS_MIDI_SendDebugString("Task, Abs Time, %% Time\n");
   vTaskGetRunTimeStats(buffer);
   status |= FREERTOS_UTILS_PrintBuffer((char *)buffer);
 #endif
 
 #if configUSE_TRACE_FACILITY
   // print task list
-  status |= MIOS32_MIDI_SendDebugString("================================================\n");
-  status |= MIOS32_MIDI_SendDebugMessage("Task, Status, Priority, StackRemaining/%d, TCB Number\n", sizeof(portSTACK_TYPE));
+  status |= ADIOS_MIDI_SendDebugString("================================================\n");
+  status |= ADIOS_MIDI_SendDebugMessage("Task, Status, Priority, StackRemaining/%d, TCB Number\n", sizeof(portSTACK_TYPE));
   vTaskList(buffer);
   status |= FREERTOS_UTILS_PrintBuffer((char *)buffer);
 #endif
 
-  status |= MIOS32_MIDI_SendDebugString("================================================\n");
+  status |= ADIOS_MIDI_SendDebugString("================================================\n");
 
   return status;
 #endif
@@ -186,7 +186,7 @@ static s32 FREERTOS_UTILS_PrintBuffer(char *buffer)
     // terminate line
     *buffer_end = 0;
     // print line
-    status |= MIOS32_MIDI_SendDebugString(buffer_start);
+    status |= ADIOS_MIDI_SendDebugString(buffer_start);
     // continue with next line
     buffer_start = ++buffer_end;
     // until 0 was read

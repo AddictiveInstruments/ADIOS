@@ -1,7 +1,7 @@
-# MIOS32 (trunk_dyn_bsl)
+# ADIOS (trunk_dyn_bsl)
 
 Firmware "OS" for STM32-based instrument retrofits - MIDI-centric, derived
-from [MIOS32](http://www.ucapps.de/mios32.html), heavily
+from [ADIOS](http://www.ucapps.de/adios.html), heavily
 reworked: STM32G0xx + STM32F4xx families, LL-driver based, dynamic
 bootloader/app flash boundary, opt-in peripheral model, bare-metal or
 FreeRTOS scheduling tiers.
@@ -29,12 +29,12 @@ cd apps/Bruno/g030k6_test      # or any other app directory
 make
 ```
 
-An exported `MIOS32_PATH` (absolute path to the repo root, POSIX style -
-e.g. `/e/MIOS32/trunk_dyn_bsl` under MSYS) overrides the self-location if
+An exported `ADIOS_PATH` (absolute path to the repo root, POSIX style -
+e.g. `/e/ADIOS/trunk_dyn_bsl` under MSYS) overrides the self-location if
 you need to build an app that lives OUTSIDE the repo tree.
 
 Apps that opt into the dynamic bootloader mechanism
-(`MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1` in their Makefile) produce two
+(`ADIOS_USE_DYNAMIC_BSL_BOUNDARY = 1` in their Makefile) produce two
 deliverables in the app directory on every `make`:
 
 - `<app>_full_bsl_app.bin` - combined bootloader+app image, flash it at
@@ -64,7 +64,7 @@ build configuration is required:
 
 - `apps/` - one directory per application/instrument; each is the place you
   run `make` from
-- `mios32/` - the OS core: `common/` (family-independent) + one directory
+- `adios/` - the OS core: `common/` (family-independent) + one directory
   per chip family (`STM32G0xx/`, `STM32F4xx/`)
 - `core/` - `main.c` (FreeRTOS or bare-metal
   scheduling), shared build logic (`core.mk`)

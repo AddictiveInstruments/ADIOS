@@ -68,16 +68,16 @@ typedef union {
 
 extern s32 MIDIO_SYSEX_Init(u32 mode);
 
-extern s32 MIDIO_SYSEX_Parser(mios32_midi_port_t port, u8 midi_in);
+extern s32 MIDIO_SYSEX_Parser(adios_midi_port_t port, u8 midi_in);
 
-extern s32 MIDIO_SYSEX_TimeOut(mios32_midi_port_t port);
+extern s32 MIDIO_SYSEX_TimeOut(adios_midi_port_t port);
 extern s32 MIDIO_SYSEX_TimeOut_Period(void);
 
 extern s32 MIDIO_SYSEX_Cmd_WriteInfoRequest(void);
 extern s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void);
-extern s32 MIDIO_SYSEX_Send_Info(mios32_midi_port_t port);
-extern s32 MIDIO_SYSEX_Send_UploadReq(mios32_midi_port_t port);
-extern s32 MIDIO_SYSEX_Send_Block(mios32_midi_port_t port);
+extern s32 MIDIO_SYSEX_Send_Info(adios_midi_port_t port);
+extern s32 MIDIO_SYSEX_Send_UploadReq(adios_midi_port_t port);
+extern s32 MIDIO_SYSEX_Send_Block(adios_midi_port_t port);
 
 extern u8 MIDIO_SYSEX_Act(void);
 extern s8 MIDIO_SYSEX_Bank_Progression(void);

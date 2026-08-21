@@ -5,7 +5,7 @@
 /* disk I/O modules and attach it to FatFs module with common interface. */
 /*-----------------------------------------------------------------------*/
 
-#include "mios32.h" // Needed for mios32_sdcard_csd_t
+#include "adios.h" // Needed for adios_sdcard_csd_t
 #include "diskio.h"
 
 // TK: defined in integer.h as bool - alternative enum here
@@ -14,7 +14,7 @@
 #define TRUE 1
 
 /////////////////////////////////////////////////////////////////////////////
-// for optional debugging messages via DEBUG_MSG (defined in mios32_config.h)
+// for optional debugging messages via DEBUG_MSG (defined in adios_config.h)
 /////////////////////////////////////////////////////////////////////////////
 
 // Note: verbose level 1 is default - it prints error messages
@@ -41,13 +41,13 @@ DSTATUS disk_initialize (
     // we assume that it has been initialized by application
     sdcard_sector_count = 0xffffffff; // TODO
 #if DEBUG_VERBOSE_LEVEL >= 2
-    MIOS32_MIDI_SendDebugMessage("[disk_init] size = %u\n", sdcard_sector_count);
+    ADIOS_MIDI_SendDebugMessage("[disk_init] size = %u\n", sdcard_sector_count);
 #endif
 
     int status;
-    if( (status=MIOS32_SDCARD_CheckAvailable(1)) < 1 ) {
+    if( (status=ADIOS_SDCARD_CheckAvailable(1)) < 1 ) {
 #if DEBUG_VERBOSE_LEVEL >= 1
-      MIOS32_MIDI_SendDebugMessage("[disk_initialize] error while checking for SD Card (status %d)\n", status);
+      ADIOS_MIDI_SendDebugMessage("[disk_initialize] error while checking for SD Card (status %d)\n", status);
 #endif
       return STA_NODISK;
     }
@@ -69,7 +69,7 @@ DSTATUS disk_status (
 {
   if( drv == SDCARD ) {
     // we assume that SD Card is always available until Read/Write operation fails
-    // we don't use MIOS32_SDCARD_CheckAvailable() here, since the status is checked very frequently!
+    // we don't use ADIOS_SDCARD_CheckAvailable() here, since the status is checked very frequently!
     return 0;
   }
 
@@ -93,17 +93,17 @@ DRESULT disk_read (
 
     for(i=0; i<count; ++i) {
 #if DEBUG_VERBOSE_LEVEL >= 2
-      MIOS32_MIDI_SendDebugMessage("[disk_read] sector %d (#%d/%d)\n", sector+i, i+1, count);
+      ADIOS_MIDI_SendDebugMessage("[disk_read] sector %d (#%d/%d)\n", sector+i, i+1, count);
 #endif
 
-      if( MIOS32_SDCARD_SectorRead(sector + i, buff + i*512) < 0 ) {
+      if( ADIOS_SDCARD_SectorRead(sector + i, buff + i*512) < 0 ) {
 #if DEBUG_VERBOSE_LEVEL >= 1
-	MIOS32_MIDI_SendDebugMessage("[disk_read] error while reading sector %d\n", sector+i);
+	ADIOS_MIDI_SendDebugMessage("[disk_read] error while reading sector %d\n", sector+i);
 #endif
 	return RES_ERROR;
       } else {
 #if DEBUG_VERBOSE_LEVEL >= 3
-	MIOS32_MIDI_SendDebugMessage("[disk_read] sector %d (#%d/%d) finished\n", sector+i, i+1, count);
+	ADIOS_MIDI_SendDebugMessage("[disk_read] sector %d (#%d/%d) finished\n", sector+i, i+1, count);
 #endif
       }
     }
@@ -132,16 +132,16 @@ DRESULT disk_write (
 
     for(i=0; i<count; ++i) {
 #if DEBUG_VERBOSE_LEVEL >= 2
-      MIOS32_MIDI_SendDebugMessage("[disk_write] sector %d (#%d/%d)\n", sector+i, i+1, count);
+      ADIOS_MIDI_SendDebugMessage("[disk_write] sector %d (#%d/%d)\n", sector+i, i+1, count);
 #endif
-      if( MIOS32_SDCARD_SectorWrite(sector + i, (u8 *)buff + 512*i) < 0 ) {
+      if( ADIOS_SDCARD_SectorWrite(sector + i, (u8 *)buff + 512*i) < 0 ) {
 #if DEBUG_VERBOSE_LEVEL >= 1
-	MIOS32_MIDI_SendDebugMessage("[disk_write] error while writing to sector %d\n", sector+i);
+	ADIOS_MIDI_SendDebugMessage("[disk_write] error while writing to sector %d\n", sector+i);
 #endif
 	return RES_ERROR;
       } else {
 #if DEBUG_VERBOSE_LEVEL >= 3
-      MIOS32_MIDI_SendDebugMessage("[disk_write] sector %d (#%d/%d) finished\n", sector+i, i+1, count);
+      ADIOS_MIDI_SendDebugMessage("[disk_write] sector %d (#%d/%d) finished\n", sector+i, i+1, count);
 #endif
       }
     }
@@ -171,7 +171,7 @@ DRESULT disk_ioctl (
   res = RES_ERROR;
 
   if( drv == SDCARD ) {
-    mios32_sdcard_csd_t csd; /* Buffer to hold CSD */
+    adios_sdcard_csd_t csd; /* Buffer to hold CSD */
     switch( ctrl ) {
     case CTRL_SYNC: /* Mandatory for write functions */
       // Make sure that the disk drive has finished pending write process.
@@ -184,7 +184,7 @@ DRESULT disk_ioctl (
       // Returns total sectors on the drive into the DWORD variable pointed by Buffer.
       // This command is used in only f_mkfs function.
       //*(DWORD*)buff = sdcard_sector_count;
-	  MIOS32_SDCARD_CSDRead(&csd);
+	  ADIOS_SDCARD_CSDRead(&csd);
 	  u32 sectors;
 	  if (csd.CSDStruct==1) // SD V2 
   	    sectors = (DWORD)(csd.DeviceSize + 1) << 10;
@@ -194,16 +194,16 @@ DRESULT disk_ioctl (
 	  *(DWORD*)buff=sectors;
       res= RES_OK;
 #if DEBUG_VERBOSE_LEVEL >= 1
-      MIOS32_MIDI_SendDebugMessage("[GET_SECTOR_COUNT] Count is %d\n", sectors);
+      ADIOS_MIDI_SendDebugMessage("[GET_SECTOR_COUNT] Count is %d\n", sectors);
 #endif
 	  break;
     case GET_SECTOR_SIZE: /* Mandatory for multiple sector size cfg */
       // Returns sector size of the drive into the WORD variable pointed by Buffer.
       // This command is not required in single sector size configuration, _MAX_SS is 512.
 #if _MAX_SS
-      *(DWORD*)buff = 512; // only single size supported by MIOS32
+      *(DWORD*)buff = 512; // only single size supported by ADIOS
 #if DEBUG_VERBOSE_LEVEL >= 1
-      MIOS32_MIDI_SendDebugMessage("[GET_SECTOR_SIZE] Sector Size is %d\n", 512);
+      ADIOS_MIDI_SendDebugMessage("[GET_SECTOR_SIZE] Sector Size is %d\n", 512);
 #endif
 
       res = RES_OK;
@@ -216,7 +216,7 @@ DRESULT disk_ioctl (
       // Returns erase block size of the memory array in unit of sector into the DWORD variable
       // pointed by Buffer. When the erase block size is unknown or magnetic disk device, 
       // return 1. This command is used in only f_mkfs function.
-	  MIOS32_SDCARD_CSDRead(&csd);
+	  ADIOS_SDCARD_CSDRead(&csd);
 	  u32 size;
 	  if (csd.CSDStruct==1){  // SD V2
 		// Some SDHC cards seem to report block size differently.
@@ -232,7 +232,7 @@ DRESULT disk_ioctl (
 	  *(DWORD*)buff = size;
 	  
 #if DEBUG_VERBOSE_LEVEL >= 1
-      MIOS32_MIDI_SendDebugMessage("[GET_BLOCK_SIZE] Block Size is %d\n", size);
+      ADIOS_MIDI_SendDebugMessage("[GET_BLOCK_SIZE] Block Size is %d\n", size);
 #endif
 	  break;
 

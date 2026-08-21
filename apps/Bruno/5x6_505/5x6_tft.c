@@ -22,12 +22,12 @@
 #define TFT_RST_PORT        GPIOB
 #define TFT_RST_PIN         LL_GPIO_PIN_0
 
-#define CS_ENA() 		MIOS32_SYS_STM_PINSET_0(TFT_PORT, TFT_CS)
-#define CS_DIS() 		MIOS32_SYS_STM_PINSET_1(TFT_PORT, TFT_CS)
-#define DC_COMMAND() 	MIOS32_SYS_STM_PINSET_0(TFT_PORT, TFT_DC)
-#define DC_DATA() 		MIOS32_SYS_STM_PINSET_1(TFT_PORT, TFT_DC)
-#define IDLE() 			MIOS32_SYS_STM_PINSET_1(TFT_RST_PORT, TFT_RST_PIN)
-#define RST() 			MIOS32_SYS_STM_PINSET_0(TFT_RST_PORT, TFT_RST_PIN)
+#define CS_ENA() 		ADIOS_SYS_STM_PINSET_0(TFT_PORT, TFT_CS)
+#define CS_DIS() 		ADIOS_SYS_STM_PINSET_1(TFT_PORT, TFT_CS)
+#define DC_COMMAND() 	ADIOS_SYS_STM_PINSET_0(TFT_PORT, TFT_DC)
+#define DC_DATA() 		ADIOS_SYS_STM_PINSET_1(TFT_PORT, TFT_DC)
+#define IDLE() 			ADIOS_SYS_STM_PINSET_1(TFT_RST_PORT, TFT_RST_PIN)
+#define RST() 			ADIOS_SYS_STM_PINSET_0(TFT_RST_PORT, TFT_RST_PIN)
 
 #define swap(a, b) { s16 t = a; a = b; b = t; }
 #define pgm_read_byte(addr) (*(const unsigned char *)(addr))
@@ -329,24 +329,24 @@ void TFT_Init()
 	IDLE();
 	// initialize SPI interface
 	// ensure that fast pin drivers are activated
-	MIOS32_SPI_IO_Init(TFT_SPI, MIOS32_SPI_PIN_DRIVER_STRONG);
+	ADIOS_SPI_IO_Init(TFT_SPI, ADIOS_SPI_PIN_DRIVER_STRONG);
 
 	// init SPI port
-	MIOS32_SPI_TransferModeInit(TFT_SPI, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_8);
+	ADIOS_SPI_TransferModeInit(TFT_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_8);
 
 
-	for(u16 d=0; d<2500; d++)MIOS32_DELAY_Wait_uS(1000);
+	for(u16 d=0; d<2500; d++)ADIOS_DELAY_Wait_uS(1000);
 	CS_DIS();
 	width=TFT_WIDTH;
 	height=TFT_HEIGHT;
 
 	//************* Start Initial Sequence **********//
 	RST();
-	MIOS32_DELAY_Wait_uS(10000);
+	ADIOS_DELAY_Wait_uS(10000);
 	IDLE();
-	for(u16 d=0; d<10; d++)MIOS32_DELAY_Wait_uS(1000);
+	for(u16 d=0; d<10; d++)ADIOS_DELAY_Wait_uS(1000);
 	TFT_SendCommand(0x01);
-	for(u16 d=0; d<120; d++)MIOS32_DELAY_Wait_uS(1000);
+	for(u16 d=0; d<120; d++)ADIOS_DELAY_Wait_uS(1000);
 	TFT_SendCommand(0xF7);
 	TFT_SendData(0xA9);
 	TFT_SendData(0x51);
@@ -434,15 +434,15 @@ void TFT_Init()
 	TFT_SendData(0x0F);
 
 	TFT_SendCommand(0x11);
-	for(u8 d=0; d<120; d++)MIOS32_DELAY_Wait_uS(1000);
+	for(u8 d=0; d<120; d++)ADIOS_DELAY_Wait_uS(1000);
 	TFT_SendCommand(0x29);
 	//TFT_SendCommand(0x23);      // Adjust Control
 	TFT_SetRotation(1);
 
 	TFT_FillRect(0, 0, 480, 320, ILI9488_BLACK);
-	for(u8 d=0; d<250; d++)MIOS32_DELAY_Wait_uS(1000);
-	MIOS32_SYS_STM_PINSET_1(TFT_PORT, TFT_LITE);
-	//MIOS32_SYS_STM_PINSET_1(TFT_PORT, TFT_LITE);
+	for(u8 d=0; d<250; d++)ADIOS_DELAY_Wait_uS(1000);
+	ADIOS_SYS_STM_PINSET_1(TFT_PORT, TFT_LITE);
+	//ADIOS_SYS_STM_PINSET_1(TFT_PORT, TFT_LITE);
 
 }
 
@@ -450,7 +450,7 @@ void TFT_SendCommand(u8 com)
 {
 	DC_COMMAND();
 	CS_ENA();
-	MIOS32_SPI_TransferByte(TFT_SPI, com);
+	ADIOS_SPI_TransferByte(TFT_SPI, com);
 	CS_DIS();
 }
 
@@ -459,7 +459,7 @@ void TFT_SendData(u8 data)
 {
 	DC_DATA();
 	CS_ENA();
-	MIOS32_SPI_TransferByte(TFT_SPI, data);
+	ADIOS_SPI_TransferByte(TFT_SPI, data);
 	CS_DIS();
 }
 
@@ -470,8 +470,8 @@ void TFT_SendData_Multi(u8 *buff, size_t buff_size){
 	while (buff_size > 0){
 		u16 chunk_size = buff_size > 256 ? 256 : buff_size;
 		//HAL_SPI_Transmit(&hspi2, buff, chunk_size, HAL_MAX_DELAY);
-		//MIOS32_SPI_TransferByte(TFT_SPI, *buff);
-		MIOS32_SPI_TransferBlock(TFT_SPI, buff, NULL, chunk_size, NULL);
+		//ADIOS_SPI_TransferByte(TFT_SPI, *buff);
+		ADIOS_SPI_TransferBlock(TFT_SPI, buff, NULL, chunk_size, NULL);
 		buff += chunk_size;
 		buff_size -= chunk_size;
 	}
@@ -672,7 +672,7 @@ void TFT_SendFastPixels(s32 n, u16 color)
 	while(cnt>0)
 	{
 		// HAL_SPI_Transmit(&hspi2, frm_buf, buf_size, HAL_MAX_DELAY);
-		MIOS32_SPI_TransferBlock(TFT_SPI, frm_buf, NULL, buf_size, NULL);
+		ADIOS_SPI_TransferBlock(TFT_SPI, frm_buf, NULL, buf_size, NULL);
 		cnt -= 1;
 	}
 	CS_DIS();

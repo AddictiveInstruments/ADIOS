@@ -23,7 +23,7 @@
 
 
 /* Includes ------------------------------------------------------------------*/
-#include <mios32.h>
+#include <adios.h>
 
 /* Defines ------------------------------------------------------------------*/
 /* sound datas ROM */
@@ -38,23 +38,23 @@
 /* names, colors and misc ROM */
 #define TR5X6_FLASH_PAGE_SIZE 0x800	// 2K
 // We use the last 4 pages of the internal flash as ROM, 8K
-#define TR5X6_FLASH_START_ADDR  (0x08000000 + MIOS32_SYS_FlashSizeGet() - 0x2000)	//0x0801E000
-#define TR5X6_FLASH_END_ADDR    (0x08000000 + MIOS32_SYS_FlashSizeGet() - 1)		//0x0801FFFF
-#define TR5X6_FLASH_PAGE_BASE	((MIOS32_SYS_FlashSizeGet() - 0x2000)/TR5X6_FLASH_PAGE_SIZE)	// 2K
+#define TR5X6_FLASH_START_ADDR  (0x08000000 + ADIOS_SYS_FlashSizeGet() - 0x2000)	//0x0801E000
+#define TR5X6_FLASH_END_ADDR    (0x08000000 + ADIOS_SYS_FlashSizeGet() - 1)		//0x0801FFFF
+#define TR5X6_FLASH_PAGE_BASE	((ADIOS_SYS_FlashSizeGet() - 0x2000)/TR5X6_FLASH_PAGE_SIZE)	// 2K
 
 /* System fields of the LAST page, anchored at its END rather than on the bank
    structure above them. That anchoring is what makes the same positions valid
    for the 505 (112 bytes of bank info per page) and the 626 (56), and for
    whatever a future variant lays out below.
-   The top TWO bytes are NOT ours: MIOS32_DEVICE_ID_PERSIST keeps its record in
+   The top TWO bytes are NOT ours: ADIOS_DEVICE_ID_PERSIST keeps its record in
    the last two bytes of flash - the one address a bootloader finds without
-   being told anything by the application (include/mios32/mios32_sys.h). Ours
+   being told anything by the application (include/adios/adios_sys.h). Ours
    moved down by two to make room, which is why a machine formatted by an older
    firmware needs the one-shot migration app before running this one. */
 #define TR5X6_FLASH_SYS_BANK_OFS		0x7FC	/* current bank  (was 0x7FE) */
 #define TR5X6_FLASH_SYS_MAGIC_OFS		0x7FD	/* magic number  (was 0x7FF) */
-#define TR5X6_FLASH_SYS_ID_CONFIRM_OFS	0x7FE	/* MIOS32's, 0x42 marker     */
-#define TR5X6_FLASH_SYS_ID_OFS			0x7FF	/* MIOS32's, the device ID   */
+#define TR5X6_FLASH_SYS_ID_CONFIRM_OFS	0x7FE	/* ADIOS's, 0x42 marker     */
+#define TR5X6_FLASH_SYS_ID_OFS			0x7FF	/* ADIOS's, the device ID   */
 #define TR5X6_FLASH_MAGIC_ADDR			(TR5X6_FLASH_END_ADDR - 2)
 
 
@@ -178,7 +178,7 @@ extern s32 TR5X6_FLASH_Slot_Write(tr5x6_flash_info_t slot);
 extern s32 TR5X6_FLASH_Bank_Write(tr5x6_flash_info_t slot);
 extern s32 TR5X6_ROM_BankStore(u8 bank);
 /* persists the SysEx device ID in the last page's system fields, so that
-   MIOS32 finds it at the next power-up - and so does the bootloader */
+   ADIOS finds it at the next power-up - and so does the bootloader */
 extern s32 TR5X6_ROM_DeviceIDStore(u8 device_id);
 extern u8 TR5X6_ROM_BankRecall(void);
 #if TR5X6_UNIT_SELECT==626

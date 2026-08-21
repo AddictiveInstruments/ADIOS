@@ -2,7 +2,7 @@
 #define SAM_H
 
 #ifndef DEBUG_MSG
-#define DEBUG_MSG MIOS32_MIDI_SendDebugMessage
+#define DEBUG_MSG ADIOS_MIDI_SendDebugMessage
 #endif
 #ifndef DEBUG_VERBOSE_LEVEL
 #define DEBUG_VERBOSE_LEVEL 0

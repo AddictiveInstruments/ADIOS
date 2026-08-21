@@ -17,7 +17,7 @@
 // Global definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// which MIOS32 timer should be used for performance measurements (0..2)
+// which ADIOS timer should be used for performance measurements (0..2)
 #ifndef FREERTOS_UTILS_PERF_TIMER
 #define FREERTOS_UTILS_PERF_TIMER 2
 #endif

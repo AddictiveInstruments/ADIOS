@@ -2,7 +2,7 @@
 ##################################################################################################
 # This perl script generates an include file which contains the BSL code
 # Usage:   perl gen_inc_file.pl <bin-file> <inc-file> <array-name>
-# Example: perl gen_inc_file.pl project.bin mios32_bsl_test.inc mios32_bsl_test_image
+# Example: perl gen_inc_file.pl project.bin adios_bsl_test.inc adios_bsl_test_image
 ##################################################################################################
 
 use Fcntl;
@@ -18,7 +18,7 @@ GetOptions (
 
 if( scalar(@ARGV) != 4 ) {
   die "Usage:   perl gen_inc_file.pl <bin-file> <inc-file> <array-name> <code-section> [-reduced_bsl] [-size=<bytes>]\n" .
-      "Example: perl gen_inc_file.pl project.bin mios32_bsl_test.inc mios32_bsl_test_code mios32_bsl\n";
+      "Example: perl gen_inc_file.pl project.bin adios_bsl_test.inc adios_bsl_test_code adios_bsl\n";
 }
 
 my ($bin_file, $inc_file, $array_name, $code_section) = @ARGV;
@@ -45,10 +45,10 @@ open(OUT, ">${inc_file}") || die "ERROR: cannot open '${inc_file}'!\n";
 printf OUT "// generated with '$0 " . join(" ", @ARGV) . "'\n\n";
 printf OUT "${array_declaration} ${array_name}[${dump_size}] = {\n", $len;
 my $line = "";
-# MIOS32_SYS_ADDR_FASTBOOT_CONFIRM / MIOS32_SYS_ADDR_FASTBOOT: last 256 bytes
-# before the boundary (MIOS32_SYS_ADDR_BSL_INFO_BEGIN + 0xd2/0xd3), relative
+# ADIOS_SYS_ADDR_FASTBOOT_CONFIRM / ADIOS_SYS_ADDR_FASTBOOT: last 256 bytes
+# before the boundary (ADIOS_SYS_ADDR_BSL_INFO_BEGIN + 0xd2/0xd3), relative
 # to $dump_size so this stays correct for any computed boundary, not just the
-# historical fixed 0x2800 (see include/mios32/mios32_sys.h)
+# historical fixed 0x2800 (see include/adios/adios_sys.h)
 my $fastboot_confirm_offset = $dump_size - 0x2e;
 my $fastboot_offset = $dump_size - 0x2d;
 for($i=0; $i<$dump_size; ++$i) {

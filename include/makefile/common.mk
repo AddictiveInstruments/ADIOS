@@ -4,7 +4,7 @@
 #   - FAMILY    e.g.: STM32G0xx
 #   - BOARD     e.g.: STM32G070CB
 #   - LCD       e.g.: clcd
-#   - LD_FILE   e.g.: $(MIOS32_PATH)/etc/ld/$(FAMILY)/$(PROCESSOR).ld
+#   - LD_FILE   e.g.: $(ADIOS_PATH)/etc/ld/$(FAMILY)/$(PROCESSOR).ld
 #   - PROJECT   e.g.: project   # (.lst, .hex, .map, etc... will be added automatically)
 #   - THUMB_SOURCE e.g.: main.c (.c only)
 #   - THUMB_CPP_SOURCE e.g.: main.cp (.cpp only)
@@ -16,26 +16,26 @@
 #   - A_INCLUDE     same for assembly code
 #   - DIST      e.g.: ./
 #
-# Modules can be added by including .mk files from $MIOS32_PATH/modules/*/*.mk
+# Modules can be added by including .mk files from $ADIOS_PATH/modules/*/*.mk
 #
 
-# if MIOS32_SHELL environment variable hasn't been set by the user, set it here
-# Ubuntu users should set it to /bin/bash from external (-> "export MIOS32_SHELL /bin/bash")
-MIOS32_SHELL ?= sh
-export MIOS32_SHELL
+# if ADIOS_SHELL environment variable hasn't been set by the user, set it here
+# Ubuntu users should set it to /bin/bash from external (-> "export ADIOS_SHELL /bin/bash")
+ADIOS_SHELL ?= sh
+export ADIOS_SHELL
 
 # select GCC tools
 # can be optionally overruled via environment variable
-# e.g. for Cortex M3 support provided by CodeSourcery, use MIOS32_GCC_PREFIX=arm-none-eabi
+# e.g. for Cortex M3 support provided by CodeSourcery, use ADIOS_GCC_PREFIX=arm-none-eabi
 # The usage of arm-elf isn't recommented due to compatibility issues!!!
-MIOS32_GCC_PREFIX ?= arm-none-eabi
+ADIOS_GCC_PREFIX ?= arm-none-eabi
 
-CC      = $(MIOS32_GCC_PREFIX)-gcc
-CPP     = $(MIOS32_GCC_PREFIX)-g++
-OBJCOPY = $(MIOS32_GCC_PREFIX)-objcopy
-OBJDUMP = $(MIOS32_GCC_PREFIX)-objdump
-NM      = $(MIOS32_GCC_PREFIX)-nm
-SIZE    = $(MIOS32_GCC_PREFIX)-size
+CC      = $(ADIOS_GCC_PREFIX)-gcc
+CPP     = $(ADIOS_GCC_PREFIX)-g++
+OBJCOPY = $(ADIOS_GCC_PREFIX)-objcopy
+OBJDUMP = $(ADIOS_GCC_PREFIX)-objdump
+NM      = $(ADIOS_GCC_PREFIX)-nm
+SIZE    = $(ADIOS_GCC_PREFIX)-size
 
 # where should the output files be located
 PROJECT_OUT ?= $(PROJECT)_build
@@ -68,31 +68,31 @@ endif
 # define CPP flags
 CPPFLAGS += $(CFLAGS) -fno-rtti -fno-exceptions -Wno-write-strings
 
-# to monitor stack usage via $MIOS32_BIN_PATH/avstack.pl
+# to monitor stack usage via $ADIOS_BIN_PATH/avstack.pl
 # see also
 # - http://dlbeer.co.nz/oss/avstack.html and 
 # - https://mcuoneclipse.com/2015/08/21/gnu-static-stack-usage-analysis/
 CFLAGS += -fstack-usage
 
 # convert .c/.s -> .o
-# Repo sources (the ones prefixed with $(MIOS32_PATH)/) get REPO-RELATIVE
+# Repo sources (the ones prefixed with $(ADIOS_PATH)/) get REPO-RELATIVE
 # object paths - the prefix is stripped before $(PROJECT_OUT)/ is prepended
-# below, so mios32/common/mios32_midi.c always maps to
-# project_build/mios32/common/mios32_midi.o no matter how MIOS32_PATH is
+# below, so adios/common/adios_midi.c always maps to
+# project_build/adios/common/adios_midi.o no matter how ADIOS_PATH is
 # spelled. Before 2026-08-09 the raw source path was used as-is, with two
-# real consequences: an absolute MIOS32_PATH nested a full copy of it inside
-# project_build/ ("project_build//e/MIOS32/..."), and a RELATIVE one (e.g.
+# real consequences: an absolute ADIOS_PATH nested a full copy of it inside
+# project_build/ ("project_build//e/ADIOS/..."), and a RELATIVE one (e.g.
 # "../../..", now the zero-config default in the app Makefiles) was worse -
 # mkdir -p/gcc -o resolved the ".." segments as a real upward walk OUT of
-# project_build/, scattering stray mios32/drivers/FreeRTOS object trees
+# project_build/, scattering stray adios/drivers/FreeRTOS object trees
 # 3 levels up (found twice: bootloader/ 2026-08-04, apps/ 2026-08-09).
-# Project-local sources (app.c etc, no MIOS32_PATH prefix) are unaffected.
-THUMB_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(THUMB_SOURCE:.c=.o))
-THUMB_CPP_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(THUMB_CPP_SOURCE:.cpp=.o))
-THUMB_AS_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(THUMB_AS_SOURCE:.s=.o))
-ARM_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(ARM_SOURCE:.c=.o))
-ARM_CPP_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(ARM_CPP_SOURCE:.cpp=.o))
-ARM_AS_OBJS = $(patsubst $(MIOS32_PATH)/%,%,$(ARM_AS_SOURCE:.s=.o))
+# Project-local sources (app.c etc, no ADIOS_PATH prefix) are unaffected.
+THUMB_OBJS = $(patsubst $(ADIOS_PATH)/%,%,$(THUMB_SOURCE:.c=.o))
+THUMB_CPP_OBJS = $(patsubst $(ADIOS_PATH)/%,%,$(THUMB_CPP_SOURCE:.cpp=.o))
+THUMB_AS_OBJS = $(patsubst $(ADIOS_PATH)/%,%,$(THUMB_AS_SOURCE:.s=.o))
+ARM_OBJS = $(patsubst $(ADIOS_PATH)/%,%,$(ARM_SOURCE:.c=.o))
+ARM_CPP_OBJS = $(patsubst $(ADIOS_PATH)/%,%,$(ARM_CPP_SOURCE:.cpp=.o))
+ARM_AS_OBJS = $(patsubst $(ADIOS_PATH)/%,%,$(ARM_AS_SOURCE:.s=.o))
 
 # convert .s -> .lst
 THUMB_AS_LST = $(THUMB_AS_SOURCE:.s=.lst)
@@ -108,7 +108,7 @@ ALL_DFILES = $(ALL_OBJS:.o=.d)
 DIRS = $(dir $(THUMB_OBJS) $(THUMB_CPP_OBJS) $(THUMB_AS_OBJS) $(ARM_OBJS) $(ARM_CPP_OBJS) $(ARM_AS_OBJS))
 
 # add files for distribution
-DIST += $(MIOS32_PATH)/include/makefile/common.mk $(MIOS32_PATH)/include/c
+DIST += $(ADIOS_PATH)/include/makefile/common.mk $(ADIOS_PATH)/include/c
 DIST += $(LD_FILE)
 
 # default rule
@@ -121,10 +121,10 @@ all: dirs cleanhex $(PROJECT).hex $(PROJECT_OUT)/$(PROJECT).bin $(PROJECT_OUT)/$
 # (Dynamic-boundary builds get theirs written by gen_bsl_boundary.sh while
 # the makefiles are still being parsed, so they need no rule at all.)
 ifneq ($(LD_TEMPLATE_S),)
-ifneq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
-$(CURDIR)/$(PROJECT_OUT)/cpu.ld: $(LD_TEMPLATE_S) $(MIOS32_PATH)/etc/ld/adios_body.ld.inc
+ifneq ($(ADIOS_USE_DYNAMIC_BSL_BOUNDARY),1)
+$(CURDIR)/$(PROJECT_OUT)/cpu.ld: $(LD_TEMPLATE_S) $(ADIOS_PATH)/etc/ld/adios_body.ld.inc
 	@mkdir -p $(dir $@)
-	@echo "Resolving $(notdir $(LD_TEMPLATE_S)) for $(PROCESSOR), $(if $(filter 0,$(MIOS32_USE_BOOTLOADER)),no bootloader - application owns the whole flash,fixed BSL boundary $(ADIOS_LD_BSL_BOUNDARY_K)K) -> $@"
+	@echo "Resolving $(notdir $(LD_TEMPLATE_S)) for $(PROCESSOR), $(if $(filter 0,$(ADIOS_USE_BOOTLOADER)),no bootloader - application owns the whole flash,fixed BSL boundary $(ADIOS_LD_BSL_BOUNDARY_K)K) -> $@"
 	@$(LD_PREPROCESS) $(LD_TEMPLATE_S) -o $@
 endif
 endif
@@ -137,13 +137,13 @@ Release: all
 
 ################################################################################
 # Automatic bootloader/app production deliverables (opt-in - set
-# MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1 in the app's own Makefile before
+# ADIOS_USE_DYNAMIC_BSL_BOUNDARY = 1 in the app's own Makefile before
 # including core.mk, see that file's own comment and
 # etc/gen_bsl_boundary.sh for the full mechanism). Two files, named after
 # this app's own directory (not the CPU, not the generic $(PROJECT) name):
 #   1) <app>_full_bsl_app.bin - combined bootloader+app image for one-shot SWD
 #      flashing of a fresh board. project_build/$(PROJECT).bin already IS
-#      this: mios32_bsl.c embeds an exact copy of the bootloader ahead of the
+#      this: adios_bsl.c embeds an exact copy of the bootloader ahead of the
 #      real app code at the generated boundary - copied here under an
 #      explicit name so it's never confused with the app-only artifact below.
 #   2) <app>_app_only.hex - app code only (embedded bootloader copy excluded)
@@ -152,7 +152,7 @@ Release: all
 # This "all:" statement has no recipe body - Make merges its prerequisite
 # list into the "all:" rule above instead of conflicting with it.
 ################################################################################
-ifeq ($(MIOS32_USE_DYNAMIC_BSL_BOUNDARY),1)
+ifeq ($(ADIOS_USE_DYNAMIC_BSL_BOUNDARY),1)
 DYNAMIC_BSL_APP_NAME = $(notdir $(CURDIR))
 
 all: $(DYNAMIC_BSL_APP_NAME)_full_bsl_app.bin $(DYNAMIC_BSL_APP_NAME)_app_only.hex $(DYNAMIC_BSL_APP_NAME)_bsl_updater.hex
@@ -161,7 +161,7 @@ $(DYNAMIC_BSL_APP_NAME)_full_bsl_app.bin: project_build/$(PROJECT).bin
 	cp $< $@
 
 $(DYNAMIC_BSL_APP_NAME)_app_only.hex: project_build/$(PROJECT).elf
-	$(OBJCOPY) --remove-section=.mios32_bsl -O ihex $< $@
+	$(OBJCOPY) --remove-section=.adios_bsl -O ihex $< $@
 
 # 3) <app>_bsl_updater.hex - the complete one-file BSL update, matched to
 #    THIS app's chip and boundary (the updater is as chip/boundary-bound as
@@ -169,25 +169,25 @@ $(DYNAMIC_BSL_APP_NAME)_app_only.hex: project_build/$(PROJECT).elf
 #    carries BOTH the update tool and the new bootloader image in disjoint
 #    address ranges - MIOS Studio runs the whole two-stage sequence from it
 #    automatically (see bootloader/updater/Makefile). Built by the updater's
-#    own Makefile for $(PROCESSOR); MIOS32_PATH is passed relative to THAT
+#    own Makefile for $(PROCESSOR); ADIOS_PATH is passed relative to THAT
 #    directory (always 2 levels deep), not inherited - an app-relative or
 #    CubeIDE-env value would resolve wrongly from there. BSL_RELAY_SRC points
-#    the updater build back at THIS app's mios32_config.h: the board's MIDI
+#    the updater build back at THIS app's adios_config.h: the board's MIDI
 #    wiring lives there (BSL_RELAY block), and the updater must come up on
 #    the same connector as the bootloader it replaces.
-#    MIOS32_DEVICE_ID_PERSIST travels the same way, and it MUST: that sub-make
+#    ADIOS_DEVICE_ID_PERSIST travels the same way, and it MUST: that sub-make
 #    re-runs gen_bsl_boundary.sh, which rebuilds bootloader/src in place and
 #    REGENERATES the embedded .inc this application links. Without the switch
 #    here, the bootloader that ends up in the combined image is the one built
 #    by this second pass - i.e. one that never looks for the stored device ID,
 #    silently undoing what the application's own pass produced (2026-08-11).
-#    MIOS32_USERDATA_PAGES travels for its own reason: the update tool is given
+#    ADIOS_USERDATA_PAGES travels for its own reason: the update tool is given
 #    everything from its origin to the top of usable flash, so it has to know
 #    which pages up there belong to the application's data and are not flash it
 #    may be linked over.
 $(DYNAMIC_BSL_APP_NAME)_bsl_updater.hex: project_build/$(PROJECT).elf
-	+$(MAKE) -C $(MIOS32_PATH)/bootloader/updater MIOS32_PATH=../.. PROCESSOR=$(PROCESSOR) BSL_RELAY_SRC=$(CURDIR) MIOS32_DEVICE_ID_PERSIST=$(MIOS32_DEVICE_ID_PERSIST) MIOS32_USERDATA_PAGES=$(MIOS32_USERDATA_PAGES) MIOS32_BSL_PADDING=$(MIOS32_BSL_PADDING)
-	cp $(MIOS32_PATH)/bootloader/updater/updater_$(PROCESSOR).hex $@
+	+$(MAKE) -C $(ADIOS_PATH)/bootloader/updater ADIOS_PATH=../.. PROCESSOR=$(PROCESSOR) BSL_RELAY_SRC=$(CURDIR) ADIOS_DEVICE_ID_PERSIST=$(ADIOS_DEVICE_ID_PERSIST) ADIOS_USERDATA_PAGES=$(ADIOS_USERDATA_PAGES) ADIOS_BSL_PADDING=$(ADIOS_BSL_PADDING)
+	cp $(ADIOS_PATH)/bootloader/updater/updater_$(PROCESSOR).hex $@
 endif
 
 # create the output directories
@@ -239,10 +239,10 @@ projectinfo:
 #
 # Two pattern rules per source kind since 2026-08-09: repo sources get
 # repo-relative object paths (see the THUMB_OBJS comment above), so their
-# real file lives under $(MIOS32_PATH)/ - first rule. Project-local sources
+# real file lives under $(ADIOS_PATH)/ - first rule. Project-local sources
 # (app.c etc) keep their path as-is - second rule. GNU make picks whichever
 # rule's prerequisite actually exists for a given .o.
-$(PROJECT_OUT)/%.o: $(MIOS32_PATH)/%.c
+$(PROJECT_OUT)/%.o: $(ADIOS_PATH)/%.c
 	@echo Creating object file for $(notdir $<)
 	@$(CC) -Wp,-MMD,$(PROJECT_OUT)/$*.dd $(CFLAGS) -mthumb -c $< -o $@
 	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
@@ -254,7 +254,7 @@ $(PROJECT_OUT)/%.o: %.c
 	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
 	@rm -f $(PROJECT_OUT)/$*.dd
 
-$(PROJECT_OUT)/%.o: $(MIOS32_PATH)/%.cpp
+$(PROJECT_OUT)/%.o: $(ADIOS_PATH)/%.cpp
 	@echo Creating object file for $(notdir $<)
 	@$(CC) -Wp,-MMD,$(PROJECT_OUT)/$*.dd $(CPPFLAGS) -mthumb -c $< -o $@
 	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
@@ -266,7 +266,7 @@ $(PROJECT_OUT)/%.o: %.cpp
 	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
 	@rm -f $(PROJECT_OUT)/$*.dd
 
-$(PROJECT_OUT)/%.o: $(MIOS32_PATH)/%.s
+$(PROJECT_OUT)/%.o: $(ADIOS_PATH)/%.s
 	@echo Creating object file for $(notdir $<)
 	@$(CC) -Wp,-MMD,$(PROJECT_OUT)/$*.dd $(ASFLAGS) -mthumb -c $< -o $@
 	@sed -e '1s/^\(.*\)$$/$(subst /,\/,$(dir $@))\1/' $(PROJECT_OUT)/$*.dd > $(PROJECT_OUT)/$*.d
@@ -322,16 +322,16 @@ egypt_tidy:
 	@mv *.expand egypt/
 
 egypt_all:
-	@perl $(MIOS32_PATH)/etc/egypt/egypt egypt/*.expand > egypt/$(PROJECT).dot
+	@perl $(ADIOS_PATH)/etc/egypt/egypt egypt/*.expand > egypt/$(PROJECT).dot
 
 
-egypt_project: EGYPTFILES = find egypt/*.expand -maxdepth 1 ! -name "mios32_*.expand" ! -name "stm32f10x*.expand" ! -name "usb_*.expand" ! -name "printf-stdarg.c*.expand" ! -name "crt0_STM32x.c*.expand" ! -name "app_lcd.c*.expand" ! -name "heap_*.expand" ! -name "list.c*.expand" ! -name "port.c*.expand" ! -name "queue.c*.expand" ! -name "main.c*.expand"
+egypt_project: EGYPTFILES = find egypt/*.expand -maxdepth 1 ! -name "adios_*.expand" ! -name "stm32f10x*.expand" ! -name "usb_*.expand" ! -name "printf-stdarg.c*.expand" ! -name "crt0_STM32x.c*.expand" ! -name "app_lcd.c*.expand" ! -name "heap_*.expand" ! -name "list.c*.expand" ! -name "port.c*.expand" ! -name "queue.c*.expand" ! -name "main.c*.expand"
 egypt_project:
-	@perl $(MIOS32_PATH)/etc/egypt/egypt `$(EGYPTFILES)` > egypt/$(PROJECT)_NoMIOS.dot
+	@perl $(ADIOS_PATH)/etc/egypt/egypt `$(EGYPTFILES)` > egypt/$(PROJECT)_NoMIOS.dot
 
 
 callgraph_convert:
-	@$(MIOS32_SHELL) $(MIOS32_PATH)/etc/egypt/dot_output.sh
+	@$(ADIOS_SHELL) $(ADIOS_PATH)/etc/egypt/dot_output.sh
 
 callgraph_all: callgraph callgraph_convert
 

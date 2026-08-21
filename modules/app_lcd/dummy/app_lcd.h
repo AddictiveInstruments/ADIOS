@@ -5,7 +5,7 @@
 //! or that drives its own screen directly and only needs the build to link.
 //!
 //! Every entry point below is a no-op returning 0 ("done"), so a project can
-//! be built with or without MIOS32_DONT_USE_LCD and behave identically: with
+//! be built with or without ADIOS_DONT_USE_LCD and behave identically: with
 //! the LCD layer compiled in, calls simply go nowhere.
 //!
 //! \{
@@ -18,7 +18,7 @@
 // Global definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// a nominal 2x16 character geometry: MIOS32_LCD's own cursor/bitmap
+// a nominal 2x16 character geometry: ADIOS_LCD's own cursor/bitmap
 // arithmetic runs on these, so they must be non-zero even though nothing is
 // ever displayed.
 #ifndef APP_LCD_NUM_X
@@ -50,8 +50,8 @@ extern s32 APP_LCD_GCursorSet(u16 x, u16 y);
 extern s32 APP_LCD_SpecialCharInit(u8 num, u8 table[8]);
 extern s32 APP_LCD_BColourSet(u32 rgb);
 extern s32 APP_LCD_FColourSet(u32 rgb);
-extern s32 APP_LCD_BitmapPixelSet(mios32_lcd_bitmap_t bitmap, u16 x, u16 y, u32 colour);
-extern s32 APP_LCD_BitmapPrint(mios32_lcd_bitmap_t bitmap);
+extern s32 APP_LCD_BitmapPixelSet(adios_lcd_bitmap_t bitmap, u16 x, u16 y, u32 colour);
+extern s32 APP_LCD_BitmapPrint(adios_lcd_bitmap_t bitmap);
 
 #endif /* _APP_LCD_H */
 //! \}

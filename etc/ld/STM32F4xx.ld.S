@@ -18,7 +18,7 @@
  * it is not contiguous - now corrected to the real 128K.
  */
 
-/* Bootloader region. A project building with MIOS32_USE_DYNAMIC_BSL_BOUNDARY
+/* Bootloader region. A project building with ADIOS_USE_DYNAMIC_BSL_BOUNDARY
    gets this overwritten with the boundary measured from its bootloader's
    real size; a static build keeps exactly this value, and can override it
    from its Makefile (ADIOS_LD_BSL_BOUNDARY_K). Default = what every

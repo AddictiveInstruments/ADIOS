@@ -1,6 +1,6 @@
 // converted with 'convpix_c.pl glcd_font_miniknob_icons.xpm -icons 32 -height 16'
 
-#include <mios32.h>
+#include <adios.h>
 
 const u8 GLCD_FONT_MINIKNOB_ICONS_INV[] = {
     16, 2*8, 0, 16, // width, height, X0 offset, char offset

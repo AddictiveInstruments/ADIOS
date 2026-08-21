@@ -1,6 +1,6 @@
 // converted with 'convpix_c.pl glcd_font_minitogsel_icons_inv.xpm
 
-#include <mios32.h>
+#include <adios.h>
 const u8 GLCD_FONT_MINITOGSEL_ICONS_INV[] = {
     16, 2*8, 0, 16, // width, height, X0 offset, char offset
     0xff,0xff,0xff,0x7f,0xbf,0x3f,0x3f,0xbf,0xbf,0xbf,0xbf,0x7f,0xff,0xff,0xff,0xff,

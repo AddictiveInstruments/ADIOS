@@ -29,7 +29,7 @@
 //!
 //!
 //! Currently this driver is only supported for the MBHP_CORE_STM32F4 module.
-//! We take TIM4, since it isn't used by MIOS32 (yet), and pin PB6 (available at J4B.SC)
+//! We take TIM4, since it isn't used by ADIOS (yet), and pin PB6 (available at J4B.SC)
 //! since the second IIC port is normally not used by applications.
 //! This pin has already a 2.2k pull-up resistor on the MBHP_CORE_STM32F4 board,
 //! which is required to pull the output to 5V (the pin is configured in open-drain mode)
@@ -58,7 +58,7 @@
 // Include files
 /////////////////////////////////////////////////////////////////////////////
 
-#include <mios32.h>
+#include <adios.h>
 #include <math.h>
 
 #include "ws2812.h"
@@ -68,7 +68,7 @@
 // Local definitions
 /////////////////////////////////////////////////////////////////////////////
 
-#if defined(MIOS32_FAMILY_STM32F4xx)
+#if defined(ADIOS_FAMILY_STM32F4xx)
 #define WS2812_SUPPORTED 1
 #else
 #warning "WS2812 driver not supported for this derivative yet!"
@@ -85,13 +85,13 @@
 #define WS2812_TIM_CLK_FUNC     { RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM4, ENABLE); }
 
 // timers clocked at CPU/2 clock, WS2812 protocol requires 800 kHz (1.25 uS period)
-#define WS2812_TIM_PERIOD       ((MIOS32_SYS_CPU_FREQUENCY/2) / 800000)
+#define WS2812_TIM_PERIOD       ((ADIOS_SYS_CPU_FREQUENCY/2) / 800000)
 #define WS2812_TIM_CC_RESET     0
 #define WS2812_TIM_CC_IDLE      WS2812_TIM_PERIOD
 #define WS2812_TIM_CC_LOW       (u16)((WS2812_TIM_PERIOD - 1) * 0.28) // 28% -> ca. 0.35 uS
 #define WS2812_TIM_CC_HIGH      (u16)((WS2812_TIM_PERIOD - 1) * 0.74) // 74% -> ca. 0.90 uS
 
-// DMA channel (DMA1 Stream 0, Channel 2 - fortunately DMA1_Stream0 not used by any other MIOS32 driver yet...!)
+// DMA channel (DMA1 Stream 0, Channel 2 - fortunately DMA1_Stream0 not used by any other ADIOS driver yet...!)
 #define WS2812_DMA_PTR          DMA1_Stream0
 #define WS2812_DMA_CHN          DMA_Channel_2
 
@@ -134,7 +134,7 @@ s32 WS2812_Init(u32 mode)
 
   if( mode == 0 ) {
     // WS2812 coding: see following nice overview page: http://www.mikrocontroller.net/articles/WS2812_Ansteuerung
-    // We take the timer based approach since TIM4 isn't used by MIOS32 (yet), and J4B.SC is normally not used by apps
+    // We take the timer based approach since TIM4 isn't used by ADIOS (yet), and J4B.SC is normally not used by apps
     // Programming Example for STM32F4: 
     {
       WS2812_TIM_REMAP_FUNC;

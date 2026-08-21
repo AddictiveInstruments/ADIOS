@@ -1,4 +1,4 @@
-#include <mios32.h>
+#include <adios.h>
 #include <stdio.h>
 
 extern unsigned char signInputTable1[];

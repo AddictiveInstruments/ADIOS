@@ -1,7 +1,7 @@
 
 ################################################################################
 # This app is permanently pinned to one specific board (2026-08-01): unlike a
-# generic MIOS32 app meant to be rebuilt for whatever MIOS32_PROCESSOR/FAMILY/
+# generic ADIOS app meant to be rebuilt for whatever ADIOS_PROCESSOR/FAMILY/
 # BOARD/LCD the environment happens to export, 5x6_505 always targets the same
 # hardware, so these are fixed constants here instead of env-var indirection -
 # no more risk of building against the wrong target because of a stale
@@ -15,24 +15,24 @@ LCD       =	ili9488_5x6
 
 # self-locating repo root: apps live at a fixed depth inside the repo, so a
 # plain `make` works with no environment setup at all (any exported
-# MIOS32_PATH - e.g. from a CubeIDE workspace - still overrides this default)
-MIOS32_PATH ?= ../../..
+# ADIOS_PATH - e.g. from a CubeIDE workspace - still overrides this default)
+ADIOS_PATH ?= ../../..
 
 # opt into the real dynamic bootloader/app flash boundary mechanism - see
 # core.mk and etc/gen_bsl_boundary.sh for the full explanation.
-MIOS32_USE_DYNAMIC_BSL_BOUNDARY = 1
+ADIOS_USE_DYNAMIC_BSL_BOUNDARY = 1
 
-# The SysEx device ID survives a power cycle: MIOS32 keeps it in the last two
+# The SysEx device ID survives a power cycle: ADIOS keeps it in the last two
 # bytes of flash, this application writes it there from its settings menu
 # (TR5X6_ROM_DeviceIDStore) and the bootloader reads the same two bytes.
-MIOS32_DEVICE_ID_PERSIST = 1
+ADIOS_DEVICE_ID_PERSIST = 1
 
 # The last 4 pages of flash are the sound-bank ROM, written at runtime - they
 # are NOT part of the application image, so they have to leave the linker's
 # FLASH region: otherwise a growing application would be placed on top of them
 # and destroy them at the first bank write, without a word at build time.
 # The device-ID record above lives in the last two bytes of this same region.
-MIOS32_USERDATA_PAGES = 4
+ADIOS_USERDATA_PAGES = 4
 
 
 ################################################################################
@@ -74,11 +74,11 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 ################################################################################
 
 # sources of programming model
-include $(MIOS32_PATH)/core/core.mk
+include $(ADIOS_PATH)/core/core.mk
 
 # application specific LCD driver (selected via makefile variable)
-include $(MIOS32_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk
+include $(ADIOS_PATH)/modules/app_lcd/$(LCD)/app_lcd.mk
 
 # common make rules
 # Please keep this include statement at the end of this Makefile. Add new modules above.
-include $(MIOS32_PATH)/include/makefile/common.mk
+include $(ADIOS_PATH)/include/makefile/common.mk

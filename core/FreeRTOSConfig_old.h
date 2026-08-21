@@ -4,18 +4,18 @@
 
 // See also: http://www.freertos.org/a00110.html
 
-// MIOS32 specific predefines - can be overruled in your local mios32_config.h file
+// ADIOS specific predefines - can be overruled in your local adios_config.h file
 // don't include complete mios.h, but only relevant parts!
-#include "mios32_datatypes.h"
-#include "mios32_config.h"
-#include "mios32_sys.h"
+#include "adios_datatypes.h"
+#include "adios_config.h"
+#include "adios_sys.h"
 
-#ifndef MIOS32_MINIMAL_STACK_SIZE
-#define MIOS32_MINIMAL_STACK_SIZE 1024
+#ifndef ADIOS_MINIMAL_STACK_SIZE
+#define ADIOS_MINIMAL_STACK_SIZE 1024
 #endif
 
-#ifndef MIOS32_HEAP_SIZE
-#define MIOS32_HEAP_SIZE 10*1024
+#ifndef ADIOS_HEAP_SIZE
+#define ADIOS_HEAP_SIZE 10*1024
 #endif
 
 #define configENABLE_MPU 0
@@ -34,14 +34,14 @@
 #define configUSE_PREEMPTION                    1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
 #define configUSE_TICKLESS_IDLE                 0
-#define configCPU_CLOCK_HZ                      ((unsigned portLONG) (MIOS32_SYS_CPU_FREQUENCY) )
+#define configCPU_CLOCK_HZ                      ((unsigned portLONG) (ADIOS_SYS_CPU_FREQUENCY) )
 #define configTICK_RATE_HZ                      ((portTickType) 1000 )
 #define configMAX_PRIORITIES                    5
-#define configMINIMAL_STACK_SIZE                ((unsigned portSHORT) ((MIOS32_MINIMAL_STACK_SIZE)/4) )
+#define configMINIMAL_STACK_SIZE                ((unsigned portSHORT) ((ADIOS_MINIMAL_STACK_SIZE)/4) )
 #define configMAX_TASK_NAME_LEN                 16
 #define configUSE_16_BIT_TICKS                  0
 #define configIDLE_SHOULD_YIELD                 1
-#ifndef configUSE_TASK_NOTIFICATIONS // can be changed in mios32_config.h -- will add some additional processing overhead
+#ifndef configUSE_TASK_NOTIFICATIONS // can be changed in adios_config.h -- will add some additional processing overhead
 #define configUSE_TASK_NOTIFICATIONS            0
 #endif
 #define configUSE_MUTEXES                       1
@@ -52,15 +52,15 @@
 #define configUSE_QUEUE_SETS                    0
 #define configUSE_TIME_SLICING                  1
 #define configUSE_NEWLIB_REENTRANT              0
-#define configENABLE_BACKWARD_COMPATIBILITY     1 // MIOS32 Legacy...
+#define configENABLE_BACKWARD_COMPATIBILITY     1 // ADIOS Legacy...
 #define configNUM_THREAD_LOCAL_STORAGE_POINTERS 0
 
 /* Memory allocation related definitions. */
-#ifndef configSUPPORT_STATIC_ALLOCATION // can be changed in mios32_config.h
+#ifndef configSUPPORT_STATIC_ALLOCATION // can be changed in adios_config.h
 #define configSUPPORT_STATIC_ALLOCATION         0
 #endif
 #define configSUPPORT_DYNAMIC_ALLOCATION        1
-#define configTOTAL_HEAP_SIZE                   ((size_t)((MIOS32_HEAP_SIZE)))
+#define configTOTAL_HEAP_SIZE                   ((size_t)((ADIOS_HEAP_SIZE)))
 #define configAPPLICATION_ALLOCATED_HEAP        1
 
 /* Hook function related definitions. */
@@ -71,7 +71,7 @@
 #define configUSE_DAEMON_TASK_STARTUP_HOOK      0
 
 /* Run time and task stats gathering related definitions. */
-#ifndef configGENERATE_RUN_TIME_STATS // can be changed in mios32_config.h
+#ifndef configGENERATE_RUN_TIME_STATS // can be changed in adios_config.h
 #define configGENERATE_RUN_TIME_STATS           0
 #endif
 #define configUSE_TRACE_FACILITY                0
@@ -82,7 +82,7 @@
 #define configMAX_CO_ROUTINE_PRIORITIES         1
 
 /* Software timer related definitions. */
-#ifndef configUSE_TIMERS // can be changed in mios32_config.h
+#ifndef configUSE_TIMERS // can be changed in adios_config.h
 #define configUSE_TIMERS                        0
 #endif
 #define configTIMER_TASK_PRIORITY               3

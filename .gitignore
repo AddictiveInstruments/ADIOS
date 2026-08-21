@@ -92,7 +92,7 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# --- MIOS32 build system additions (2026-08-01) ---
+# --- ADIOS build system additions (2026-08-01) ---
 # Eclipse/STM32CubeIDE indexer cache (regenerated locally, huge .pdom files)
 .metadata/
 
@@ -120,7 +120,7 @@ project_build/
 # each project's own directory.
 cpu_bsl.ld
 cpu_app.ld
-mios32_bsl_boundary.h
+adios_bsl_boundary.h
 gen_bsl_boundary_build.log
 # Transient concurrency lock (etc/gen_bsl_boundary.sh) - removed on exit, can
 # only survive a hard crash/kill; the script steals a lock whose holder PID
@@ -140,12 +140,12 @@ gen_bsl_boundary_build.log
 *.hex
 
 # Embedded bootloader image, written beside the project's own
-# mios32_bsl_boundary.h by the same pass of etc/gen_bsl_boundary.sh and
+# adios_bsl_boundary.h by the same pass of etc/gen_bsl_boundary.sh and
 # rewritten at every build of that project
-mios32_bsl_image.inc
+adios_bsl_image.inc
 
 # Reference-only MIDIbox heritage, kept on disk but out of the repository
 # (decided 2026-08-11): modules and LCD drivers that depended on the removed
-# mios32_board, plus the original MIDIbox application tree. Nothing here is
+# adios_board, plus the original MIDIbox application tree. Nothing here is
 # built or maintained - it is kept locally to consult, not to carry.
 old_midibox_ref_only/

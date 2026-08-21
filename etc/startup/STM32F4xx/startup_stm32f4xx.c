@@ -2,7 +2,7 @@
  ******************************************************************************
  * @file      startup_stm32f4xx.c
  * @brief     STM32F4xx vector table and reset handler for the GCC toolchain.
- *            Used for every F4xx processor variant MIOS32 targets
+ *            Used for every F4xx processor variant ADIOS targets
  *            (STM32F405RG, STM32F407VG, ...) - the vector table content is
  *            identical across the family, only flash/RAM size differs
  *            (handled by the per-processor linker script, not here).

@@ -62,7 +62,7 @@ extern s32 BSL_SYSEX_UploadStartedGet(void);
 extern s32 BSL_SYSEX_SoftHoldSet(u8 hold);
 extern s32 BSL_SYSEX_SoftHoldGet(void);
 extern s32 BSL_SYSEX_ReleaseHaltState(void);
-extern s32 BSL_SYSEX_Cmd(mios32_midi_port_t port, mios32_midi_sysex_cmd_state_t cmd_state, u8 midi_in, u8 sysex_cmd);
-extern s32 BSL_SYSEX_SendUploadReq(mios32_midi_port_t port);
+extern s32 BSL_SYSEX_Cmd(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in, u8 sysex_cmd);
+extern s32 BSL_SYSEX_SendUploadReq(adios_midi_port_t port);
 
 #endif /* _BSL_SYSEX_H */

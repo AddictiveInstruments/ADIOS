@@ -1,6 +1,6 @@
 // converted with 'convpix_c.pl glcd_font_knob_icons.xpm -icons 12 -height 24'
 
-#include <mios32.h>
+#include <adios.h>
 
   // converted with 'convpix_16bit_c.pl glcd_font_small.xpm'
   const u8 GLCD_FONT_16BIT_PIX[] = {

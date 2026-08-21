@@ -13,8 +13,8 @@
 # BOARD is the family-wide fixed default, same rule as the apps (one default
 # per family, never per-chip board conditionals): MBHP_DIPCOREF4 for all
 # F4xx, STM32G0GENERIC for all G0xx. No live code branches on a per-chip
-# BOARD define (verified 2026-08-05) - it only feeds MIOS32_BOARD_STR and
-# the board pin tables in mios32_board.c.
+# BOARD define (verified 2026-08-05) - it only feeds ADIOS_BOARD_STR and
+# the board pin tables in adios_board.c.
 
 ifeq ($(PROCESSOR),)
 $(error PROCESSOR must be given, e.g. "make -f Makefile.bsl PROCESSOR=STM32G030K6" - normally this Makefile is invoked by etc/gen_bsl_boundary.sh)
@@ -25,14 +25,14 @@ FAMILY    = 	STM32F4xx
 BOARD	  = 	MBHP_DIPCOREF4
 # single canonical startup shared by the whole F4xx family (see the same
 # rule and rationale in core/core.mk)
-STARTUP_FILE = $(MIOS32_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c
+STARTUP_FILE = $(ADIOS_PATH)/etc/startup/STM32F4xx/startup_stm32f4xx.c
 else
 FAMILY    = 	STM32G0xx
 BOARD	  = 	STM32G0GENERIC
 # per-subfamily startup: startup_<lowercased 9-char line prefix>.c - same
 # derivation as core.mk (every chip in a subfamily shares the
 # exact same vector table, regardless of package/density)
-STARTUP_FILE = $(MIOS32_PATH)/etc/startup/STM32G0xx/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
+STARTUP_FILE = $(ADIOS_PATH)/etc/startup/STM32G0xx/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
 endif
 
 LCD       =     dummy
@@ -52,11 +52,11 @@ ARM_SOURCE      =
 ARM_AS_SOURCE   =
 
 # core supplies the family conf headers
-# (stm32g0xx_conf.h / stm32f4xx_conf.h, included via mios32.h) - the
+# (stm32g0xx_conf.h / stm32f4xx_conf.h, included via adios.h) - the
 # bootloader used to carry its own byte-identical copies here (removed
 # 2026-08-09); it deliberately does NOT include core.mk itself
 # (no FreeRTOS, no main.c), only that directory on the include path.
-C_INCLUDE = 	-I . -I $(MIOS32_PATH)/core
+C_INCLUDE = 	-I . -I $(ADIOS_PATH)/core
 A_INCLUDE = 	-I .
 
 LIBS =
@@ -97,8 +97,8 @@ CFLAGS =	$(DEBUG) $(OPTIMIZE)
 # Include source modules via additional makefiles
 ################################################################################
 
-# add MIOS32 sources
-include $(MIOS32_PATH)/mios32/mios32.mk
+# add ADIOS sources
+include $(ADIOS_PATH)/adios/adios.mk
 
 # common make rules
-include $(MIOS32_PATH)/include/makefile/common.mk
+include $(ADIOS_PATH)/include/makefile/common.mk

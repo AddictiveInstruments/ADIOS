@@ -51,18 +51,18 @@
 #define CMSIS_device_header "stm32F4xx.h"
 #endif /* CMSIS_device_header */
 
-// MIOS32 specific predefines - can be overruled in your local mios32_config.h file
+// ADIOS specific predefines - can be overruled in your local adios_config.h file
 // don't include complete mios.h, but only relevant parts!
-#include "mios32_datatypes.h"
-#include "mios32_config.h"
-#include "mios32_sys.h"
+#include "adios_datatypes.h"
+#include "adios_config.h"
+#include "adios_sys.h"
 
-#ifndef MIOS32_MINIMAL_STACK_SIZE
-#define MIOS32_MINIMAL_STACK_SIZE 1024
+#ifndef ADIOS_MINIMAL_STACK_SIZE
+#define ADIOS_MINIMAL_STACK_SIZE 1024
 #endif
 
-#ifndef MIOS32_HEAP_SIZE
-#define MIOS32_HEAP_SIZE 6*1024
+#ifndef ADIOS_HEAP_SIZE
+#define ADIOS_HEAP_SIZE 6*1024
 #endif
 
  /* If No secure feature is used the configENABLE_TRUSTZONE should be set to 0
@@ -78,10 +78,10 @@
 #define configUSE_IDLE_HOOK               1
 #define configUSE_TICK_HOOK               1
 #define configMAX_PRIORITIES              5
-#define configCPU_CLOCK_HZ                ((unsigned portLONG) (MIOS32_SYS_CPU_FREQUENCY) )
+#define configCPU_CLOCK_HZ                ((unsigned portLONG) (ADIOS_SYS_CPU_FREQUENCY) )
 #define configTICK_RATE_HZ                ((TickType_t)1000)
-#define configMINIMAL_STACK_SIZE          ((unsigned portSHORT) ((MIOS32_MINIMAL_STACK_SIZE)/4) )
-#define configTOTAL_HEAP_SIZE             ((size_t)((MIOS32_HEAP_SIZE)))
+#define configMINIMAL_STACK_SIZE          ((unsigned portSHORT) ((ADIOS_MINIMAL_STACK_SIZE)/4) )
+#define configTOTAL_HEAP_SIZE             ((size_t)((ADIOS_HEAP_SIZE)))
 #define configMAX_TASK_NAME_LEN           (16)
 #define configUSE_TRACE_FACILITY          1
 #define configUSE_16_BIT_TICKS            0
@@ -93,7 +93,7 @@
 #define configUSE_MALLOC_FAILED_HOOK      1
 #define configUSE_APPLICATION_TASK_TAG    0
 #define configUSE_COUNTING_SEMAPHORES     0
-#ifndef configGENERATE_RUN_TIME_STATS // can be changed in mios32_config.h
+#ifndef configGENERATE_RUN_TIME_STATS // can be changed in adios_config.h
 #define configGENERATE_RUN_TIME_STATS     0
 #endif
 
@@ -102,7 +102,7 @@
 #define configMAX_CO_ROUTINE_PRIORITIES   1
 
 /* Software timer definitions. */
-#ifndef configUSE_TIMERS // can be changed in mios32_config.h
+#ifndef configUSE_TIMERS // can be changed in adios_config.h
 #define configUSE_TIMERS                  0
 #endif
 #define configTIMER_TASK_PRIORITY     	  3

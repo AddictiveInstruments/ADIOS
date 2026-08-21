@@ -42,16 +42,16 @@
 #define TR5X6_ROM_nRST_PIN 		LL_GPIO_PIN_2
 //#define TR5X6_ROM_RDY_PIN 		LL_GPIO_PIN_1
 
-#define PROG() 		MIOS32_SYS_STM_PINSET_1(TR5X6_ROM_PORT, TR5X6_ROM_nHOST_PIN)
-#define HOST() 		MIOS32_SYS_STM_PINSET_0(TR5X6_ROM_PORT, TR5X6_ROM_nHOST_PIN)
-#define TR5X6_ROM_RD() 	MIOS32_SYS_STM_PINSET_1(TR5X6_ROM_PORT, TR5X6_ROM_nWR_PIN)
-#define TR5X6_ROM_WR() 	MIOS32_SYS_STM_PINSET_0(TR5X6_ROM_PORT, TR5X6_ROM_nWR_PIN)
-#define TR5X6_ROM_OE() 	MIOS32_SYS_STM_PINSET_0(TR5X6_ROM_PORT, TR5X6_ROM_nOE_PIN)
-#define TR5X6_ROM_IE() 	MIOS32_SYS_STM_PINSET_1(TR5X6_ROM_PORT, TR5X6_ROM_nOE_PIN)
-#define TR5X6_ROM_CS(v) 	MIOS32_SYS_STM_PINSET(TR5X6_ROM_PORT,TR5X6_ROM_nCS_PIN,v)
-#define TR5X6_ROM_ADR(v) 	MIOS32_SYS_STM_PINSET(TR5X6_ROM_PORT,TR5X6_ROM_ADR_PIN,v)
-#define TR5X6_ROM_DAT(v) 	MIOS32_SYS_STM_PINSET(TR5X6_ROM_PORT,TR5X6_ROM_DAT_PIN,v)
-#define TR5X6_ROM_RST(v) 	MIOS32_SYS_STM_PINSET(TR5X6_ROM_PORT,TR5X6_ROM_nRST_PIN,v)
+#define PROG() 		ADIOS_SYS_STM_PINSET_1(TR5X6_ROM_PORT, TR5X6_ROM_nHOST_PIN)
+#define HOST() 		ADIOS_SYS_STM_PINSET_0(TR5X6_ROM_PORT, TR5X6_ROM_nHOST_PIN)
+#define TR5X6_ROM_RD() 	ADIOS_SYS_STM_PINSET_1(TR5X6_ROM_PORT, TR5X6_ROM_nWR_PIN)
+#define TR5X6_ROM_WR() 	ADIOS_SYS_STM_PINSET_0(TR5X6_ROM_PORT, TR5X6_ROM_nWR_PIN)
+#define TR5X6_ROM_OE() 	ADIOS_SYS_STM_PINSET_0(TR5X6_ROM_PORT, TR5X6_ROM_nOE_PIN)
+#define TR5X6_ROM_IE() 	ADIOS_SYS_STM_PINSET_1(TR5X6_ROM_PORT, TR5X6_ROM_nOE_PIN)
+#define TR5X6_ROM_CS(v) 	ADIOS_SYS_STM_PINSET(TR5X6_ROM_PORT,TR5X6_ROM_nCS_PIN,v)
+#define TR5X6_ROM_ADR(v) 	ADIOS_SYS_STM_PINSET(TR5X6_ROM_PORT,TR5X6_ROM_ADR_PIN,v)
+#define TR5X6_ROM_DAT(v) 	ADIOS_SYS_STM_PINSET(TR5X6_ROM_PORT,TR5X6_ROM_DAT_PIN,v)
+#define TR5X6_ROM_RST(v) 	ADIOS_SYS_STM_PINSET(TR5X6_ROM_PORT,TR5X6_ROM_nRST_PIN,v)
 
 
 /* Prototypes ------------------------------------------------------------------*/
@@ -134,7 +134,7 @@ void TR5X6_ROM_Init(void)
 
 	// initialize SPI interface
 	// ensure that fast pin drivers are activated, do it before
-	MIOS32_SPI_IO_Init(TR5X6_ROM_SPI, MIOS32_SPI_PIN_DRIVER_STRONG);
+	ADIOS_SPI_IO_Init(TR5X6_ROM_SPI, ADIOS_SPI_PIN_DRIVER_STRONG);
 
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
 	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
@@ -148,7 +148,7 @@ void TR5X6_ROM_Init(void)
 	// initialize SPI interface
 	// init SPI port
 	//TR5X6_SPI_TransferModeInit();
-	MIOS32_SPI_TransferModeInit(TR5X6_ROM_SPI, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_32);
+	ADIOS_SPI_TransferModeInit(TR5X6_ROM_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_32);
 
 	TR5X6_ROM_DAT(1);
 	TR5X6_ROM_ADR(1);
@@ -163,7 +163,7 @@ void TR5X6_ROM_Init(void)
 /* HOST Mode */
 //void TR5X6_SPI_TransferModeInit(void){
 //// init SPI port
-//	MIOS32_SPI_TransferModeInit(TR5X6_ROM_SPI, MIOS32_SPI_MODE_CLK0_PHASE0, MIOS32_SPI_PRESCALER_128);
+//	ADIOS_SPI_TransferModeInit(TR5X6_ROM_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_128);
 //}
 /* HOST Mode */
 void TR5X6_ROM_HOST(void){
@@ -191,7 +191,7 @@ s32 TR5X6_ROM_BankSet(u8 bank, u8 address_set){
 		TR5X6_ROM_Addr_Set(TR5X6_ROM_HostAddr(bank));
 	if(bank==rom_bank)return 0;
 	rom_bank = bank;
-	//MIOS32_MIDI_SendProgramChange(DIN0, mios32_midi_chn_t chn, u8 prg);
+	//ADIOS_MIDI_SendProgramChange(DIN0, adios_midi_chn_t chn, u8 prg);
 	if(address_set)
 		TR5X6_ROM_BankStore(bank);
 	else
@@ -203,9 +203,9 @@ s32 TR5X6_ROM_BankSet(u8 bank, u8 address_set){
 #if TR5X6_UNIT_SELECT==626
 s32 TR5X6_ROM_BankStore_Req(){
 	if(bank_store_req){
-		MIOS32_IRQ_DeInstall(EXTI4_15_IRQn);
+		ADIOS_IRQ_DeInstall(EXTI4_15_IRQn);
 		TR5X6_ROM_BankStore(rom_bank);
-		MIOS32_IRQ_Install(EXTI4_15_IRQn, 2);
+		ADIOS_IRQ_Install(EXTI4_15_IRQn, 2);
 		bank_store_req = 0;
 	}
 	return 0;
@@ -276,7 +276,7 @@ tr5x6_rom_status TR5X6_ROM_Write(uint32_t address, uint8_t data, uint32_t Timeou
 	TR5X6_ROM_RD();			// ROM Read pin
 	TR5X6_ROM_OE();			// ROM Input enable
 	s32 tmpData=0;
-	MIOS32_DELAY_Wait_uS(4);
+	ADIOS_DELAY_Wait_uS(4);
 	tr5x6_rom_status errorcode = TR5X6_ROM_OK;
 	s32 tickstart = 0;
 
@@ -340,14 +340,14 @@ tr5x6_rom_status TR5X6_ROM_Sector_Erase(uint32_t sector, uint32_t Timeout){
 	TR5X6_ROM_RD();			// ROM Read pin
 	TR5X6_ROM_OE();			// ROM Input enable
 	s32 tmpData=0;
-	MIOS32_DELAY_Wait_uS(4);
+	ADIOS_DELAY_Wait_uS(4);
 	tr5x6_rom_status errorcode = TR5X6_ROM_OK;
-	//s32 tickstart = MIOS32_TIMESTAMP_Init(0);
+	//s32 tickstart = ADIOS_TIMESTAMP_Init(0);
 	u16 tickstart = 0;
 	while(tmpData!=0xff){
-		//MIOS32_BOARD_LED_Set(1, 1);
+		//ADIOS_BOARD_LED_Set(1, 1);
         /* Timeout management */
-		//if(MIOS32_TIMESTAMP_Get()>(tickstart+TR5X6_ROM_MAX_DELAY)){
+		//if(ADIOS_TIMESTAMP_Get()>(tickstart+TR5X6_ROM_MAX_DELAY)){
 		if((tickstart++)>4000000){
 			TR5X6_ROM_CS(1);			// ROM Deselect
 
@@ -362,7 +362,7 @@ tr5x6_rom_status TR5X6_ROM_Sector_Erase(uint32_t sector, uint32_t Timeout){
         }
 
 	}
-	//for(int i =0; i<count;i++)MIOS32_MIDI_SendDebugMessage("%08x", byte[i]);
+	//for(int i =0; i<count;i++)ADIOS_MIDI_SendDebugMessage("%08x", byte[i]);
 
 	return errorcode;
 }
@@ -377,7 +377,7 @@ void TR5X6_ROM_Addr_Set(uint32_t address){
 #endif
 	uint8_t tmpAddr[3] = {(address>>16) &0xff,  (address>>8) &0xff, address &0xff};
 	//HAL_SPI_Transmit(&hspi2, tmpAddr, 3, 1);
-	MIOS32_SPI_TransferBlock(TR5X6_ROM_SPI, tmpAddr, NULL, 3, NULL);
+	ADIOS_SPI_TransferBlock(TR5X6_ROM_SPI, tmpAddr, NULL, 3, NULL);
 	TR5X6_ROM_ADR(0);
 	TR5X6_ROM_ADR(1);
 
@@ -388,18 +388,18 @@ void TR5X6_ROM_Data_Set(uint8_t data){
 	TR5X6_ROM_DAT(0);
 //	__NOP();__NOP();__NOP();
 	//HAL_SPI_Transmit(&hspi2, &data, 1, 1);
-	MIOS32_SPI_TransferByte(TR5X6_ROM_SPI, data);
+	ADIOS_SPI_TransferByte(TR5X6_ROM_SPI, data);
 	TR5X6_ROM_DAT(1);
 }
 
 /* ********* */
 s32 TR5X6_ROM_Data_Get(void){
 	TR5X6_ROM_DAT(0);
-	MIOS32_DELAY_Wait_uS(1);
+	ADIOS_DELAY_Wait_uS(1);
 	TR5X6_ROM_DAT(1);
 	//uint8_t tmpData=0;
 	//HAL_SPI_Receive(&hspi2, &tmpData, 1, 1);
-	return MIOS32_SPI_TransferByte(TR5X6_ROM_SPI, 0xff);
+	return ADIOS_SPI_TransferByte(TR5X6_ROM_SPI, 0xff);
 	//return tmpData;
 }
 
@@ -412,8 +412,8 @@ s32 TR5X6_MEM_Format(void){
 	//u8 sect_bmp_array[270*2];
 	u8 prog_bmp_array[300*2];
 	char message[60];
-	//mios32_lcd_bitmap_t sect_bmp = APP_LCD_BitmapInit((u8*)sect_bmp_array, 270, 16, 270, Is1BIT);
-	mios32_lcd_bitmap_t prog_bmp = APP_LCD_BitmapInit((u8*)prog_bmp_array, 300, 16, 300, Is1BIT);
+	//adios_lcd_bitmap_t sect_bmp = APP_LCD_BitmapInit((u8*)sect_bmp_array, 270, 16, 270, Is1BIT);
+	adios_lcd_bitmap_t prog_bmp = APP_LCD_BitmapInit((u8*)prog_bmp_array, 300, 16, 300, Is1BIT);
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
 	APP_LCD_Rectangle(89, 14+80, 302, 18, 1, APP_LCD_WHITE, 0, 0);
 
@@ -427,7 +427,7 @@ s32 TR5X6_MEM_Format(void){
 				if((errorcode=TR5X6_ROM_Write((u32)(addr+b), 0x80, 1000))!=TR5X6_ROM_OK){
 					tr5x6_rom_format_stat=(s32)(errorcode-4);
 					sprintf(message, "Write addr@0x%08x error#%d!", (u32)(addr+b-0x00800000),  errorcode);
-					MIOS32_MIDI_SendDebugMessage(message);
+					ADIOS_MIDI_SendDebugMessage(message);
 					APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 					APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 					return (s32)tr5x6_rom_format_stat;
@@ -440,19 +440,19 @@ s32 TR5X6_MEM_Format(void){
 		}else{
 			tr5x6_rom_format_stat=(s32)errorcode;
 			sprintf(message, "Sector#%u erase, addr@0x%08x, error#%d!", sector, addr-0x00800000, errorcode);
-			MIOS32_MIDI_SendDebugMessage(message);
+			ADIOS_MIDI_SendDebugMessage(message);
 			APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 			APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 			return (s32)tr5x6_rom_format_stat;
 		}
-		MIOS32_MIDI_SendDebugMessage(message);
+		ADIOS_MIDI_SendDebugMessage(message);
 		if(sector<511){
 			APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 			APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 		}else{
 			APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 			APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", "All sectors formatted.");
-			MIOS32_MIDI_SendDebugMessage("All ROM sectors formatted.");
+			ADIOS_MIDI_SendDebugMessage("All ROM sectors formatted.");
 		}
 		u16 progress= 100*(sector+1)/512;
 		memset(&prog_bmp_array, 0x00, sizeof(prog_bmp_array));
@@ -498,7 +498,7 @@ s32 TR5X6_MEM_Format(void){
 			datas[TR5X6_FLASH_SYS_MAGIC_OFS]     = TR5X6_MAGIC_NUMBER;
 			datas[TR5X6_FLASH_SYS_BANK_OFS]      = 0; // stored bank num
 			datas[TR5X6_FLASH_SYS_ID_CONFIRM_OFS]= 0x42;
-			datas[TR5X6_FLASH_SYS_ID_OFS]        = MIOS32_MIDI_DeviceIDGet();
+			datas[TR5X6_FLASH_SYS_ID_OFS]        = ADIOS_MIDI_DeviceIDGet();
 		}
 		// Page erase
 		LL_FLASH_Unlock();
@@ -508,7 +508,7 @@ s32 TR5X6_MEM_Format(void){
 			uint32_t error=LL_FLASH_GetError();
 			LL_FLASH_Lock();
 			sprintf(message, "erase failed for page#%d: code %d err 0x%08x\n", p, status, error);
-			MIOS32_MIDI_SendDebugMessage(message);
+			ADIOS_MIDI_SendDebugMessage(message);
 			APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 			APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 			return -1;
@@ -530,20 +530,20 @@ s32 TR5X6_MEM_Format(void){
 				uint32_t error=LL_FLASH_GetError();
 				LL_FLASH_Lock();
 				sprintf(message, "write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
-				MIOS32_MIDI_SendDebugMessage(message);
+				ADIOS_MIDI_SendDebugMessage(message);
 				APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 				APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 				return -2;
 			}
 			sprintf(message, "Page#%u addr@%08x formatted", p, addr);
-			MIOS32_MIDI_SendDebugMessage("%s", message);
+			ADIOS_MIDI_SendDebugMessage("%s", message);
 			if(((p*0x800)+i)<8183){
 				APP_LCD_Rectangle(90, 15+132, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 				APP_LCD_PrintFormattedString(92, 15+134, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 			}else{
 				APP_LCD_Rectangle(90, 15+132, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 				APP_LCD_PrintFormattedString(92, 15+134, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", "All Pages formatted.");
-				MIOS32_MIDI_SendDebugMessage("All Pages formatted.");
+				ADIOS_MIDI_SendDebugMessage("All Pages formatted.");
 			}
 			u16 progress= 100*((p*0x800)+i+8)/8192;
 			memset(&prog_bmp_array, 0x00, sizeof(prog_bmp_array));
@@ -562,8 +562,8 @@ s32 TR5X6_MEM_Format(void){
 
 /* ********* */
 s32 TR5X6_FLASH_Bank_Write(tr5x6_flash_info_t slot){
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-		//MIOS32_MIDI_SendDebugMessage("bank#%d slot#%d; %s and color 0x%04x\n", slot.bank, slot.slot, slot.name, slot.color);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+		//ADIOS_MIDI_SendDebugMessage("bank#%d slot#%d; %s and color 0x%04x\n", slot.bank, slot.slot, slot.name, slot.color);
 #endif
 	// determine the page and address range depending on host 505/626
 	u8 page= slot.bank/TR5X6_FLASH_BANK_DIVIDER;		// TR5X6_FLASH_PAGE_BASE
@@ -579,9 +579,9 @@ s32 TR5X6_FLASH_Bank_Write(tr5x6_flash_info_t slot){
 	LL_FLASH_Status status;
 	if( (status=LL_FLASH_PageErase(LL_FLASH_BANK_1, TR5X6_FLASH_PAGE_BASE + page)) != FLASH_COMPLETE ) {
 		//LL_FLASH_ClearFlag(LL_FLASH_SR_CLEAR); // clear error flags, otherwise next program attempts will fail
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 		uint32_t error=LL_FLASH_GetError();
-		MIOS32_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
+		ADIOS_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
 #endif
 		LL_FLASH_Lock();
 		return -1;
@@ -599,9 +599,9 @@ s32 TR5X6_FLASH_Bank_Write(tr5x6_flash_info_t slot){
 				((uint64_t)datas[i+6] << 48) |
 				((uint64_t)datas[i+7] << 56);
 		if( (status=LL_FLASH_ProgramDoubleWord(addr, buff64)) != FLASH_COMPLETE ) {
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 			uint32_t error=LL_FLASH_GetError();
-			MIOS32_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
+			ADIOS_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
 #endif
 			LL_FLASH_Lock();
 			return -2;
@@ -663,9 +663,9 @@ static s32 TR5X6_ROM_SysPageWrite(void){
 	LL_FLASH_Status status;
 	if( (status=LL_FLASH_PageErase(LL_FLASH_BANK_1, TR5X6_FLASH_PAGE_BASE + page)) != FLASH_COMPLETE ) {
 		//LL_FLASH_ClearFlag(LL_FLASH_SR_CLEAR); // clear error flags, otherwise next program attempts will fail
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 		uint32_t error=LL_FLASH_GetError();
-		MIOS32_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
+		ADIOS_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
 #endif
 		LL_FLASH_Lock();
 		return -1;
@@ -683,9 +683,9 @@ static s32 TR5X6_ROM_SysPageWrite(void){
 				((uint64_t)datas[i+6] << 48) |
 				((uint64_t)datas[i+7] << 56);
 		if( (status=LL_FLASH_ProgramDoubleWord(addr, buff64)) != FLASH_COMPLETE ) {
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 			uint32_t error=LL_FLASH_GetError();
-			MIOS32_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
+			ADIOS_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
 #endif
 			LL_FLASH_Lock();
 			return -2;
@@ -706,8 +706,8 @@ u8 TR5X6_ROM_BankRecall(void){
 
 /* ********* */
 s32 TR5X6_FLASH_Slot_Write(tr5x6_flash_info_t slot){
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-		//MIOS32_MIDI_SendDebugMessage("bank#%d slot#%d; %s and color 0x%04x\n", slot.bank, slot.slot, slot.name, slot.color);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+		//ADIOS_MIDI_SendDebugMessage("bank#%d slot#%d; %s and color 0x%04x\n", slot.bank, slot.slot, slot.name, slot.color);
 #endif
 	// determine the page and address range depending on host 505/626
 	u8 page= slot.bank/TR5X6_FLASH_BANK_DIVIDER;		// TR5X6_FLASH_PAGE_BASE
@@ -723,9 +723,9 @@ s32 TR5X6_FLASH_Slot_Write(tr5x6_flash_info_t slot){
 	LL_FLASH_Status status;
 	if( (status=LL_FLASH_PageErase(LL_FLASH_BANK_1, TR5X6_FLASH_PAGE_BASE + page)) != FLASH_COMPLETE ) {
 		//LL_FLASH_ClearFlag(LL_FLASH_SR_CLEAR); // clear error flags, otherwise next program attempts will fail
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 		uint32_t error=LL_FLASH_GetError();
-		MIOS32_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
+		ADIOS_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
 #endif
 		LL_FLASH_Lock();
 		return -1;
@@ -743,9 +743,9 @@ s32 TR5X6_FLASH_Slot_Write(tr5x6_flash_info_t slot){
 				((uint64_t)datas[i+6] << 48) |
 				((uint64_t)datas[i+7] << 56);
 		if( (status=LL_FLASH_ProgramDoubleWord(addr, buff64)) != FLASH_COMPLETE ) {
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 			uint32_t error=LL_FLASH_GetError();
-			MIOS32_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
+			ADIOS_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
 #endif
 			LL_FLASH_Lock();
 			return -2;
@@ -771,8 +771,8 @@ s32 TR5X6_FLASH_SlotRead(tr5x6_flash_info_t* slot){
 #if 0
 /* ********* */
 s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_mem){
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
-		//MIOS32_MIDI_SendDebugMessage("bank#%d slot#%d; %s and color 0x%04x\n", slot.bank, slot.slot, slot.name, slot.color);
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+		//ADIOS_MIDI_SendDebugMessage("bank#%d slot#%d; %s and color 0x%04x\n", slot.bank, slot.slot, slot.name, slot.color);
 
 #endif
 
@@ -798,9 +798,9 @@ s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_
 	LL_FLASH_Status status;
 	if( (status=LL_FLASH_PageErase(LL_FLASH_BANK_1, TR5X6_FLASH_PAGE_BASE + page)) != FLASH_COMPLETE ) {
 		//LL_FLASH_ClearFlag(LL_FLASH_SR_CLEAR); // clear error flags, otherwise next program attempts will fail
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 		uint32_t error=LL_FLASH_GetError();
-		MIOS32_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
+		ADIOS_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
 #endif
 		LL_FLASH_Lock();
 		return -1;
@@ -818,9 +818,9 @@ s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_
 				((uint64_t)datas[i+6] << 48) |
 				((uint64_t)datas[i+7] << 56);
 		if( (status=LL_FLASH_ProgramDoubleWord(addr, buff64)) != FLASH_COMPLETE ) {
-#ifndef MIOS32_MIDI_DISABLE_DEBUG_MESSAGE
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
 			uint32_t error=LL_FLASH_GetError();
-			MIOS32_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
+			ADIOS_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
 #endif
 			LL_FLASH_Lock();
 			return -2;

@@ -1,6 +1,6 @@
 //
 // USB Mass Storage Device Driver
-// Mainly based on STM32 example code and adapted to MIOS32.
+// Mainly based on STM32 example code and adapted to ADIOS.
 //
 // Memory Management Layer
 // 
@@ -31,7 +31,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 
-#include <mios32.h>
+#include <adios.h>
 #include <usb_lib.h>
 
 #include "msd.h"
@@ -97,7 +97,7 @@ void MSD_Read_Memory(uint8_t lun, uint32_t Memory_Offset, uint32_t Transfer_Leng
         case 0:
 	  if( MSD_Mass_Block_Size[lun] != 512 )
 	    break;
-	  status = MIOS32_SDCARD_SectorRead(Offset/512, (u8 *)Data_Buffer);
+	  status = ADIOS_SDCARD_SectorRead(Offset/512, (u8 *)Data_Buffer);
 	  // TK: how to handle an error here?
 	  break;
 
@@ -179,7 +179,7 @@ void MSD_Write_Memory (uint8_t lun, uint32_t Memory_Offset, uint32_t Transfer_Le
         case 0:
 	  if( MSD_Mass_Block_Size[lun] != 512 )
 	    break;
-	  status = MIOS32_SDCARD_SectorWrite(Offset/512, (u8 *)Data_Buffer);
+	  status = ADIOS_SDCARD_SectorWrite(Offset/512, (u8 *)Data_Buffer);
 	  // TK: how to handle an error here?
 	  break;
 
@@ -219,8 +219,8 @@ uint16_t MSD_MAL_GetStatus (uint8_t lun)
     return 1;
 
   if( lun == 0 ) {
-    mios32_sdcard_csd_t csd;
-    if( MIOS32_SDCARD_CSDRead(&csd) < 0 )
+    adios_sdcard_csd_t csd;
+    if( ADIOS_SDCARD_CSDRead(&csd) < 0 )
       return 1;
 
     u32 DeviceSizeMul = csd.DeviceSizeMul + 2;
