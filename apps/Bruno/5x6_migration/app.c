@@ -166,7 +166,7 @@ void APP_Init(void)
   }
 #endif
 
-  // give MIOS Studio a moment to be listening before the verdict goes out:
+  // give ADIOS Studio a moment to be listening before the verdict goes out:
   // the whole job is over long before a human could open a terminal
   ADIOS_DELAY_Wait_uS(50000);
 

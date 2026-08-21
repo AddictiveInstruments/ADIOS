@@ -7,14 +7,14 @@
 # protocol and writes it DIRECTLY into the BSL region (no staging - see the
 # rationale in ../src/bsl_sysex.c), preserving the persistent info block
 # (device ID, fastboot...) across the update, and resets into the fresh
-# bootloader on MIOS Studio's final 0x7f. See the BSL_UPDATER sections in
+# bootloader on ADIOS Studio's final 0x7f. See the BSL_UPDATER sections in
 # ../src/bsl_sysex.c and ../src/main.c - this build reuses the bootloader's
 # own sources, only adios_config.h (in THIS directory) and the -DBSL_UPDATER
 # switch differ.
 #
 # The output hex carries BOTH stages in disjoint address ranges: the tool
 # itself (its own window above the app origin) and the new bootloader image
-# (0x08000000..boundary). MIOS Studio runs the whole sequence from it.
+# (0x08000000..boundary). ADIOS Studio runs the whole sequence from it.
 #
 #   make [PROCESSOR=STM32G070CB]     -> updater_<PROCESSOR>.hex
 #
@@ -138,7 +138,7 @@ include $(ADIOS_PATH)/include/makefile/common.mk
 # image (0x08000000..boundary, straight from the pass-2 bootloader this very
 # build measured). The two occupy disjoint address ranges, so a plain ihex
 # concatenation (EOF record of the first part stripped) is a valid file.
-# MIOS Studio splits it by the boundary: stage 1 uploads the tool through
+# ADIOS Studio splits it by the boundary: stage 1 uploads the tool through
 # the device's existing bootloader, then - recognizing the freshly booted
 # core as "UPDATER" (query 0x0b) - automatically uploads the image part,
 # which the updater writes into the BSL region directly, then triggers the

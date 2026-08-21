@@ -21,14 +21,14 @@
 //! include $(ADIOS_PATH)/modules/freertos_utils/freertos_utils.mk
 //! \endcode
 //!
-//! Performance stats can be sent to the MIOS Terminal via:
+//! Performance stats can be sent to the ADIOS Terminal via:
 //! \code
 //!   FREERTOS_UTILS_RunTimeStats();
 //! \endcode
 //! e.g. when a special button has been pushed, or a special MIDI event
 //! has been received.
 //!
-//! Example for a stat table sent to the MIOS Terminal:
+//! Example for a stat table sent to the ADIOS Terminal:
 //! \code
 //! 00000072321902 ms | Task                 Abs Time             % Time
 //! 00000072321902 ms | ================================================
@@ -130,7 +130,7 @@ u32 FREERTOS_UTILS_PerfCounterGet(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
-//! Use this function to send the performance stats to the MIOS terminal
+//! Use this function to send the performance stats to the ADIOS terminal
 //! via MIDI
 //! \return < 0 if MIDI output failed
 /////////////////////////////////////////////////////////////////////////////
@@ -167,7 +167,7 @@ s32 FREERTOS_UTILS_RunTimeStats(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Sends individual SysEx strings to MIOS terminal which are separated by \n
+// Sends individual SysEx strings to ADIOS terminal which are separated by \n
 /////////////////////////////////////////////////////////////////////////////
 #if configGENERATE_RUN_TIME_STATS
 static s32 FREERTOS_UTILS_PrintBuffer(char *buffer)

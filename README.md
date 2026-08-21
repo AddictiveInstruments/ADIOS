@@ -1,7 +1,7 @@
 # ADIOS (trunk_dyn_bsl)
 
 Firmware "OS" for STM32-based instrument retrofits - MIDI-centric, derived
-from [ADIOS](http://www.ucapps.de/adios.html), heavily
+from [MIOS32](http://www.ucapps.de/mios32.html), heavily
 reworked: STM32G0xx + STM32F4xx families, LL-driver based, dynamic
 bootloader/app flash boundary, opt-in peripheral model, bare-metal or
 FreeRTOS scheduling tiers.
@@ -30,7 +30,7 @@ make
 ```
 
 An exported `ADIOS_PATH` (absolute path to the repo root, POSIX style -
-e.g. `/e/ADIOS/trunk_dyn_bsl` under MSYS) overrides the self-location if
+e.g. `/c/work/adios` under MSYS) overrides the self-location if
 you need to build an app that lives OUTSIDE the repo tree.
 
 Apps that opt into the dynamic bootloader mechanism
@@ -40,7 +40,7 @@ deliverables in the app directory on every `make`:
 - `<app>_full_bsl_app.bin` - combined bootloader+app image, flash it at
   0x08000000 over SWD for a factory-fresh board
 - `<app>_app_only.hex` - app only, for field updates over MIDI
-  (MIOS Studio), never touches the protected bootloader region
+  (ADIOS Studio), never touches the protected bootloader region
 
 The bootloader is rebuilt and measured automatically on every make (see
 `etc/gen_bsl_boundary.sh` - the app/bootloader flash split is computed from

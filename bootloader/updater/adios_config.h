@@ -93,7 +93,7 @@
 #define ADIOS_MIDI_BSL_ENHANCEMENTS 1
 
 // announce ourselves as the BSL-update tool on the core-type query (0x0b):
-// MIOS Studio only ever allows a hex targeting the protected bootloader
+// ADIOS Studio only ever allows a hex targeting the protected bootloader
 // range to be sent to a core answering "UPDATER" here
 #define ADIOS_MIDI_CORE_TYPE_STR "UPDATER"
 
@@ -149,7 +149,7 @@
 #include "adios_bsl_boundary.h"
 #endif
 // same guard as the bootloader: without the project's relayed wiring this
-// tool would build fine and never answer MIOS Studio
+// tool would build fine and never answer ADIOS Studio
 #ifndef ADIOS_USE_DIN_MIDI
 # error "No board MIDI wiring reached this updater build: add a BSL_RELAY_BEGIN/END block to your project's adios_config.h declaring the port it must talk on (see apps/Bruno/5x6_505/adios_config.h)."
 #endif

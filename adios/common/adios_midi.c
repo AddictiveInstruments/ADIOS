@@ -829,7 +829,7 @@ s32 ADIOS_MIDI_SendDebugStringHeader(adios_midi_port_t port, char command, char 
 	package.type = 0x4; // SysEx starts or continues
 	package.evnt0 = ADIOS_MIDI_SYSEX_DEBUG;
 	package.evnt1 = command; // output string, usually 0x40
-	package.evnt2 = first_byte; // will be 0x00 if string already ends (""), thats ok, MIOS Studio can handle this
+	package.evnt2 = first_byte; // will be 0x00 if string already ends (""), thats ok, ADIOS Studio can handle this
 	status |= ADIOS_MIDI_SendPackage(port, package);
 
 	return status;
@@ -920,7 +920,7 @@ s32 ADIOS_MIDI_SendDebugStringFooter(adios_midi_port_t port)
 
 
 /////////////////////////////////////////////////////////////////////////////
-//! Sends a string to the MIOS Terminal in MIOS Studio.
+//! Sends a string to the ADIOS Terminal in ADIOS Studio.
 //!
 //! In distance to ADIOS_MIDI_SendDebugMessage this version is less costly (it
 //! doesn't consume so much stack space), but the string must already be prepared.
@@ -954,7 +954,7 @@ s32 ADIOS_MIDI_SendDebugString(const char *str)
 
 
 /////////////////////////////////////////////////////////////////////////////
-//! Sends a formatted Debug Message to the MIOS Terminal in MIOS Studio.
+//! Sends a formatted Debug Message to the ADIOS Terminal in ADIOS Studio.
 //!
 //! Formatting parameters are like known from printf, e.g.
 //! \code
@@ -1014,7 +1014,7 @@ s32 ADIOS_MIDI_SendDebugMessage(const char *format, ...)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Sends an hex dump (formatted representation of memory content) to the 
-//! MIOS Terminal in MIOS Studio.
+//! ADIOS Terminal in ADIOS Studio.
 //!
 //! The MIDI port used for debugging (MIDI_DEBUG) can be declared in adios_config.h:
 //! \code
@@ -1758,10 +1758,10 @@ static s32 ADIOS_MIDI_SYSEX_Parser(adios_midi_port_t port, u8 midi_in)
 		return -1;
 
 	// USB upload is only allowed via USB0
-	// this covers the scenario where other USB1..7 ports are used for MIDI Port forwarding, and a MIOS8 core
+	// this covers the scenario where other USB1..15 ports are used for MIDI Port forwarding, and the core
 	// is connected to one of these ports
-	// MIOS Studio reports "Detected MIOS8 and ADIOS response - selection not supported yet!" in this case
-	// ignoring USB1..USB7 keeps multi-port hosts working
+	// ADIOS Studio reports "Detected ADIOS response - selection not supported yet!" in this case
+	// ignoring USB1..USB15 keeps multi-port hosts working
 	if( port >= USB1 && port <= USB15 )
 		return -1;
 
@@ -1876,7 +1876,7 @@ static s32 ADIOS_MIDI_SYSEX_Cmd_Query(adios_midi_port_t port, adios_midi_sysex_c
 			// the old USB stack. It leaned on an API that stack took with it,
 			// and only ever compiled with more than one cable, which is why
 			// it survived unnoticed until 2026-08-17.)
-			// the operating system's own name. MIOS Studio checks it before
+			// the operating system's own name. ADIOS Studio checks it before
 			// starting an upload, so the two must change together - it
 			// accepts both spellings (UploadHandler.cpp).
 			ADIOS_MIDI_SYSEX_SendAckStr(port, "ADIOS");
@@ -1927,7 +1927,7 @@ static s32 ADIOS_MIDI_SYSEX_Cmd_Query(adios_midi_port_t port, adios_midi_sysex_c
 #endif
 		case 0x0b: // Core type (2026-08-09, for the one-click BSL update flow):
 			// "APP" (default), "BSL" (bootloader build) or "UPDATER" (the
-			// BSL-update tool) - lets MIOS Studio decide whether a hex
+			// BSL-update tool) - lets ADIOS Studio decide whether a hex
 			// targeting the protected bootloader range may be sent (UPDATER
 			// only), and whether the core understands the entry-override
 			// command (BSL). Legacy firmware without this query answers
@@ -1938,7 +1938,7 @@ static s32 ADIOS_MIDI_SYSEX_Cmd_Query(adios_midi_port_t port, adios_midi_sysex_c
 #if !ADIOS_USE_BOOTLOADER
 			// nothing to reboot INTO: this core has no bootloader, so the
 			// flag-and-reset below would just restart the application on
-			// itself - and MIOS Studio, which retries, would loop it. Say so
+			// itself - and ADIOS Studio, which retries, would loop it. Say so
 			// instead, and stay running.
 			ADIOS_MIDI_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_UNKNOWN_QUERY);
 #elif ADIOS_MIDI_BSL_ENHANCEMENTS
@@ -1946,13 +1946,13 @@ static s32 ADIOS_MIDI_SYSEX_Cmd_Query(adios_midi_port_t port, adios_midi_sysex_c
 			BSL_SYSEX_ReleaseHaltState();
 #else
 			// "wait" handshake (2026-08-09): acknowledge the reboot request
-			// BEFORE resetting - MIOS Studio's one-click update flow used to
+			// BEFORE resetting - ADIOS Studio's one-click update flow used to
 			// hear nothing at all between this query and the bootloader's
 			// upload request after reset, and its wait window expired during
 			// the reboot gap. On this ack (arg = 0x7f, echoing the query
 			// number) Studio extends its window and waits for the BSL's
 			// "ready" (the upload request). See UploadHandlerThread::run()
-			// in MIOS Studio.
+			// in ADIOS Studio.
 			ADIOS_MIDI_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_ACK, 0x7f);
 			// let the ack physically leave the wire before the reset kills
 			// the peripheral: the 9-byte SysEx takes ~2.9 mS at MIDI baudrate
@@ -2135,7 +2135,7 @@ static s32 ADIOS_MIDI_SYSEX_SendAckStr(adios_midi_port_t port, char *str)
 
 /////////////////////////////////////////////////////////////////////////////
 //! Installs the debug command callback function which is executed on incoming
-//! characters from a MIOS Terminal
+//! characters from a ADIOS Terminal
 //!
 //! Example:
 //! \code

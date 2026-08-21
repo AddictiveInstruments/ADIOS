@@ -7,7 +7,7 @@
 #ifndef _ADIOS_CONFIG_H
 #define _ADIOS_CONFIG_H
 
-// The names MIOS Studio shows in its query answer. Unambiguous on purpose:
+// The names ADIOS Studio shows in its query answer. Unambiguous on purpose:
 // this thing is loaded on top of the instrument's firmware for exactly one
 // boot, and you want to be able to tell at a glance that it is what is running.
 #define ADIOS_APP_NAME1 "5x6 ROM migration"

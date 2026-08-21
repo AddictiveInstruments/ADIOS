@@ -89,7 +89,7 @@
 #define ADIOS_MIDI_BSL_ENHANCEMENTS 1
 
 // announce ourselves as the bootloader on the core-type query (0x0b) - a
-// new-generation marker too: MIOS Studio uses a positive answer here to know
+// new-generation marker too: ADIOS Studio uses a positive answer here to know
 // the entry-override SysEx command is understood (legacy BSLs DISACK 0x0b)
 #define ADIOS_MIDI_CORE_TYPE_STR "BSL"
 
@@ -156,7 +156,7 @@
 // debug-message support stripped (production default): the vsprintf
 // machinery alone pushes the new-generation BSL over its 10240-byte page
 // (10456 bytes with it), bouncing the boundary from 0x2800 to 0x3000 -
-// errors still reach MIOS Studio as DISACK codes.
+// errors still reach ADIOS Studio as DISACK codes.
 // Commenting this line out is therefore also how the boundary-MIGRATION
 // path gets exercised on real hardware (bigger BSL -> 0x3000): it tests the
 // updater's old-info-block scan, its relocation to the new boundary, and

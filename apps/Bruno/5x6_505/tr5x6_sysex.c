@@ -165,7 +165,7 @@ s32 TR5X6_SYSEX_HaltStateGet(void)
 s32 TR5X6_SYSEX_ReleaseHaltState(void)
 {
 	// always send upload request (like if we would come out of reset)
-	// DIN2 = the instrument's physical MIDI OUT, where MIOS Studio listens
+	// DIN2 = the instrument's physical MIDI OUT, where ADIOS Studio listens
 	TR5X6_SYSEX_SendUploadReq(DIN2);
 	TR5X6_SYSEX_SendUploadReq(USB0);
 

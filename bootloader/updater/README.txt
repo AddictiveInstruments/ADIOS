@@ -7,7 +7,7 @@ See the LICENSE file in the project root for full licence information.
 ===============================================================================
 
 Required tools:
-  -> http://www.ucapps.de/adios_c.html
+  -> see README.md in the project root
 
 ===============================================================================
 
@@ -19,8 +19,8 @@ Required hardware:
 
 This application has different purposes:
 
-1) you would like to program the bootloader on a virgin STM32 or LPC17 device via JTAG
-or COM interface as described under http://www.ucapps.de/adios_bootstrap_experts.html
+1) you would like to program the bootloader on a virgin STM32 device via SWD
+(STM32_Programmer_CLI, see README.md in the project root).
 
 In this case, just use the <board>/project.bin or <board>/project.hex file.
 Once uploaded, you are able to update applications via MIOS Studio

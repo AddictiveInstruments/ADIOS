@@ -51,7 +51,7 @@
 
 // core type reported by query 0x0b - "APP" for a normal application (the
 // default), overridden to "BSL" by the bootloader build and "UPDATER" by the
-// BSL-update tool (see bootloader/). MIOS Studio bases its upload-range
+// BSL-update tool (see bootloader/). ADIOS Studio bases its upload-range
 // protection on this answer.
 // Line activity, for an indicator. OPT-IN: define ADIOS_USE_MIDI_ACT in a
 // project's adios_config.h to compile it at all - without it there is no

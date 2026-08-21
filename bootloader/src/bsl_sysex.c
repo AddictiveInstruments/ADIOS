@@ -157,7 +157,7 @@ static u8 halt_state;
 // DIRECTLY into the BSL region - no staging (decision 2026-08-09: this is a
 // beta-tester-only operation, a power cut during the ~10s transfer is
 // accepted; every MIDI-level failure is covered by the per-block checksum,
-// the read-back verification and MIOS Studio's block retries). Studio
+// the read-back verification and ADIOS Studio's block retries). Studio
 // drives the whole two-stage sequence from ONE hex and finishes with 0x7f
 // (see BSL_SYSEX_ReleaseHaltState below).
 #ifndef ADIOS_UPDATER_ORIGIN_ADDR
@@ -195,7 +195,7 @@ static u8 info_found;
 // software-requested hold (2026-08-09): mirror of the RTC-backup
 // "bootloader mode requested" flag, set by main() at boot. Unlike the
 // physical BSL_HOLD pin (which the user releases by hand), this one has no
-// physical release - it is cleared here, by MIOS Studio's post-upload
+// physical release - it is cleared here, by ADIOS Studio's post-upload
 // "reboot" query (see BSL_SYSEX_ReleaseHaltState below). Without that, a
 // software-entered bootloader could never fall through to the application.
 static u8 soft_hold;
@@ -207,7 +207,7 @@ static u8 upload_started;
 
 #ifndef BSL_UPDATER
 // The application's head page (its vector table) is erased on the FIRST write
-// block of a session and written by the LAST one, because MIOS Studio holds
+// block of a session and written by the LAST one, because ADIOS Studio holds
 // that block back deliberately. Together they make an interrupted upload
 // detectable: main() only branches to the application when its reset vector
 // is valid, so an upload that never reached its final block leaves no
@@ -265,7 +265,7 @@ s32 BSL_SYSEX_Init(u32 mode)
 	// ID from ADIOS_SYS_ADDR_DEVICE_ID - which, in this build, points at the
 	// NEW boundary's info block position. On a boundary MIGRATION nothing is
 	// there yet (the real block still sits at the OLD boundary, found by the
-	// scan above), so the ID silently defaulted to 0 and MIOS Studio - still
+	// scan above), so the ID silently defaulted to 0 and ADIOS Studio - still
 	// addressing the instrument's own ID - could no longer reach the updater:
 	// the second stage of the one-file update never started (found on the
 	// first real migration, 2026-08-10).
@@ -289,7 +289,7 @@ s32 BSL_SYSEX_HaltStateGet(void)
 /////////////////////////////////////////////////////////////////////////////
 // Returns 1 once anything has been written in this session. main()'s
 // "no application" wait loop uses it as its way out: something arrived and
-// MIOS Studio released, so the boot decision has to be taken again from
+// ADIOS Studio released, so the boot decision has to be taken again from
 // scratch - which may now mean an entry override, not just a fresh app.
 /////////////////////////////////////////////////////////////////////////////
 s32 BSL_SYSEX_UploadStartedGet(void)
@@ -317,7 +317,7 @@ s32 BSL_SYSEX_SoftHoldGet(void)
 
 #ifdef BSL_UPDATER
 /////////////////////////////////////////////////////////////////////////////
-// Updater build: MIOS Studio's 0x7f is handled two ways.
+// Updater build: ADIOS Studio's 0x7f is handled two ways.
 //
 // A) A bootloader image was written this session (upload_started, and a
 //    plausible reset vector at 0x08000004): finish the BSL update -
@@ -363,7 +363,7 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 		// bootloader from the outside - so nothing ever told you that the
 		// update had happened and that the application space now holds this
 		// tool rather than an application. Staying resident makes the state
-		// visible: a query answers UPDATER, and MIOS Studio says so.
+		// visible: a query answers UPDATER, and ADIOS Studio says so.
 		//
 		// upload_started goes back to zero, which is what makes the NEXT 0x7f
 		// take case B below - the app-load relay. Sending an application from
@@ -372,7 +372,7 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 		halt_state = 0;
 		upload_started = 0;
 
-		// answer MIOS Studio's finalize (it waits ~3 s for any sign of life,
+		// answer ADIOS Studio's finalize (it waits ~3 s for any sign of life,
 		// which used to be the fresh bootloader announcing itself after the
 		// reset). No peripheral reset happens here, so nothing can eat these
 		// bytes on their way out.
@@ -401,7 +401,7 @@ s32 BSL_SYSEX_ReleaseHaltState(void)
 	// ADIOS_MIDI_DEFAULT_PORT, not a hardcoded DIN0: this bootloader talks
 	// on whatever DIN port its board actually wires (see adios_config.h) -
 	// announcing on a port that isn't even enabled makes the core look dead
-	// to MIOS Studio while everything else works.
+	// to ADIOS Studio while everything else works.
 	BSL_SYSEX_SendUploadReq(ADIOS_MIDI_DEFAULT_PORT);
 	BSL_SYSEX_SendUploadReq(USB0);
 
@@ -502,7 +502,7 @@ s32 BSL_SYSEX_Cmd_ReadMem(adios_midi_port_t port, adios_midi_sysex_cmd_state_t c
 // vector-table address of an alternate entry (the updater, linked above the
 // normal app origin). Stored in a backup register, one-shot - consumed by
 // main()'s jump-to-application decision on the very next boundary-exit.
-// Sent by MIOS Studio right before the final 0x7f when it has uploaded an
+// Sent by ADIOS Studio right before the final 0x7f when it has uploaded an
 // application whose hex does NOT start at the app/bootloader boundary.
 /////////////////////////////////////////////////////////////////////////////
 s32 BSL_SYSEX_Cmd_SetEntryOverride(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in)
@@ -629,7 +629,7 @@ s32 BSL_SYSEX_Cmd_WriteMem(adios_midi_port_t port, adios_midi_sysex_cmd_state_t 
 			// invalidate the application NOW by erasing its head page, so
 			// that an upload interrupted anywhere from here on leaves a
 			// device with no application rather than a half-replaced one.
-			// The block that refills that page is the one MIOS Studio sends
+			// The block that refills that page is the one ADIOS Studio sends
 			// last, which is what makes "upload complete" and "application
 			// valid" the same statement.
 			// bounded on BOTH sides: WriteMem also accepts SRAM targets,
@@ -814,7 +814,7 @@ s32 BSL_SYSEX_SendMem(adios_midi_port_t port, u32 addr, u32 len)
 // Erases the application's head page/sector - the one holding its vector
 // table - so that from the first received block onwards this device has no
 // application main() would agree to start. Called once per upload session;
-// MIOS Studio sends the block that refills it last (see app_head_erased).
+// ADIOS Studio sends the block that refills it last (see app_head_erased).
 /////////////////////////////////////////////////////////////////////////////
 static s32 BSL_SYSEX_EraseAppHead(void)
 {
@@ -879,7 +879,7 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 			//ADIOS_IRQ_Disable();
 
 			// erase on entering a page - EXCEPT the application's head page
-			// when this session already erased it up front: MIOS Studio
+			// when this session already erased it up front: ADIOS Studio
 			// sends that page's first block LAST, and erasing again here
 			// would wipe the rest of the page it has just filled
 			if( (addr % FLASH_PAGE_SIZE) == 0
@@ -914,7 +914,7 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 			// Skip double words that already hold exactly this value. Two
 			// things depend on it on G0, where flash carries ECC and a double
 			// word may be programmed only ONCE per erase cycle:
-			//  - retries. MIOS Studio re-sends a block whose acknowledge was
+			//  - retries. ADIOS Studio re-sends a block whose acknowledge was
 			//    lost, and re-programming an identical double word raises
 			//    PROGERR. That used to be survivable only for the block at a
 			//    page start, which re-erased the page - and that block is now
@@ -989,7 +989,7 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 #endif
 					// erase only if really required
 					// helps in the case, that an erase takes more than 1 second.
-					// if this happens, MIOS Studio will retry the memory transfer, and in this case the sector will be erased again.
+					// if this happens, ADIOS Studio will retry the memory transfer, and in this case the sector will be erased again.
 					// period...
 					u8 erase_required = 0;
 					{
@@ -999,7 +999,7 @@ static s32 BSL_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
 						}
 #else
 						// NOT reset on the application's start address any
-						// more: MIOS Studio now sends that block LAST, so
+						// more: ADIOS Studio now sends that block LAST, so
 						// clearing the bookkeeping here would re-erase the
 						// head sector and destroy the whole upload. The
 						// session starts (and the head sector is erased) at

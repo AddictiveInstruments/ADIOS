@@ -121,7 +121,7 @@
 //           everything is merged, and PB9 in, wired in parallel with the
 //           host's own MIDI input                          -> port DIN2
 // Only the second one is the bootloader's business - it is the connector
-// the outside world (and MIOS Studio) talks to - so it lives in the relayed
+// the outside world (and ADIOS Studio) talks to - so it lives in the relayed
 // block below; the host link is this application's alone.
 #define ADIOS_USE_UART0
 

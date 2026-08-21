@@ -260,7 +260,7 @@ s32 NOTESTACK_Clear(notestack_t *n)
 
 
 /////////////////////////////////////////////////////////////////////////////
-//! Sends the content of the Notestack to the MIOS Terminal
+//! Sends the content of the Notestack to the ADIOS Terminal
 //! \param[in] *n pointer to notestack structure
 //! \return < 0 on errors
 /////////////////////////////////////////////////////////////////////////////

@@ -138,7 +138,7 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
 // main() enters it from exactly two places, and they are the only two reasons
 // to be here at all:
 //   - held, by the BSL_HOLD pin or by the software request an application
-//     sets before rebooting on MIOS Studio's behalf (no_app = 0). Leaves when
+//     sets before rebooting on ADIOS Studio's behalf (no_app = 0). Leaves when
 //     released, and main() hands over to the application below.
 //   - no valid application to hand over to (no_app = 1), the state a power cut
 //     during an upload leaves behind. Leaves as soon as something HAS been
@@ -149,7 +149,7 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
 // The LED tells the two apart: pulsating = held, fast blink = no application.
 //
 // There is deliberately NO timeout. The former 2-second window existed so
-// MIOS Studio could catch a core it had just asked to reboot; the software
+// ADIOS Studio could catch a core it had just asked to reboot; the software
 // hold flag does that explicitly now, so the delay only ever slowed down
 // every single boot (it was disabled outright by the "fastboot" info-block
 // field, which this makes pointless - see main()).
@@ -163,7 +163,7 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
   // ADIOS_MIDI_DEFAULT_PORT, not a hardcoded DIN0: this bootloader talks
   // on whatever DIN port its board actually wires (see adios_config.h).
   // Announcing on a port that isn't even enabled makes the core look dead
-  // to MIOS Studio while everything else works - which is exactly what
+  // to ADIOS Studio while everything else works - which is exactly what
   // happened once ADIOS_UARTn was realigned to USART(n+1) and this
   // board's MIDI connector became DIN2 instead of DIN0.
   BSL_SYSEX_SendUploadReq(ADIOS_MIDI_DEFAULT_PORT);
@@ -260,9 +260,9 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
     ADIOS_MIDI_Receive_Handler(NULL);
 
     // The "no application" case leaves as soon as SOMETHING has been written
-    // and MIOS Studio has released - main() then resets, and the whole boot
+    // and ADIOS Studio has released - main() then resets, and the whole boot
     // decision is taken again from scratch. Watching the application's reset
-    // vector instead was too narrow: MIOS Studio also installs the BSL update
+    // vector instead was too narrow: ADIOS Studio also installs the BSL update
     // tool ABOVE the boundary and redirects a single boot to it with the entry
     // override, which is read once per startup, before this loop. The loop
     // never saw the boundary become valid - because it does not, in that flow -
@@ -276,7 +276,7 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
   // Let whatever was just queued actually LEAVE the UART before this function
   // returns - main() hands over to the application (or resets) immediately
   // after, and both wipe the USART while transmission is interrupt driven.
-  // BSL_SYSEX_ReleaseHaltState() answers MIOS Studio's post-upload reboot
+  // BSL_SYSEX_ReleaseHaltState() answers ADIOS Studio's post-upload reboot
   // query with an upload request exactly here, and losing it made Studio
   // report "No response from core after reboot" on an upload that had in
   // fact succeeded (2026-08-11). The former 2-second timeout hid this by
@@ -289,7 +289,7 @@ static void BSL_WaitLoop(u8 hold_mode_active_after_reset, u8 usb_was_initialized
 
 #if defined(ADIOS_USE_USB)
   // Same duty for USB - and it was missing, while the DIN had its flush
-  // above. ReleaseHaltState() queues its answers to MIOS Studio's post-
+  // above. ReleaseHaltState() queues its answers to ADIOS Studio's post-
   // upload reboot query; the loop condition then goes false and this
   // function returns, main() quiesces the port, and everything still in
   // the TX FIFO dies unsent. Studio waits for exactly those bytes, and
@@ -393,7 +393,7 @@ int main(void)
 
   // relay the software-requested hold (RTC backup flag, consumed above) into
   // the SysEx module: unlike the physical pin it has no manual release, so
-  // BSL_SYSEX_ReleaseHaltState() clears it on MIOS Studio's post-upload
+  // BSL_SYSEX_ReleaseHaltState() clears it on ADIOS Studio's post-upload
   // "reboot" query - otherwise a software-entered BSL could never fall
   // through to the application (found 2026-08-09).
   BSL_SYSEX_SoftHoldSet(bootloader_mode_requested);
@@ -411,7 +411,7 @@ int main(void)
   // bootloader now ALWAYS hands over immediately when it has an application
   // and nothing asks it to stay - what the info block's fastboot field used
   // to switch on. Its opposite was not a feature but a 2-second delay on
-  // every boot, whose only purpose was to give MIOS Studio a chance to catch
+  // every boot, whose only purpose was to give ADIOS Studio a chance to catch
   // a core it had just asked to reboot; the software hold flag does that
   // explicitly and reliably. The field at ADIOS_SYS_ADDR_FASTBOOT(_CONFIRM)
   // is simply no longer read - the bytes stay in the info block, and the
@@ -531,7 +531,7 @@ int main(void)
   // ...and it returned, so an upload just wrote a valid application. Reset
   // rather than jump from here: the boot path above already knows how to
   // hand over (stack pointer, entry override, peripheral reset), and a fresh
-  // start is also what MIOS Studio asked for with the reboot query that
+  // start is also what ADIOS Studio asked for with the reboot query that
   // released the hold. Everything queued for it has been flushed by the loop.
   ADIOS_SYS_Reset();
 

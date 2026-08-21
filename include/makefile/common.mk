@@ -81,7 +81,7 @@ CFLAGS += -fstack-usage
 # project_build/adios/common/adios_midi.o no matter how ADIOS_PATH is
 # spelled. Before 2026-08-09 the raw source path was used as-is, with two
 # real consequences: an absolute ADIOS_PATH nested a full copy of it inside
-# project_build/ ("project_build//e/ADIOS/..."), and a RELATIVE one (e.g.
+# project_build/ ("project_build//c/work/adios/..."), and a RELATIVE one (e.g.
 # "../../..", now the zero-config default in the app Makefiles) was worse -
 # mkdir -p/gcc -o resolved the ".." segments as a real upward walk OUT of
 # project_build/, scattering stray adios/drivers/FreeRTOS object trees
@@ -147,7 +147,7 @@ Release: all
 #      real app code at the generated boundary - copied here under an
 #      explicit name so it's never confused with the app-only artifact below.
 #   2) <app>_app_only.hex - app code only (embedded bootloader copy excluded)
-#      for injecting via MIOS Studio without touching SWD, the normal
+#      for injecting via ADIOS Studio without touching SWD, the normal
 #      end-user/field update path.
 # This "all:" statement has no recipe body - Make merges its prerequisite
 # list into the "all:" rule above instead of conflicting with it.
@@ -167,7 +167,7 @@ $(DYNAMIC_BSL_APP_NAME)_app_only.hex: project_build/$(PROJECT).elf
 #    THIS app's chip and boundary (the updater is as chip/boundary-bound as
 #    the app itself, so it ships from here under the app's own name). It
 #    carries BOTH the update tool and the new bootloader image in disjoint
-#    address ranges - MIOS Studio runs the whole two-stage sequence from it
+#    address ranges - ADIOS Studio runs the whole two-stage sequence from it
 #    automatically (see bootloader/updater/Makefile). Built by the updater's
 #    own Makefile for $(PROCESSOR); ADIOS_PATH is passed relative to THAT
 #    directory (always 2 levels deep), not inherited - an app-relative or

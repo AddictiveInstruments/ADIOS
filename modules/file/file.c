@@ -1770,7 +1770,7 @@ s32 FILE_BackupDiskAutoName(u8 max_depth)
 }
 
 /////////////////////////////////////////////////////////////////////////////
-//! This function prints some useful SD card informations on the MIOS terminal
+//! This function prints some useful SD card informations on the ADIOS terminal
 /////////////////////////////////////////////////////////////////////////////
 s32 FILE_PrintSDCardInfos(void)
 {
@@ -1849,7 +1849,7 @@ s32 FILE_PrintSDCardInfos(void)
 
 
 /////////////////////////////////////////////////////////////////////////////
-//! Send a verbose error message to MIOS terminal
+//! Send a verbose error message to ADIOS terminal
 /////////////////////////////////////////////////////////////////////////////
 s32 FILE_SendErrorMessage(s32 error_status)
 {
@@ -1892,7 +1892,7 @@ s32 FILE_SendErrorMessage(s32 error_status)
 
 
 /////////////////////////////////////////////////////////////////////////////
-//! Handler for MIOS Studio Filebrowser accesses.\n
+//! Handler for ADIOS Studio Filebrowser accesses.\n
 //! See $ADIOS_PATH/apps/controllers/midio128/src/terminal.c for usage example.
 /////////////////////////////////////////////////////////////////////////////
 s32 FILE_BrowserHandler(adios_midi_port_t port, char *command)
@@ -1993,7 +1993,7 @@ s32 FILE_BrowserHandler(adios_midi_port_t port, char *command)
 	    for(pos=0; pos<len; pos+=32) {
 	      char *str_ptr = (char *)str;
 
-	      // send status message to MIOS terminal for the case that MIOS Studio has been started
+	      // send status message to ADIOS terminal for the case that ADIOS Studio has been started
 	      // while read operation in progress
 	      if( (pos % (320*32)) == 0 ) {
 		DEBUG_MSG("[FILE] Download of %d bytes in progress (%d%%)", len, (int)((100.0*(float)pos)/(float)len));

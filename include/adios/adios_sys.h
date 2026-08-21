@@ -215,7 +215,7 @@ typedef enum {
 #endif
 
 // location of the Device ID and USB device name
-// The bootloader update tool allows to change these values from MIOS terminal
+// The bootloader update tool allows to change these values from ADIOS terminal
 // NOTE: deliberately left UNDEFINED when there is no bootloader. The block
 // lives at (boundary - 0x100), which without a bootloader would resolve to
 // 0x07FFFF00 - outside flash entirely - and every reader of it here and in

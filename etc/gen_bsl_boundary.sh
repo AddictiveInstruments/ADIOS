@@ -108,7 +108,7 @@ PROJECT_DIR="$3"
 # ORIGIN = the FLEET BOUNDARY CEILING (the highest boundary any device can
 # have). The updater is compiled code with absolute addresses - its link
 # address is fixed at build time, before the target device's OLD boundary is
-# known, and neither MIOS Studio nor anyone can relocate compiled ARM code.
+# known, and neither ADIOS Studio nor anyone can relocate compiled ARM code.
 # Two constraints force it >= max(old, new) boundary: (1) it is uploaded
 # THROUGH the old bootloader, which physically refuses writes below its own
 # boundary; (2) it must survive the BSL-region rewrite (writes below the new

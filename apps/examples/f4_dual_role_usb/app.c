@@ -157,7 +157,7 @@ void APP_MIDI_NotifyPackage(adios_midi_port_t port, adios_midi_package_t midi_pa
 {
   // Host bring-up check: everything received from devices attached to the
   // host socket (USB16..31) is mirrored to the FIRST device cable - the same
-  // one MIOS Studio talks on. That mixing is not a compromise, it is what any
+  // one ADIOS Studio talks on. That mixing is not a compromise, it is what any
   // MIDI port does: sends all go through one task, so every message is
   // written whole, and a note lands BETWEEN two SysEx messages, never inside
   // one. Notes and a firmware upload do not even share a direction.

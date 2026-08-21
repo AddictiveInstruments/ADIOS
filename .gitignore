@@ -158,3 +158,10 @@ old_midibox_ref_only/
 session notepad
 session*.xml
 RELIQUATS.md
+
+# Eclipse / CubeIDE per-workspace settings. These describe THIS machine's IDE
+# install - toolchain paths, indexer state, and an exported ADIOS_PATH that
+# overrides the Makefile's self-location. They are rewritten on every build and
+# say nothing about the firmware, so whoever clones must not inherit them.
+# The .project / .cproject files DO stay: they describe the project itself.
+.settings/
