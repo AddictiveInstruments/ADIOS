@@ -149,3 +149,12 @@ adios_bsl_image.inc
 # adios_board, plus the original MIDIbox application tree. Nothing here is
 # built or maintained - it is kept locally to consult, not to carry.
 old_midibox_ref_only/
+
+# Editor session files and one-off working documents kept at the root.
+# These describe how WE are looking at the tree at a given moment - an open-tab
+# list, a survey, an analysis - and say nothing about the firmware. Twice in two
+# days such a file left in a commit (tk_report.txt, cases.txt), so they are named
+# here rather than remembered.
+session notepad
+session*.xml
+RELIQUATS.md
