@@ -165,3 +165,31 @@ RELIQUATS.md
 # say nothing about the firmware, so whoever clones must not inherit them.
 # The .project / .cproject files DO stay: they describe the project itself.
 .settings/
+
+# ---------------------------------------------------------------------------
+# Only what is needed to BUILD an application, plus the documentation written
+# for whoever uses it. Everything below fails that rule and is kept on disk,
+# out of the repository.
+# ---------------------------------------------------------------------------
+
+# Vendor documentation and libraries we never compile. The build asks for
+# exactly two CMSIS paths per family - CMSIS/Include and
+# CMSIS/Device/ST/STM32<family>/Include - and nothing else in that tree is ever
+# read: 4400 HTML pages, the DSP library with its Keil/IAR projects and test
+# suites, the neural-network library, two RTOS ports.
+drivers/*/LL_HAL/CMSIS/docs/
+drivers/*/LL_HAL/CMSIS/DSP/
+drivers/*/LL_HAL/CMSIS/NN/
+drivers/*/LL_HAL/CMSIS/RTOS/
+drivers/*/LL_HAL/CMSIS/RTOS2/
+*.chm
+
+# A MIDI library for the PC. Nothing in a firmware can use it.
+drivers/gnustep/
+
+# IDE project descriptors. Whoever builds under Xcode does not care about the
+# CubeIDE files, and the reverse holds too - the Makefile is the only thing
+# they have in common. These stay on disk so the local IDE keeps working.
+*.project
+*.cproject
+*.xcodeproj/
