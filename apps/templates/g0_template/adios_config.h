@@ -174,99 +174,57 @@
 
 
 // =============================================================================
-// FreeRTOS: two independent, numeric (0/1) opt-in switches, both with a
-// RAM/FLASH-tiered default (see include/adios/adios_sys.h for the exact
-// logic) - nothing needs to be defined here unless you want to override
-// that default. Numeric rather than plain #define presence specifically so
-// EITHER direction of override is possible ("#define ... 0" to force off on
-// a chip that would default to 1, or "... 1" to force on where it would
-// default to 0) - a bare #undef can't express "explicitly off" as opposed
-// to "undecided, apply the tier default".
+// FreeRTOS: presence/absence switches, like every other ADIOS_USE_* opt-in
+// (see include/adios/adios_sys.h). Nothing needs to be defined here on most
+// projects - the chip decides the default:
 //
-//   ADIOS_APP_USE_FREERTOS  - is the FreeRTOS kernel itself compiled/
-//                              linked in at all? (renamed from the old
-//                              opt-out ADIOS_DONT_USE_FREERTOS)
-//   ADIOS_CORE_USE_FREERTOS - does core/main.c
-//                              schedule the application Hooks (APP_Tick,
-//                              APP_MIDI_Tick, DIN/ENC/AIN/COM callbacks...)
-//                              via FreeRTOS tasks, or via a bare-metal
-//                              super-loop timed by a dedicated SysTick
-//                              handler instead?
+//   FLASH <= 32K or RAM <= 8K (real figures from etc/ld/<family>.ld.S)
+//     -> bare-metal: core/core.mk defines ADIOS_CORE_DONT_USE_FREERTOS
+//        itself and the kernel is not even compiled.
+//   bigger chips
+//     -> the traditional FreeRTOS model, scheduler on.
 //
-// Both default to 0 (bare-metal, no FreeRTOS) on chips in the "small" tier
-// - RAM <= 8K or FLASH <= 32K (physical chip specs: STM32G030K6, STM32G031K8
-// today) - and to 1 (FreeRTOS) everywhere else. Why: measured empirically,
-// FreeRTOS's own kernel + heap already consumes ~83% of a full G030K6 build
-// and roughly half the *total* RAM on G031K8 (the heap alone, before any
-// application code) - there just isn't enough room left for a real
-// application otherwise.
+//   ADIOS_CORE_DONT_USE_FREERTOS - opt-OUT: define it here to force the
+//                              bare-metal build on a big chip too.
+//   ADIOS_APP_USE_FREERTOS   - opt-in: declare it when the APPLICATION
+//                              ITSELF calls FreeRTOS (tasks, queues,
+//                              semaphores...). Incompatible with the
+//                              opt-out above - the build refuses the
+//                              combination, since core/main.c is who
+//                              starts the scheduler.
 //
 // *** THE TRADE-OFF, READ THIS BEFORE RELYING ON BARE-METAL MODE ***
-// With FreeRTOS (ADIOS_CORE_USE_FREERTOS=1, the traditional model): the
-// Hooks run as two SEPARATE, PREEMPTIVELY SCHEDULED tasks (TASK_Hooks for
-// DIN/ENC/AIN/COM/APP_Tick, TASK_MIDI_Hooks for MIDI). If an application
-// hook blocks or runs long (a slow screen redraw, a busy-wait, anything),
-// MIDI keeps being processed on schedule regardless, since TASK_MIDI_Hooks
-// can still preempt it.
-// Without FreeRTOS (=0, bare-metal super-loop): the two Hooks collapse into
+// With FreeRTOS (the traditional model): the Hooks run as two SEPARATE,
+// PREEMPTIVELY SCHEDULED tasks (TASK_Hooks for DIN/ENC/AIN/APP_Tick,
+// TASK_MIDI_Hooks for MIDI). If an application hook blocks or runs long
+// (a slow screen redraw, a busy-wait, anything), MIDI keeps being
+// processed on schedule regardless, since TASK_MIDI_Hooks can still
+// preempt it.
+// Bare-metal (ADIOS_CORE_DONT_USE_FREERTOS): the two Hooks collapse into
 // ONE sequential 1mS block, with nothing left to preempt anything. A slow
-// or blocking application hook NOW ALSO DELAYS MIDI PROCESSING. This is the
-// real price of the RAM/FLASH savings above - not just a smaller binary,
-// a different concurrency model. If your application on a small chip does
-// anything that can block or run long inside APP_Tick()/APP_Background()/
-// a DIN or ENC callback, keep that in mind (or force
-// ADIOS_CORE_USE_FREERTOS back to 1 and accept the RAM/FLASH cost instead).
+// or blocking application hook NOW ALSO DELAYS MIDI PROCESSING. This is
+// the real price of the RAM/FLASH savings (measured: FreeRTOS costs ~83%
+// of a full G030K6 build, about half the total RAM of a G031K8) - not
+// just a smaller binary, a different concurrency model.
 //
-// A related switch, ADIOS_CORE_USE_CANARI (also numeric, also tiered -
-// defaults to 1 exactly when ADIOS_CORE_USE_FREERTOS is 0): adds a
-// stack-overflow canary to the bare-metal loop, since FreeRTOS's own
-// configCHECK_FOR_STACK_OVERFLOW protection is gone along with the kernel.
-// Costs ~630 bytes FLASH, 0 extra RAM (reuses the existing stack region -
-// only one stack left once tasks are gone, unlike FreeRTOS's per-task
-// watermarking) - measured on a G030K6 build.
+// A related switch, ADIOS_CORE_USE_CANARI (numeric 0/1 - defaults to 1
+// exactly when the core runs bare-metal): adds a stack-overflow canary to
+// the super-loop, since FreeRTOS's own configCHECK_FOR_STACK_OVERFLOW
+// protection is gone along with the kernel. Costs ~630 bytes FLASH, 0
+// extra RAM (reuses the existing stack region - only one stack left once
+// tasks are gone) - measured on a G030K6 build.
 //
-// Examples, only needed if you want to override the tiered default:
-//#define ADIOS_APP_USE_FREERTOS 0
-//#define ADIOS_CORE_USE_FREERTOS 0
+// Examples:
+//#define ADIOS_CORE_DONT_USE_FREERTOS
+//#define ADIOS_APP_USE_FREERTOS
 //#define ADIOS_CORE_USE_CANARI 0
 // =============================================================================
 
-#if 0
-// Following settings allow to customize the USB device descriptor
-#define ADIOS_USB_VENDOR_ID    0x16c0        // sponsored by voti.nl! see http://www.voti.nl/pids
-#define ADIOS_USB_VENDOR_STR   "midibox.org" // you will see this in the USB device description
-#define ADIOS_USB_PRODUCT_STR  "app skeleton"  // you will see this in the MIDI device list
-#define ADIOS_USB_PRODUCT_ID   0x03fe        // ==1022; 1020-1029 reserved for T.Klose, 1000 - 1009 free for lab use... 0x3fe is required if the GM5 driver should be used
-#define ADIOS_USB_VERSION_ID   0x1010        // v1.010
-
-
-// 1 to stay compatible to USB MIDI spec, 0 as workaround for some windows versions...
-#define ADIOS_USB_MIDI_USE_AC_INTERFACE 1
-
-// allowed number of USB MIDI ports: 1..8
-#define ADIOS_USB_MIDI_NUM_PORTS 1
-
-// buffer size (should be at least >= ADIOS_USB_MIDI_DATA_*_SIZE/4)
-#define ADIOS_USB_MIDI_RX_BUFFER_SIZE  512 // packages
-#define ADIOS_USB_MIDI_TX_BUFFER_SIZE  512 // packages
-
-// size of IN/OUT pipe
-#define ADIOS_USB_MIDI_DATA_IN_SIZE           64
-#define ADIOS_USB_MIDI_DATA_OUT_SIZE          64
-#endif
 
 // enable BSL enhancements in ADIOS SysEx parser
 //#define ADIOS_MIDI_BSL_ENHANCEMENTS 0
 
 // to save memory on STM32 build:
-#if defined(ADIOS_FAMILY_STM32F4xx)
-# define ADIOS_SYS_DONT_INIT_RTC
-//# define ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-
-#define ADIOS_USE_UART0
-#define ADIOS_USE_UART1
-#define ADIOS_USE_DIN_MIDI
-#elif defined(ADIOS_FAMILY_STM32G0xx)
 #define ADIOS_DONT_USE_USB
 #define ADIOS_DONT_USE_USB_MIDI
 # define ADIOS_SYS_DONT_INIT_RTC
@@ -284,8 +242,6 @@
 #define ADIOS_MIDI_DEBUG_PORT DIN0
 #define ADIOS_UART0_TX_OD 0
 // BSL_RELAY_END
-
-#endif
 
 // FreeRTOS heap, sized for the minimal task set this template actually
 // creates by default (Idle + TASK_Hooks + TASK_MIDI_Hooks, no software

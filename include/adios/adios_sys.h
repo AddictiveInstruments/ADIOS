@@ -37,64 +37,32 @@
 #endif
 
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// FreeRTOS switches - presence/absence, like every other ADIOS_USE_* opt-in
 /////////////////////////////////////////////////////////////////////////////
-// FreeRTOS opt-in defaults - tiered by RAM/FLASH budget
-/////////////////////////////////////////////////////////////////////////////
-//! Two independent opt-in switches control FreeRTOS usage. Both are
-//! NUMERIC (0 or 1), not plain presence/absence #defines - checked with
-//! "#if ADIOS_xxx_USE_FREERTOS", not "#ifdef" - specifically so a project
-//! can override either one to 0 even on a chip that would otherwise default
-//! to 1 (a bare "#undef" can't express "explicitly off" as opposed to
-//! "undecided, let the tier default apply" - a numeric value can).
-//!   - ADIOS_APP_USE_FREERTOS - is the FreeRTOS kernel itself compiled
-//!     in at all? Consulted by adios_sys.c (the only FreeRTOS touchpoint
-//!     in the whole adios/common + family driver tree) and, at the Make
-//!     level, by core/core.mk
-//!     (whether tasks.c/queue.c/etc even get compiled - see that file for
-//!     why the C-side #if alone isn't enough to save the FLASH cost).
-//!   - ADIOS_CORE_USE_FREERTOS - does core/
-//!     main.c schedule the application Hooks via FreeRTOS tasks (=1) or
-//!     via a bare-metal super-loop clocked by SysTick (=0)? See that file
-//!     for the full implication - in bare mode, MIDI processing is no
-//!     longer isolated from a slow/blocking application hook (no more task
-//!     preemption).
+//! ADIOS_CORE_DONT_USE_FREERTOS - opt-OUT: core/main.c
+//! drives the application hooks from a bare-metal super-loop clocked by
+//! SysTick instead of FreeRTOS tasks, and the kernel is not compiled at all.
+//! Defined automatically by core/core.mk on small chips
+//! (FLASH <= 32K or RAM <= 8K, real figures taken from etc/ld/<family>.ld.S:
+//! on those, kernel + heap would consume most of the chip - measured ~83% of
+//! a G030K6 build, ~half the total RAM of a G031K8). On any bigger chip,
+//! define it in adios_config.h to get the same bare-metal build.
+//! Bare-mode implication: MIDI processing is no longer isolated from a
+//! slow/blocking application hook (no task preemption) - see core/main.c.
 //!
-//! Both default here to whether this processor is in the "small" RAM/FLASH
-//! tier (RAM <= 8K or FLASH <= 32K, physical chip specs, not the app-only
-//! region after bootloader reservation) - on those chips FreeRTOS's own
-//! kernel + heap already consumes the majority of what's available (verified
-//! empirically: ~83% of a G030K6 build, ~half the total RAM on G031K8),
-//! leaving too little room for a real application. Either switch can still
-//! be overridden explicitly per-project in adios_config.h regardless of
-//! this default - a project on a small chip can force FreeRTOS back on (or
-//! vice versa on a big chip) with e.g. "#define ADIOS_CORE_USE_FREERTOS 0".
-#if defined(ADIOS_PROCESSOR_STM32G030K6) || defined(ADIOS_PROCESSOR_STM32G031K8)
-// RAM=8K/FLASH=32K (G030K6) and RAM=8K/FLASH=64K (G031K8) - both qualify via
-// the RAM<=8K leg. Re-verify actual RAM/FLASH before adding any further
-// processor here - don't extrapolate from name/family similarity alone.
-#define ADIOS_SYS_SMALL_CHIP_TIER 1
-#endif
-
-#ifndef ADIOS_APP_USE_FREERTOS
-#if defined(ADIOS_SYS_SMALL_CHIP_TIER)
-#define ADIOS_APP_USE_FREERTOS 0
-#else
-#define ADIOS_APP_USE_FREERTOS 1
-#endif
-#endif
-
-#ifndef ADIOS_CORE_USE_FREERTOS
-#if defined(ADIOS_SYS_SMALL_CHIP_TIER)
-#define ADIOS_CORE_USE_FREERTOS 0
-#else
-#define ADIOS_CORE_USE_FREERTOS 1
-#endif
+//! ADIOS_APP_USE_FREERTOS - opt-in, adios_config.h only: the application
+//! itself calls FreeRTOS (tasks, queues, semaphores...). It requires the
+//! scheduler, so it cannot be combined with the opt-out above - core/main.c
+//! is who starts the scheduler; without it those calls could never run.
+#if defined(ADIOS_APP_USE_FREERTOS) && defined(ADIOS_CORE_DONT_USE_FREERTOS)
+# error "ADIOS_APP_USE_FREERTOS needs the scheduler: remove ADIOS_CORE_DONT_USE_FREERTOS (or the app opt-in)"
 #endif
 
 //! ADIOS_CORE_USE_CANARI - optional stack-overflow canary for the
 //! bare-metal super-loop (core/main.c). Also
-//! numeric, also overridable regardless of its default. Defaults to the
-//! opposite of ADIOS_CORE_USE_FREERTOS: active (1) when running bare,
+//! numeric, also overridable regardless of its default. Defaults to
+//! active (1) exactly when the core runs bare-metal,
 //! since FreeRTOS's own configCHECK_FOR_STACK_OVERFLOW protection is gone
 //! along with the kernel; inactive (0) when FreeRTOS tasks are in use,
 //! since that protection already covers it - a bare-metal canary there
@@ -102,10 +70,10 @@
 //! watermarking, only ONE canary is needed here: there's only one stack
 //! left once tasks are gone.
 #ifndef ADIOS_CORE_USE_CANARI
-#if ADIOS_CORE_USE_FREERTOS
-#define ADIOS_CORE_USE_CANARI 0
-#else
+#ifdef ADIOS_CORE_DONT_USE_FREERTOS
 #define ADIOS_CORE_USE_CANARI 1
+#else
+#define ADIOS_CORE_USE_CANARI 0
 #endif
 #endif
 

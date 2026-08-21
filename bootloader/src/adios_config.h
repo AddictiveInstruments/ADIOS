@@ -36,46 +36,14 @@
 // now the sign-of-life pin - same default as before, GPIOA pin 12.
 #define ADIOS_USE_SOL
 
-// calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
-// ADIOS_APP_USE_FREERTOS is opt-in (renamed from ADIOS_DONT_USE_FREERTOS),
-// numeric (0/1) with a RAM/FLASH-tiered default in adios_sys.h - MUST be
-// forced to 0 explicitly here rather than left to that default: on a
-// non-small-tier chip (e.g. this bootloader built for G070CB) the tier
-// default would be 1, and adios_sys.c would then try to #include
-// <FreeRTOS.h> - a header this bootloader's own Makefile never puts on the
-// include path (its main.c is a bare super-loop, never went through the
-// FreeRTOS-based programming model to begin with, on ANY chip it targets).
-#define ADIOS_APP_USE_FREERTOS 0
+// This bootloader is bare-metal on EVERY chip it targets: its main.c is a
+// plain super-loop, its Makefile never puts FreeRTOS on the include path.
+// Declaring the opt-out here keeps adios_sys.c from reaching for
+// <FreeRTOS.h> on chips where the scheduler would otherwise be on (this
+// build does not go through core.mk, so it must say so itself).
+#define ADIOS_CORE_DONT_USE_FREERTOS
 
 #if defined(ADIOS_FAMILY_STM32F4xx)
-#if 0
-// Following settings allow to customize the USB device descriptor
-#define ADIOS_USB_VENDOR_ID    0x16c0        // sponsored by voti.nl! see http://www.voti.nl/pids
-#define ADIOS_USB_VENDOR_STR   "midibox.org" // you will see this in the USB device description
-#define ADIOS_USB_PRODUCT_STR  "ADIOS Bootloader"  // you will see this in the MIDI device list
-#define ADIOS_USB_PRODUCT_ID   0x03fe        // ==1022; 1020-1029 reserved for T.Klose, 1000 - 1009 free for lab use... 0x3fe is required if the GM5 driver should be used
-#define ADIOS_USB_VERSION_ID   0x1010        // v1.010
-
-
-// 1 to stay compatible to USB MIDI spec, 0 as workaround for some windows versions...
-#define ADIOS_USB_MIDI_USE_AC_INTERFACE 1
-
-// allowed number of USB MIDI ports: 1..8
-#define ADIOS_USB_MIDI_NUM_PORTS 1
-
-// buffer size (should be at least >= ADIOS_USB_MIDI_DATA_*_SIZE/4)
-#define ADIOS_USB_MIDI_RX_BUFFER_SIZE  512 // packages
-#define ADIOS_USB_MIDI_TX_BUFFER_SIZE  512 // packages
-
-// size of IN/OUT pipe
-#define ADIOS_USB_MIDI_DATA_IN_SIZE           64
-#define ADIOS_USB_MIDI_DATA_OUT_SIZE          64
-
-// unfortunately!!! Only 584 bytes are missing, maybe the USB driver could be optimized by removing irrelevant code
-// (opt-in world: simply not defining ADIOS_USE_UART0/ADIOS_USE_DIN_MIDI
-// keeps the UART transport out - the old DONT_USE_UART* opt-outs are gone)
-
-#else
 // No transport is chosen here, deliberately - see the check further down,
 // where the generated header lands. Which connector this build must talk on
 // is a fact of the BOARD, so it arrives from the project's BSL_RELAY block
@@ -83,7 +51,6 @@
 // falling back to a family default. That fallback is exactly what let this
 // bootloader and its update tool end up on DIFFERENT connectors, each
 // silently right in its own file: the tool then answered nobody.
-#endif
 #endif
 // enable BSL enhancements in ADIOS SysEx parser
 #define ADIOS_MIDI_BSL_ENHANCEMENTS 1

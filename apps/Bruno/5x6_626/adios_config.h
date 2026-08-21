@@ -60,33 +60,12 @@
 //#define ADIOS_DONT_USE_STOPWATCH
 //#define ADIOS_DONT_USE_DELAY
 
-// calls to FreeRTOS required? (e.g. to disable tasks on critical sections)
-// opt-in, renamed from ADIOS_DONT_USE_FREERTOS
-//#define ADIOS_APP_USE_FREERTOS
+// This application is a FreeRTOS user in its own right: it creates the
+// SPI mutex and tasks of its own (settings menu, TFT refresh, ROM check).
+// Declared, so a bare-metal build of this project is refused at compile
+// time instead of failing on the bench.
+#define ADIOS_APP_USE_FREERTOS
 
-#if 0
-// Following settings allow to customize the USB device descriptor
-#define ADIOS_USB_VENDOR_ID    0x16c0        // sponsored by voti.nl! see http://www.voti.nl/pids
-#define ADIOS_USB_VENDOR_STR   "midibox.org" // you will see this in the USB device description
-#define ADIOS_USB_PRODUCT_STR  "app skeleton"  // you will see this in the MIDI device list
-#define ADIOS_USB_PRODUCT_ID   0x03fe        // ==1022; 1020-1029 reserved for T.Klose, 1000 - 1009 free for lab use... 0x3fe is required if the GM5 driver should be used
-#define ADIOS_USB_VERSION_ID   0x1010        // v1.010
-
-
-// 1 to stay compatible to USB MIDI spec, 0 as workaround for some windows versions...
-#define ADIOS_USB_MIDI_USE_AC_INTERFACE 1
-
-// allowed number of USB MIDI ports: 1..8
-#define ADIOS_USB_MIDI_NUM_PORTS 1
-
-// buffer size (should be at least >= ADIOS_USB_MIDI_DATA_*_SIZE/4)
-#define ADIOS_USB_MIDI_RX_BUFFER_SIZE  512 // packages
-#define ADIOS_USB_MIDI_TX_BUFFER_SIZE  512 // packages
-
-// size of IN/OUT pipe
-#define ADIOS_USB_MIDI_DATA_IN_SIZE           64
-#define ADIOS_USB_MIDI_DATA_OUT_SIZE          64
-#endif
 
 // enable BSL enhancements in ADIOS SysEx parser
 //#define ADIOS_MIDI_BSL_ENHANCEMENTS 0

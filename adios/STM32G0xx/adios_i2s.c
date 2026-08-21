@@ -8,7 +8,7 @@
 //! A master clock for 8x oversampling is optional: enable it with
 //! ADIOS_I2S_ENABLE_MCLK and take it from the MCLK pin listed below.
 //!
-//! Due to pin conflicts with default setting of ADIOS_SRIO, MIOS_I2S is 
+//! Due to pin conflicts with default setting of ADIOS_SRIO, ADIOS_I2S is 
 //! disabled by default, and has to be enabled via ADIOS_USE_I2S in
 //! adios_config.h<BR>
 //! ADIOS_SRIO should either be left undeclared, or 

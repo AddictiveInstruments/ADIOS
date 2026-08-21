@@ -19,21 +19,20 @@
 #include <app.h>
 
 // ===========================================================================
-// ADIOS_CORE_USE_FREERTOS (see adios_sys.h for the auto-derived default,
-// tiered by RAM/FLASH budget - RAM<=8K or FLASH<=32K defaults this OFF):
-// decides how the application Hooks below are scheduled.
+// Scheduling of the application Hooks below - decided by
+// ADIOS_CORE_DONT_USE_FREERTOS (set automatically by core/core.mk on small
+// chips - FLASH <= 32K or RAM <= 8K, real figures from etc/ld/<family>.ld.S -
+// or defined in a project's adios_config.h on any chip; see adios_sys.h):
 //
-//   - 1: the traditional FreeRTOS model - TASK_Hooks and TASK_MIDI_Hooks
-//     run as two SEPARATE, PREEMPTIVELY SCHEDULED tasks. If an application
-//     hook (APP_Tick, a DIN/ENC/AIN/COM callback...) blocks or runs long,
-//     MIDI keeps being processed on schedule regardless, since
-//     TASK_MIDI_Hooks can still preempt it.
+//   - absent: the traditional FreeRTOS model - TASK_Hooks and
+//     TASK_MIDI_Hooks run as two SEPARATE, PREEMPTIVELY SCHEDULED tasks.
+//     If an application hook (APP_Tick, a DIN/ENC/AIN callback...) blocks
+//     or runs long, MIDI keeps being processed on schedule regardless,
+//     since TASK_MIDI_Hooks can still preempt it.
 //
-//   - 0: a bare-metal super-loop, no FreeRTOS kernel involved at all here
-//     (see ADIOS_APP_USE_FREERTOS for the kernel-presence switch,
-//     independent of this one) - timed by a dedicated SysTick handler
-//     instead of the FreeRTOS tick (ADIOS_STOPWATCH is deliberately NOT
-//     used for this: it must stay free for the application's own timing
+//   - defined: a bare-metal super-loop, no FreeRTOS kernel involved at all,
+//     timed by a dedicated SysTick handler (ADIOS_STOPWATCH is deliberately
+//     NOT used for this: it must stay free for the application's own timing
 //     needs). The two Hooks collapse into ONE sequential 1mS block - THIS
 //     REMOVES THE ISOLATION DESCRIBED ABOVE: a slow/blocking application
 //     hook now delays MIDI processing too, since everything runs on the
@@ -43,15 +42,8 @@
 //     and roughly half the total RAM on G031K8 (heap alone, before any
 //     application code) - see apps/templates/app_skeleton/adios_config.h
 //     for the full writeup.
-//
-// Both switches are numeric (0/1), not plain #define presence - checked
-// with "#if", not "#ifdef" - specifically so a project CAN override either
-// one to 0 even where the RAM/FLASH tier would otherwise default it to 1
-// (a bare #undef can't express "explicitly off" vs. "undecided, apply the
-// tier default"). Override in your own adios_config.h, e.g.
-// "#define ADIOS_CORE_USE_FREERTOS 0".
 // ===========================================================================
-#if ADIOS_CORE_USE_FREERTOS
+#ifndef ADIOS_CORE_DONT_USE_FREERTOS
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
@@ -66,12 +58,12 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Task Priorities and stack sizes (ADIOS_CORE_USE_FREERTOS only - a bare
+// Task Priorities and stack sizes (FreeRTOS scheduling only - a bare
 // super-loop has no separate task stacks, everything runs on the single
 // main() stack sized by the linker script)
 /////////////////////////////////////////////////////////////////////////////
 
-#if ADIOS_CORE_USE_FREERTOS
+#ifndef ADIOS_CORE_DONT_USE_FREERTOS
 #define PRIORITY_TASK_HOOKS		( tskIDLE_PRIORITY + 3 )
 
 #ifndef ADIOS_TASK_HOOKS_STACK_SIZE
@@ -128,13 +120,13 @@ extern void __libc_init_array(void);  /* calls CTORS of static objects */
 /////////////////////////////////////////////////////////////////////////////
 // Local prototypes
 /////////////////////////////////////////////////////////////////////////////
-#if ADIOS_CORE_USE_FREERTOS
+#ifndef ADIOS_CORE_DONT_USE_FREERTOS
 static void TASK_Hooks(void *pvParameters);
 static void TASK_MIDI_Hooks(void *pvParameters);
 #endif
 static void ADIOS_CORE_NonMIDI_Tick(void);
 static void ADIOS_CORE_MIDI_Tick(void);
-#if !ADIOS_CORE_USE_FREERTOS
+#ifdef ADIOS_CORE_DONT_USE_FREERTOS
 static void ADIOS_CORE_BareLoop_Run(void);
 #endif
 
@@ -237,7 +229,7 @@ int main(void)
   // to wait. Its name and version are reported over MIDI regardless - see
   // ADIOS_APP_NAME1/2 in adios_midi.h.)
 
-#if ADIOS_CORE_USE_FREERTOS
+#ifndef ADIOS_CORE_DONT_USE_FREERTOS
   // start the task which calls the application hooks
   xTaskCreate(TASK_Hooks, "Hooks", (ADIOS_TASK_HOOKS_STACK_SIZE)/4, NULL, PRIORITY_TASK_HOOKS, NULL);
   xTaskCreate(TASK_MIDI_Hooks, "MIDI_Hooks", (ADIOS_TASK_MIDI_HOOKS_STACK_SIZE)/4, NULL, PRIORITY_TASK_HOOKS, NULL);
@@ -248,7 +240,7 @@ int main(void)
   // Will only get here if there was not enough heap space to create the idle task
   return 0;
 #else
-  // bare-metal super-loop - see the ADIOS_CORE_USE_FREERTOS module-level
+  // bare-metal super-loop - see the scheduling module-level
   // comment above for what this trades away.
   ADIOS_CORE_BareLoop_Run(); // never returns
   return 0; // never reached
@@ -273,7 +265,7 @@ void SRIO_ServiceFinish(void)
 #endif
 }
 
-#if ADIOS_CORE_USE_FREERTOS
+#ifndef ADIOS_CORE_DONT_USE_FREERTOS
 void vApplicationTickHook(void)
 {
 #ifdef ADIOS_USE_TIMESTAMP
@@ -304,7 +296,7 @@ void vApplicationIdleHook(void)
 /////////////////////////////////////////////////////////////////////////////
 // Shared 1mS hook bodies - the ONE place that defines what runs each
 // millisecond, called from either the FreeRTOS tasks below or the
-// bare-metal super-loop further down (ADIOS_CORE_USE_FREERTOS=0) -
+// bare-metal super-loop further down (ADIOS_CORE_DONT_USE_FREERTOS) -
 // deliberately factored out so the two scheduling modes can never drift
 // apart from each other.
 /////////////////////////////////////////////////////////////////////////////
@@ -354,7 +346,7 @@ static void ADIOS_CORE_NonMIDI_Tick(void)
 }
 
 
-#if ADIOS_CORE_USE_FREERTOS
+#ifndef ADIOS_CORE_DONT_USE_FREERTOS
 /////////////////////////////////////////////////////////////////////////////
 // MIDI task (separated from TASK_Hooks() to ensure parallel handling of
 // MIDI events if a hook in TASK_Hooks() blocks)
@@ -406,9 +398,9 @@ static void TASK_Hooks(void *pvParameters)
 #endif
 
 
-#if !ADIOS_CORE_USE_FREERTOS
+#ifdef ADIOS_CORE_DONT_USE_FREERTOS
 /////////////////////////////////////////////////////////////////////////////
-// Bare-metal super-loop (ADIOS_CORE_USE_FREERTOS=0) - replaces
+// Bare-metal super-loop (ADIOS_CORE_DONT_USE_FREERTOS) - replaces
 // vTaskStartScheduler()/TASK_Hooks/TASK_MIDI_Hooks/vApplicationTickHook/
 // vApplicationIdleHook above. Timed by a dedicated SysTick handler rather
 // than FreeRTOS's tick or ADIOS_STOPWATCH (kept free for the application -

@@ -20,7 +20,7 @@
 
 
 
-#if ADIOS_APP_USE_FREERTOS
+#ifndef ADIOS_CORE_DONT_USE_FREERTOS
 #include <FreeRTOS.h>
 #include <portmacro.h>
 #endif
@@ -176,7 +176,7 @@ s32 ADIOS_SYS_Init(u32 mode)
 s32 ADIOS_SYS_Reset(void)
 {
   // disable all RTOS tasks
-#if ADIOS_APP_USE_FREERTOS
+#ifndef ADIOS_CORE_DONT_USE_FREERTOS
   portENTER_CRITICAL(); // port specific FreeRTOS function to disable tasks (nested)
 #endif
 

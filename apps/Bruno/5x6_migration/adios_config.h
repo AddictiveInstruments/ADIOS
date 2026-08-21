@@ -37,8 +37,9 @@
 // used by APP_Init's short settling delay before it reports
 #define ADIOS_USE_STOPWATCH
 
-// FreeRTOS is not needed either - the whole job happens in APP_Init()
-#define APP_USE_FREERTOS 0
+// FreeRTOS is not needed - the whole job happens in APP_Init(), so the
+// core runs bare-metal and the kernel is not even compiled.
+#define ADIOS_CORE_DONT_USE_FREERTOS
 
 // The instrument's MIDI wiring, identical to 5x6_505's - this tool has to come
 // up on the same physical connector as the firmware it is loaded beside.

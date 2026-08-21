@@ -4,29 +4,6 @@
 
 FREE_RTOS      =    $(ADIOS_PATH)/FreeRTOS
 
-# Make-level mirror of the ADIOS_APP_USE_FREERTOS opt-in switch
-# (include/adios/adios_sys.h) - decides whether the FreeRTOS kernel
-# sources below are even compiled/linked. Needed here, at the Make level,
-# because the C-side #ifdef alone isn't enough: tasks.c/port.c/etc are
-# always-referenced-by-each-other units with their own undefined external
-# symbols (e.g. tasks.c unconditionally needs vApplicationStackOverflowHook,
-# port.c defines SysTick_Handler) - the linker can't --gc-sections its way
-# out of an unresolved reference or a symbol collision, only genuinely dead
-# code. Same tiered default as adios_sys.h (RAM<=8K or FLASH<=32K -> off) -
-# keep both lists in sync if you add a processor to either one. A project
-# can override this Make variable directly (on the command line or its own
-# Makefile) - but if it does, it must also override the matching
-# ADIOS_APP_USE_FREERTOS #define in its adios_config.h to match, there's
-# no automatic link between the two.
-ifndef ADIOS_APP_USE_FREERTOS
-ifeq ($(PROCESSOR),STM32G030K6)
-ADIOS_APP_USE_FREERTOS = 0
-endif
-ifeq ($(PROCESSOR),STM32G031K8)
-ADIOS_APP_USE_FREERTOS = 0
-endif
-ADIOS_APP_USE_FREERTOS ?= 1
-endif
 
 # extend include path
 C_INCLUDE += 	-I $(ADIOS_PATH)/core \
@@ -72,13 +49,50 @@ LD_CHIP_DEFS     = -DADIOS_LD_CHIP_$(PROCESSOR) -DADIOS_LD_CHIP_$(shell echo $(P
 LD_PREPROCESS    = $(CC) -E -x assembler-with-cpp -P -I $(ADIOS_PATH)/etc/ld $(LD_CHIP_DEFS)
 STARTUP_FILE     = $(ADIOS_PATH)/etc/startup/$(FAMILY)/startup_$(shell echo $(PROCESSOR) | cut -c1-9 | tr '[:upper:]' '[:lower:]').c
 
+# FreeRTOS: one switch, one source. The project's adios_config.h has the
+# first word - an explicit ADIOS_CORE_DONT_USE_FREERTOS there wins as-is
+# (anchored ^, so a commented-out line doesn't count). Otherwise the chip
+# decides: FLASH <= 32K or RAM <= 8K -> bare-metal, and make defines the
+# switch itself via CFLAGS. The chip's real RAM/FLASH come from the one
+# table that already knows every chip - etc/ld/$(FAMILY).ld.S - probed
+# through the same preprocessor that builds the linker script. A chip
+# missing from that table doesn't link anyway.
+# The kernel sources (tasks.c/port.c/...) must be gated HERE, at the Make
+# level: they are always-referenced-by-each-other units (tasks.c needs
+# vApplicationStackOverflowHook, port.c defines SysTick_Handler) - the
+# linker can't --gc-sections its way out of an unresolved reference.
+# NOTE: this probe runs at PARSE time (the kernel source list below depends
+# on it) and common.mk - where CC is defined - is included only later, so
+# the preprocessor is named directly (same default prefix as common.mk's).
+ADIOS_GCC_PREFIX ?= arm-none-eabi
+CORE_DONT_CFG := $(shell grep -E '^[[:space:]]*\#define[[:space:]]+ADIOS_CORE_DONT_USE_FREERTOS' adios_config.h 2>/dev/null)
+ifeq ($(CORE_DONT_CFG),)
+# The probe command must live in its own recursive variable: inlining the
+# pipe in $(shell ...) makes make mis-expand the nested $(LD_CHIP_DEFS)
+# and the probe silently answers nothing (verified 2026-08-22).
+FREERTOS_PROBE = printf '\#include "$(FAMILY).ld.S"\nADIOS_TIER_PROBE ADIOS_RAM_LEN ADIOS_FLASH_TOTAL_LEN\n' | $(ADIOS_GCC_PREFIX)-gcc -E -x assembler-with-cpp -P -I $(ADIOS_PATH)/etc/ld $(LD_CHIP_DEFS) - 2>/dev/null | awk '/^ADIOS_TIER_PROBE [0-9]/{r=$$2+0; f=$$3+0; print (f<=32 || r<=8) ? "small" : "big"}'
+FREERTOS_TIER := $(shell $(FREERTOS_PROBE))
+ifeq ($(FREERTOS_TIER),small)
+CFLAGS += -DADIOS_CORE_DONT_USE_FREERTOS
+endif
+endif
+
+# kernel compiled only when the core schedules by tasks
+ADIOS_FREERTOS_KERNEL := 1
+ifneq ($(CORE_DONT_CFG),)
+ADIOS_FREERTOS_KERNEL := 0
+endif
+ifeq ($(FREERTOS_TIER),small)
+ADIOS_FREERTOS_KERNEL := 0
+endif
+
 ifeq ($(FAMILY),STM32F4xx)
 CFLAGS    +=    -DGCC_ARMCM3
 # add modules to thumb sources
 THUMB_SOURCE += \
 		$(ADIOS_PATH)/core/main.c
 
-ifneq ($(ADIOS_APP_USE_FREERTOS),0)
+ifneq ($(ADIOS_FREERTOS_KERNEL),0)
 THUMB_SOURCE += \
 		$(FREE_RTOS)/Source/tasks.c \
 		$(FREE_RTOS)/Source/list.c \
@@ -100,7 +114,7 @@ CFLAGS    +=    -DGCC_ARMCM0
 THUMB_SOURCE += \
 		$(ADIOS_PATH)/core/main.c
 
-ifneq ($(ADIOS_APP_USE_FREERTOS),0)
+ifneq ($(ADIOS_FREERTOS_KERNEL),0)
 THUMB_SOURCE += \
 		$(FREE_RTOS)/Source/tasks.c \
 		$(FREE_RTOS)/Source/list.c \
@@ -260,7 +274,7 @@ LD_FILE = $(CURDIR)/project_build/cpu.ld
 endif
 
 THUMB_CPP_SOURCE += $(ADIOS_PATH)/core/mini_cpp.cpp
-ifneq ($(ADIOS_APP_USE_FREERTOS),0)
+ifneq ($(ADIOS_FREERTOS_KERNEL),0)
 # overrides malloc()/calloc()/realloc()/free() to redirect to FreeRTOS's
 # pvPortMalloc()/vPortFree() - meaningless without the kernel; without this,
 # mini_cpp.cpp's operator new/delete above fall back to newlib's own default
