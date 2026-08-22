@@ -94,23 +94,10 @@ static u8 last_id = 0;
 static u8 curr_id = 0;
 static u8 formatting=0;
 
-// Mutex serializing every SPI user of this app (TFT drawing on port 1, sound
-// ROM flash on port 0): ADIOS_SPI has no internal locking, and a second task
-// entering TransferByte/TransferBlock while a blocking DMA transfer is in
-// flight steals RX bytes from it - the transfer then never completes and the
-// caller spins forever in ADIOS_SPI_TransferBlock, starving every lower/equal
-// priority task (hardware-diagnosed 2026-08-09 on the frozen 505: RX DMA stuck
-// 7 bytes short of its counter, TX long done, no overrun).
-// Recursive, so nested drawing helpers stay safe. Priority inheritance keeps
-// the TFT task from blocking the MIDI task unboundedly. The decod capture
-// ISRs never touch SPI and never take it - the host data path is unaffected.
-xSemaphoreHandle xSPISemaphore;
-#define MUTEX_SPI_TAKE { xSemaphoreTakeRecursive(xSPISemaphore, portMAX_DELAY); }
-#define MUTEX_SPI_GIVE { xSemaphoreGiveRecursive(xSPISemaphore); }
-
-// entry points for the SysEx handlers (MIDI task context - see app.h)
-void APP_SPI_MutexTake(void){ MUTEX_SPI_TAKE; }
-void APP_SPI_MutexGive(void){ MUTEX_SPI_GIVE; }
+//// define a Mutex for LCD access
+//xSemaphoreHandle xSPISemaphore;
+//#define MUTEX_SPI_TAKE { while( xSemaphoreTakeRecursive(xSPISemaphore, (portTickType)1) != pdTRUE ); }
+//#define MUTEX_SPI_GIVE { xSemaphoreGiveRecursive(xSPISemaphore); }
 
 //temp
 //static int address=0;
@@ -125,10 +112,6 @@ void APP_SPI_MutexGive(void){ MUTEX_SPI_GIVE; }
 /////////////////////////////////////////////////////////////////////////////
 void APP_Init(void)
 {
-	// SPI serialization - created before any task exists (APP_Init runs
-	// single-threaded), so every taker below finds it valid
-	xSPISemaphore = xSemaphoreCreateRecursiveMutex();
-
 	// ROM R/W init
 	TR5X6_ROM_Init();
 	TR5X6_ROM_HOST();
@@ -475,19 +458,25 @@ void APP_TFT_Background(void){
 static void TASK_ROM_Periodic(void *pvParameters)
 {
 	portTickType xLastExecutionTime;
+	s32 spi_err_reported = 0;
 
 	// Initialise the xLastExecutionTime variable on task entry
 	xLastExecutionTime = xTaskGetTickCount();
 
 	while( 1 ) {
-		// wait for 80 mS
-		vTaskDelayUntil(&xLastExecutionTime, 100 / portTICK_RATE_MS);
-		// check for requested write (flash accesses on the ROM SPI port -
-		// serialized against the TFT/menu drawing and the MIDI-task handlers)
-		MUTEX_SPI_TAKE;
+		// 10 ms: this task is what picks up a pending block write, so its
+		// period is dead time added to every single block of an upload
+		vTaskDelayUntil(&xLastExecutionTime, 10 / portTICK_RATE_MS);
+		// check for requested write
 		MIDIO_SYSEX_Cmd_WriteInfoRequest();
 		MIDIO_SYSEX_Cmd_WriteBlockRequest();
-		MUTEX_SPI_GIVE;
+		// dbg scaffolding: reported OUT of the critical path, so the ROM
+		// sequences keep their timing. Non-zero means a transfer was refused
+		// and the latch kept a stale value - see TR5X6_ROM_Addr_Set.
+		if( tr5x6_rom_spi_err != spi_err_reported ) {
+			ADIOS_MIDI_SendDebugMessage("SPI refused: %d", tr5x6_rom_spi_err);
+			spi_err_reported = tr5x6_rom_spi_err;
+		}
 	}
 }
 
@@ -770,9 +759,6 @@ static void TASK_TFT_Periodic(void *pvParameters)
 		// wait for 40 mS
 		vTaskDelayUntil(&xLastExecutionTime, 40 / portTICK_RATE_MS);
 		if(!APP_LCD_IsReady())return;
-		// whole drawing pass under the SPI mutex (TFT port + the flash reads
-		// done for bank/slot info)
-		MUTEX_SPI_TAKE;
 		if(first_start)APP_TFT_Background();	// prints the background
 		if(normal_start){
 
@@ -1731,7 +1717,7 @@ static void TASK_TFT_Periodic(void *pvParameters)
 #endif
 		}
 		// release SPI access for other tasks
-		MUTEX_SPI_GIVE;
+		//MUTEX_SPI_GIVE;
 	}
 }
 
@@ -1937,10 +1923,6 @@ void TASK_SettingsMenu(void *pvParameters){
 	while( 1 ) {
 		// wait for 40 mS
 		vTaskDelayUntil(&xLastExecutionTime, 40 / portTICK_RATE_MS);
-		// menu drawing + formatting flow under the SPI mutex (in settings
-		// boot mode no other SPI task exists, but this keeps the rule
-		// uniform: every SPI-using task takes it)
-		MUTEX_SPI_TAKE;
 		if(formatting){
 			if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
 				tr5x6_decod_buttons_flags.inc = 0;
@@ -2045,6 +2027,6 @@ void TASK_SettingsMenu(void *pvParameters){
 				ADIOS_SYS_Reset();
 			}
 		}
-		MUTEX_SPI_GIVE;
+		//MUTEX_SPI_GIVE;
 	}
 }

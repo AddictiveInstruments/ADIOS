@@ -212,13 +212,9 @@ s32 MIDIO_SYSEX_Send_Info(adios_midi_port_t port)
 	slot.bank=sysex_bank;
 	slot.slot=sysex_slot;
 
-	// get the slot info (flash access from the MIDI task - serialized against
-	// the TFT/ROM tasks, see APP_SPI_MutexTake in app.h)
-	APP_SPI_MutexTake();
 	if(sysex_cmd==CMD_SLOT_READ_INFO)
 		TR5X6_FLASH_SlotRead(&slot);
 	else TR5X6_FLASH_BankRead(&slot);
-	APP_SPI_MutexGive();
 
 	// add slot name
 	for(i=0; i<22; i++) {
@@ -314,8 +310,6 @@ s32 MIDIO_SYSEX_Send_Block(adios_midi_port_t port)
 	sysex_buffer[sysex_buffer_ix++] = sysex_block;
 	checksum += sysex_block;
 
-	// ROM reads from the MIDI task - serialized (see APP_SPI_MutexTake)
-	APP_SPI_MutexTake();
 	u32 addr;
 	switch(tr5x6_slots[sysex_slot].size){
 	case SIZE_4K:
@@ -357,7 +351,6 @@ s32 MIDIO_SYSEX_Send_Block(adios_midi_port_t port)
 		break;
 
 	}
-	APP_SPI_MutexGive();
 
 	// send checksum
 	sysex_buffer[sysex_buffer_ix++] = -checksum & 0x7f;
@@ -365,6 +358,11 @@ s32 MIDIO_SYSEX_Send_Block(adios_midi_port_t port)
 	// send footer
 	sysex_buffer[sysex_buffer_ix++] = 0xf7;
 
+	// The bus is deliberately NOT handed back here. The ROM data bus also
+	// feeds the host's DAC and follows the HOST line, so every PROG/HOST swing
+	// drags it from Hi-Z to a forced level - and that is AUDIBLE. A multi-block
+	// dump therefore stays in PROG throughout and hands the bus back once, on
+	// the last block (MIDIO_SYSEX_Cmd_ReadBlock). Do not "restore" a call here.
 	// finally send SysEx stream and return error status
 	sysex_act = 2;
 	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, sysex_buffer_ix);
@@ -409,11 +407,10 @@ s32 MIDIO_SYSEX_TimeOut(adios_midi_port_t port)
 	// if we receive a SysEx command (MY_SYSEX flag set), abort parser if port matches
 	if( sysex_state.MY_SYSEX && port == sysex_port )
 		MIDIO_SYSEX_Cmd_Finished();
-	// bus handover back to the host touches the ROM SPI port (Addr_Set) -
-	// serialized (MIDI task context)
-	APP_SPI_MutexTake();
+	// the transfer died mid-flight, so give the machine its ROM back or it
+	// stays deaf until the next command. Swinging the bus is safe here:
+	// nothing is streaming any more.
 	TR5X6_ROM_HOST();
-	APP_SPI_MutexGive();
 	return 0; // no error
 }
 
@@ -742,10 +739,10 @@ s32 MIDIO_SYSEX_Cmd_ReadBlock(u8 cmd_state, u8 midi_in)
 				xfer_time_out=MIDIO_SYSEX_XFER_TIMEOUT;
 				tr5x6_xfer_state.FLAG_CONT=1;
 			}else{
-				// bus handover to the host (ROM SPI port) - MIDI task context
-				APP_SPI_MutexTake();
+				// last block: hand the ROM back to the machine now, and only
+				// now - one swing per dump instead of one per block (see
+				// MIDIO_SYSEX_Send_Block for why that matters)
 				TR5X6_ROM_HOST();
-				APP_SPI_MutexGive();
 				xfer_time_out=-1;
 				tr5x6_xfer_state.FLAG_END=1;
 			}

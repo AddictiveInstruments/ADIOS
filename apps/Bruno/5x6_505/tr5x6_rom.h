@@ -159,6 +159,7 @@ extern const tr5x6_slot_t tr5x6_slots[30];
 extern const char tr5x6_slot_name[4][4];
 extern const char tr5x6_slot_duration[4][6];
 extern s32 tr5x6_rom_format_stat;
+extern s32 tr5x6_rom_spi_err;
 extern s32 tr5x6_flash_format_stat;
 /* Prototypes ----------------------------------------------------------------*/
 extern void TR5X6_ROM_Init(void);

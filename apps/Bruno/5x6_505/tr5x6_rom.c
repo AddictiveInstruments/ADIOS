@@ -27,6 +27,45 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+/* ---------------------------------------------------------------------------
+   THE ROM BUS, AND WHO OWNS WHICH ADDRESS LINE
+
+   The sound ROM sits between the host machine and us. A latch chain, fed by
+   three SPI bytes and strobed by ADR, drives the address lines; nHOST decides
+   which side is in charge:
+
+     HOST mode (nHOST=0) - the machine reads its own samples
+     PROG mode (nHOST=1) - we read, write and erase the chip
+
+   The 24-bit word handed to the latch is NOT a flat address:
+
+     bits 0..16   A0-A16   host in HOST mode, latch in PROG mode
+     bit  17      A17      MUXED - see bit 23
+     bits 18..22  A18-A22  latch at all times, in BOTH modes
+     bit  23      -        the mux: 1 = A17 from the latch, 0 = A17 from host
+
+   Bit 23 exists because the two host machines cut the same chip differently:
+
+     505   16 banks of 128K   host addresses A0-A16   bank = A17-A20
+           A17 is already part of the bank number, so bit 23 is set at all
+           times, host mode included (see TR5X6_ROM_Addr_Set).
+
+     626   8 banks of 256K    host addresses A0-A17   bank = A18-A20
+           A17 belongs to the machine, so bit 23 must be 0 in host mode and 1
+           in PROG mode - hence TR5X6_ROM_ProgAddr_Set below.
+
+   Get it wrong either way and the failure is silent, not loud: bit 23 low in
+   PROG mode erases the low half of a bank twice and never touches the high
+   half; bit 23 high in host mode freezes A17, so the machine reads the same
+   half of every instrument forever.
+
+   A21/A22 reach the latch for a larger device than the 2M fitted today.
+
+   One more thing the addresses do not show: samples are stored EVEN/ODD
+   interleaved (the SLOT_EVEN/SLOT_ODD column of tr5x6_slots), so a linear
+   PROG address flips A0 - that is the `address ^= 1` in Read and Write.
+   --------------------------------------------------------------------------- */
+
 /* Defines ------------------------------------------------------------------*/
 
 #define TR5X6_ROM_SPI		0
@@ -56,6 +95,7 @@
 
 /* Prototypes ------------------------------------------------------------------*/
 void TR5X6_ROM_Addr_Set(uint32_t address);
+static void TR5X6_ROM_ProgAddr_Set(uint32_t address);
 void TR5X6_ROM_Data_Set(uint8_t data);
 s32 TR5X6_ROM_Data_Get(void);
 
@@ -69,6 +109,9 @@ const char tr5x6_slot_duration[4][6]={"163ms\0", "327ms\0", "655ms\0", "1.31s\0"
 
 s32 tr5x6_rom_format_stat;
 s32 tr5x6_flash_format_stat;
+// sticky count of SPI transfers the driver refused to run (-3 busy, -4 lost).
+// Anything but zero means a ROM operation was aimed at a stale latch value.
+s32 tr5x6_rom_spi_err;
 
 #if TR5X6_UNIT_SELECT==505
 const tr5x6_slot_t tr5x6_slots[TR5X6_SLOT_NUM]={{"Low ConGa\0    ", 0x08000, SIZE_4K, SLOT_ODD},
@@ -148,7 +191,7 @@ void TR5X6_ROM_Init(void)
 	// initialize SPI interface
 	// init SPI port
 	//TR5X6_SPI_TransferModeInit();
-	ADIOS_SPI_TransferModeInit(TR5X6_ROM_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_32);
+	ADIOS_SPI_TransferModeInit(TR5X6_ROM_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_16);
 
 	TR5X6_ROM_DAT(1);
 	TR5X6_ROM_ADR(1);
@@ -235,7 +278,7 @@ s32 TR5X6_ROM_Read(uint32_t address){
 	TR5X6_ROM_CS(1);				// ROM Deselect
 	TR5X6_ROM_RD();					// ROM Read pin
 	TR5X6_ROM_OE();					// ROM Output enable
-	TR5X6_ROM_Addr_Set(address);	// Set ROM address
+	TR5X6_ROM_ProgAddr_Set(address);	// Set ROM address
 	PROG();							// ROM PROG Mode
 	TR5X6_ROM_CS(0);				// ROM Select
 	s32 tmpData= 0;
@@ -254,21 +297,21 @@ tr5x6_rom_status TR5X6_ROM_Write(uint32_t address, uint8_t data, uint32_t Timeou
 	PROG();				// ROM PROG Mode
 	// start sector erase sequence
 	//TR5X6_ROM_Addr_Set(0x00005555);
-	TR5X6_ROM_Addr_Set(0x00000AAA);
+	TR5X6_ROM_ProgAddr_Set(0x00000AAA);
 	TR5X6_ROM_Data_Set(0xAA);
 	TR5X6_ROM_CS(0);			// ROM Select
 	TR5X6_ROM_CS(1);			// ROM Deselect
 	//TR5X6_ROM_Addr_Set(0x00002AAA);
-	TR5X6_ROM_Addr_Set(0x00000555);
+	TR5X6_ROM_ProgAddr_Set(0x00000555);
 	TR5X6_ROM_Data_Set(0x55);
 	TR5X6_ROM_CS(0);			// ROM Select
 	TR5X6_ROM_CS(1);			// ROM Deselect
 	//TR5X6_ROM_Addr_Set(0x00005555);
-	TR5X6_ROM_Addr_Set(0x00000AAA);
+	TR5X6_ROM_ProgAddr_Set(0x00000AAA);
 	TR5X6_ROM_Data_Set(0xA0);
 	TR5X6_ROM_CS(0);			// ROM Select
 	TR5X6_ROM_CS(1);			// ROM Deselect
-	TR5X6_ROM_Addr_Set(address);
+	TR5X6_ROM_ProgAddr_Set(address);
 	TR5X6_ROM_Data_Set(data);
 	TR5X6_ROM_CS(0);			// ROM Select
 	TR5X6_ROM_CS(1);			// ROM Deselect
@@ -280,13 +323,16 @@ tr5x6_rom_status TR5X6_ROM_Write(uint32_t address, uint8_t data, uint32_t Timeou
 	tr5x6_rom_status errorcode = TR5X6_ROM_OK;
 	s32 tickstart = 0;
 
+	// The address latch HOLDS its value and nothing else touches the bus while
+	// we poll, so set it ONCE here instead of clocking three bytes out on every
+	// iteration. The wait itself is set by the chip, but the bus is freed.
+	TR5X6_ROM_ProgAddr_Set(address);
 	while(tmpData!=data){
         /* Timeout management */
 		if((tickstart++)>6000){
 			TR5X6_ROM_CS(1);			// ROM Deselect
 			return TR5X6_ROM_TIMEOUT;
         }else{
-        	TR5X6_ROM_Addr_Set(address);
 			TR5X6_ROM_CS(0);			// ROM Select
 			tmpData=TR5X6_ROM_Data_Get();
 			TR5X6_ROM_CS(1);			// ROM Deselect
@@ -306,32 +352,32 @@ tr5x6_rom_status TR5X6_ROM_Sector_Erase(uint32_t sector, uint32_t Timeout){
 	PROG();				// ROM PROG Mode
 	// start sector erase sequence
 	//TR5X6_ROM_Addr_Set(0x00005555);
-	TR5X6_ROM_Addr_Set(0x00000AAA);
+	TR5X6_ROM_ProgAddr_Set(0x00000AAA);
 	TR5X6_ROM_Data_Set(0xAA);
 	TR5X6_ROM_CS(0);			// ROM Select
 	TR5X6_ROM_CS(1);			// ROM Deselect
 
 	//TR5X6_ROM_Addr_Set(0x00002AAA);
-	TR5X6_ROM_Addr_Set(0x00000555);
+	TR5X6_ROM_ProgAddr_Set(0x00000555);
 	TR5X6_ROM_Data_Set(0x55);
 	TR5X6_ROM_CS(0);			// ROM Select
 	TR5X6_ROM_CS(1);			// ROM Deselect
 	//TR5X6_ROM_Addr_Set(0x00005555);
-	TR5X6_ROM_Addr_Set(0x00000AAA);
+	TR5X6_ROM_ProgAddr_Set(0x00000AAA);
 	TR5X6_ROM_Data_Set(0x80);
 	TR5X6_ROM_CS(0);			// ROM Select
 	TR5X6_ROM_CS(1);			// ROM Deselect
 	//TR5X6_ROM_Addr_Set(0x00005555);
-	TR5X6_ROM_Addr_Set(0x00000AAA);
+	TR5X6_ROM_ProgAddr_Set(0x00000AAA);
 	TR5X6_ROM_Data_Set(0xAA);
 	TR5X6_ROM_CS(0);			// ROM Select
 	TR5X6_ROM_CS(1);			// ROM Deselect
 	//TR5X6_ROM_Addr_Set(0x00002AAA);
-	TR5X6_ROM_Addr_Set(0x00000555);
+	TR5X6_ROM_ProgAddr_Set(0x00000555);
 	TR5X6_ROM_Data_Set(0x55);
 	TR5X6_ROM_CS(0);			// ROM Select
 	TR5X6_ROM_CS(1);			// ROM Deselect
-	TR5X6_ROM_Addr_Set(sector);
+	TR5X6_ROM_ProgAddr_Set(sector);
 	//TR5X6_ROM_Data_Set(0x30);
 	TR5X6_ROM_Data_Set(0x50);
 	TR5X6_ROM_CS(0);			// ROM Select
@@ -342,8 +388,11 @@ tr5x6_rom_status TR5X6_ROM_Sector_Erase(uint32_t sector, uint32_t Timeout){
 	s32 tmpData=0;
 	ADIOS_DELAY_Wait_uS(4);
 	tr5x6_rom_status errorcode = TR5X6_ROM_OK;
-	//s32 tickstart = ADIOS_TIMESTAMP_Init(0);
-	u16 tickstart = 0;
+	// s32, not u16: this is compared against 4000000, which a u16 can never
+	// reach - the guard could never fire and a stuck erase span for ever.
+	s32 tickstart = 0;
+	// same as in Write(): the latch holds the poll address, set it once
+	TR5X6_ROM_ProgAddr_Set(sector+TR5X6_ROM_SECTOR_SIZE-1);
 	while(tmpData!=0xff){
 		//ADIOS_BOARD_LED_Set(1, 1);
         /* Timeout management */
@@ -353,7 +402,6 @@ tr5x6_rom_status TR5X6_ROM_Sector_Erase(uint32_t sector, uint32_t Timeout){
 
 			return TR5X6_ROM_TIMEOUT;
         }else{
-        	TR5X6_ROM_Addr_Set(sector+TR5X6_ROM_SECTOR_SIZE-1);
 			TR5X6_ROM_CS(0);			// ROM Select
 			tmpData=TR5X6_ROM_Data_Get();
 			TR5X6_ROM_CS(1);			// ROM Deselect
@@ -373,22 +421,41 @@ void TR5X6_ROM_Addr_Set(uint32_t address){
 
 
 #if TR5X6_UNIT_SELECT==505
+	// A17 is the low bit of the bank number here, so it belongs to the latch in
+	// both modes - the mux stays on. See the bus map at the top of this file.
 	address |= 0x00800000;
 #endif
-	uint8_t tmpAddr[3] = {(address>>16) &0xff,  (address>>8) &0xff, address &0xff};
-	//HAL_SPI_Transmit(&hspi2, tmpAddr, 3, 1);
-	ADIOS_SPI_TransferBlock(TR5X6_ROM_SPI, tmpAddr, NULL, 3, NULL);
+	// Three POLLED byte transfers, not TransferBlock. The DMA path spends some
+	// twenty peripheral register writes reconfiguring both channels to move
+	// three bytes - overhead that dwarfs the 12 us actually spent clocking them
+	// out, and this runs 4096 times per sector read-back.
+	// A refused transfer means the bytes never reached the shift register:
+	// strobing ADR anyway would latch a stale address and every operation that
+	// follows would aim at the wrong place, silently. So leave the latch alone.
+	if( ADIOS_SPI_TransferByte(TR5X6_ROM_SPI, (address>>16) & 0xff) < 0 ||
+	    ADIOS_SPI_TransferByte(TR5X6_ROM_SPI, (address>>8)  & 0xff) < 0 ||
+	    ADIOS_SPI_TransferByte(TR5X6_ROM_SPI,  address       & 0xff) < 0 ) {
+		++tr5x6_rom_spi_err;
+		return;
+	}
 	TR5X6_ROM_ADR(0);
 	TR5X6_ROM_ADR(1);
 
 }
 
 /* ********* */
+/* Every address emitted in PROG mode, unlock command sequences included:
+   bit 23 claims A17 for the latch. See the bus map at the top of this file. */
+static void TR5X6_ROM_ProgAddr_Set(uint32_t address){
+	TR5X6_ROM_Addr_Set(address | 0x00800000);
+}
+
+/* ********* */
 void TR5X6_ROM_Data_Set(uint8_t data){
 	TR5X6_ROM_DAT(0);
-//	__NOP();__NOP();__NOP();
-	//HAL_SPI_Transmit(&hspi2, &data, 1, 1);
-	ADIOS_SPI_TransferByte(TR5X6_ROM_SPI, data);
+	// same rule as the address latch: no transfer, no strobe (see Addr_Set)
+	if( ADIOS_SPI_TransferByte(TR5X6_ROM_SPI, data) < 0 )
+		++tr5x6_rom_spi_err;
 	TR5X6_ROM_DAT(1);
 }
 
@@ -417,20 +484,22 @@ s32 TR5X6_MEM_Format(void){
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
 	APP_LCD_Rectangle(89, 14+80, 302, 18, 1, APP_LCD_WHITE, 0, 0);
 
+	u16 bad_sectors=0;
+	s32 first_bad_sector=-1;
 	for(int sector=0; sector<((TR5X6_ROM_END_ADDR+1)/TR5X6_ROM_SECTOR_SIZE);sector++){
 
 		u32 addr=(sector*TR5X6_ROM_SECTOR_SIZE) | 0x00800000;
 		//for(int i =0; i<600; i++)prog_bmp_array[i] = 0x00;
 
+		// A sector that refuses to erase or to program is reported and skipped,
+		// never fatal: the format has to reach the internal flash and write the
+		// magic, or the machine reboots into this page for ever.
 		if((errorcode=TR5X6_ROM_Sector_Erase(sector*TR5X6_ROM_SECTOR_SIZE, 1000))==TR5X6_ROM_OK){
 			for(u16 b=0;b<TR5X6_ROM_SECTOR_SIZE;b++){
 				if((errorcode=TR5X6_ROM_Write((u32)(addr+b), 0x80, 1000))!=TR5X6_ROM_OK){
 					tr5x6_rom_format_stat=(s32)(errorcode-4);
 					sprintf(message, "Write addr@0x%08x error#%d!", (u32)(addr+b-0x00800000),  errorcode);
-					ADIOS_MIDI_SendDebugMessage(message);
-					APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
-					APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
-					return (s32)tr5x6_rom_format_stat;
+					break;	// give this sector up, carry on with the next one
 				}
 			}
 			if(errorcode>=0){
@@ -440,20 +509,14 @@ s32 TR5X6_MEM_Format(void){
 		}else{
 			tr5x6_rom_format_stat=(s32)errorcode;
 			sprintf(message, "Sector#%u erase, addr@0x%08x, error#%d!", sector, addr-0x00800000, errorcode);
-			ADIOS_MIDI_SendDebugMessage(message);
-			APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
-			APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
-			return (s32)tr5x6_rom_format_stat;
+		}
+		if(errorcode<0){
+			bad_sectors++;
+			if(first_bad_sector<0)first_bad_sector=sector;
 		}
 		ADIOS_MIDI_SendDebugMessage(message);
-		if(sector<511){
-			APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
-			APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
-		}else{
-			APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
-			APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", "All sectors formatted.");
-			ADIOS_MIDI_SendDebugMessage("All ROM sectors formatted.");
-		}
+		APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
+		APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 		u16 progress= 100*(sector+1)/512;
 		memset(&prog_bmp_array, 0x00, sizeof(prog_bmp_array));
 
@@ -461,6 +524,22 @@ s32 TR5X6_MEM_Format(void){
 		APP_LCD_PrintProgress(prog_bmp, 0x00ff0000, 90, 15+80, 300, 16, 300*progress/100);
 
 	}
+
+	// What the ROM pass found, said before the internal flash is touched. The
+	// unit is the SECTOR: a write error gives its sector up, so the format
+	// never learns how many cells below it are really dead - counting those
+	// takes a readback pass, which belongs to the diagnostic tool.
+	if(bad_sectors)
+		sprintf(message, "ROM report: %u sector%s in error (first #%d)",
+				bad_sectors, (bad_sectors>1)?"s":"", first_bad_sector);
+	else
+		sprintf(message, "ROM report: all %u sectors formatted",
+				(u32)((TR5X6_ROM_END_ADDR+1)/TR5X6_ROM_SECTOR_SIZE));
+	if(tr5x6_rom_spi_err)
+		ADIOS_MIDI_SendDebugMessage("ROM report: %d SPI transfers refused!", tr5x6_rom_spi_err);
+	ADIOS_MIDI_SendDebugMessage(message);
+	APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
+	APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 
 	APP_LCD_PrintString(92, 15+120, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Formatting   FLASH...");
 	APP_LCD_Rectangle(89, 14+150, 302, 18, 1, APP_LCD_WHITE, 0, 0);
