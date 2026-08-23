@@ -53,6 +53,7 @@ u8 segment=0;
 u8 cs_active=0;
 u8 decoding=0;
 u8 seg_bit=0;
+u8 tr5x6_digits_num;
 
 
 #if TR5X6_UNIT_SELECT==505
@@ -129,6 +130,14 @@ u8 segment_test_flag=0;
 /* ********* */
 void TR5X6_DECOD_Init()
 {
+	// The one line that changes the day the host comes from the flash magic
+	// instead of the build.
+#if TR5X6_UNIT_SELECT==505
+	tr5x6_digits_num = 6;
+#else
+	tr5x6_digits_num = 7;
+#endif
+
 
 	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
 	LL_EXTI_InitTypeDef EXTI_InitStruct = {0};
