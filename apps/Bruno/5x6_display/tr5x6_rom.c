@@ -163,9 +163,9 @@ const tr5x6_slot_t tr5x6_slots_626[30]={
 		{"Mid Tom 2\0    ", "MT2\0", 0x26000, SIZE_8K, SLOT_EVEN},
 		{"Hi Tom 2\0     ", "HT2\0", 0x24000, SIZE_8K, SLOT_EVEN}};
 
-//                                    slots        slot bank div shift dig magic  ack
-const tr5x6_unit_t tr5x6_unit_505 = { tr5x6_slots_505, 16, 16,  4,  17,  6, 0x75, 0x50 };
-const tr5x6_unit_t tr5x6_unit_626 = { tr5x6_slots_626, 30,  8,  2,  18,  7, 0x76, 0x62 };
+//                                    slots        slot bank div shift dig magic  ack  cs2
+const tr5x6_unit_t tr5x6_unit_505 = { tr5x6_slots_505, 16, 16,  4,  17,  6, 0x75, 0x50, 0 };
+const tr5x6_unit_t tr5x6_unit_626 = { tr5x6_slots_626, 30,  8,  2,  18,  7, 0x76, 0x62, 1 };
 
 // The unit descriptor every user goes through. Aimed once at boot.
 const tr5x6_unit_t *tr5x6_unit;

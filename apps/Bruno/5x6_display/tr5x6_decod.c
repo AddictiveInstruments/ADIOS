@@ -25,29 +25,22 @@
 #define TR5X6_DECOD_BUTT_DEC 	 	LL_GPIO_PIN_0
 #define TR5X6_DECOD_BUTT_INC 	 	LL_GPIO_PIN_1
 
-#if TR5X6_UNIT_SELECT==505
-#define TR5X6_DECOD_PAT_DIGIT1 	 	4
-#define TR5X6_DECOD_PAT_DIGIT2 	 	5
+// The G0 has 2 NVIC priority bits, so only the low two bits of this value
+// ever reach the hardware. It used to read 2 on the 505 and 6 on the 626 -
+// 6 & 3 = 2, so both landed on the same level and the difference never
+// existed outside the source.
 #define TR5X6_DECOD_IRQ_PRIOR 	 	2
-#else
-#define TR5X6_DECOD_PAT_DIGIT1 	 	5
-#define TR5X6_DECOD_PAT_DIGIT2 	 	6
-#define TR5X6_DECOD_IRQ_PRIOR 	 	6
-#endif
 
 
 //#define TR5X6_DECOD_CS_IRQHANDLER_FUNC void EXTI4_15_IRQHandler(void)
 //#define TR5X6_DECOD_CLK_IRQHANDLER_FUNC void EXTI2_3_IRQHandler(void)
 
 /* Prototypes -----------------------------------------------------------------*/
-void TR5X6_DECOD_segments_func(void);
-#if TR5X6_UNIT_SELECT==626
-void TR5X6_DECOD_blinks_func(void);
-#endif
-#if 0
-static s32 (*pattern_change_callback_func)(u8 group, u8 pattern);
-static s32 TR5X6_DECOD_PatternChange(void);
-#endif
+static void lcd_callback_505(void);
+static void lcd_callback_626(void);
+static void segments_func_505(void);
+static void segments_func_626(void);
+static void blinks_func_626(void);
 /* Variables ------------------------------------------------------------------*/
 u8 segment=0;
 u8 cs_active=0;
@@ -55,38 +48,36 @@ u8 decoding=0;
 u8 seg_bit=0;
 
 
-#if TR5X6_UNIT_SELECT==505
-// Digits
-u8 tr5x6_decod_digits[6];
-u8 tr5x6_decod_digits_old[6]={0xff,0xff,0xff,0xff,0xff,0xff};
-const u16 tr5x6_decod_digits_pos[6]={16,67,107,147,245,285};
+// EVERY host's state lives here, sized for the LARGER machine. Both decoders
+// are compiled into both binaries now, so both sets of variables have to
+// exist - 133 bytes of RAM on the 505, 3 on the 626, noise against the 36K
+// of the G070CB.
+
+// Digits - seven on the 626, six on the 505, so seven here
+u8 tr5x6_decod_digits[7];
+u8 tr5x6_decod_digits_old[7]={0xff,0xff,0xff,0xff,0xff,0xff,0xff};
 u8 tr5x6_decod_digits_flags= 0x00;
+// Two const tables in flash, one pointer aimed at boot - the same pattern as
+// the slot tables in tr5x6_rom.c.
+const u16 tr5x6_decod_digits_pos_505[6]={16,67,107,147,245,285};
+const u16 tr5x6_decod_digits_pos_626[7]={16,68,124,157,190,272,305};
+const u16 *tr5x6_decod_digits_pos;
+// Accent - the 505 only, but the symbol must exist on both
 u8 tr5x6_decod_inst_acc;
 u8 tr5x6_decod_inst_acc_old= 0x00;
 u8 tr5x6_decod_inst_acc_flags= 0x00;
-u8 tr5x6_decod_segments[32];
-u8 tr5x6_decod_segments_shadow[32];
-u8* decod_reg = NULL;
-
-#else //TR5X6_UNIT_SELECT==626
-// Digits
-u8 tr5x6_decod_digits[7];
-u8 tr5x6_decod_digits_old[7]={0xff,0xff,0xff,0xff,0xff,0xff,0xff};
-const u16 tr5x6_decod_digits_pos[7]={16,68,124,157,190,272,305};
-u8 tr5x6_decod_digits_flags= 0x00;
-// Instruments select
+// Blocked instruments - the 626 only, same rule
 u16 tr5x6_decod_inst_blk;
 u16 tr5x6_decod_inst_blk_old= 0x0000;
 u16 tr5x6_decod_inst_blk_flags= 0x0000;
-u8 local_buff=0;
-u8 tr5x6_decod_blinks[15];
-u8 tr5x6_decod_blinks_shadow[15];
+// The captured planes. The 626 fills buff[] first and splits it into the
+// other two once the frame checks out; the 505 fills segments[] directly.
 u8 tr5x6_decod_segments[32];
 u8 tr5x6_decod_segments_shadow[32];
+u8 tr5x6_decod_blinks[15];
+u8 tr5x6_decod_blinks_shadow[15];
 u8 tr5x6_decod_buff[47];
 u8 tr5x6_decod_buff_shadow[47];
-u8* decod_reg = NULL;
-#endif
 
 
 // Instruments select
@@ -129,6 +120,22 @@ u8 segment_test_flag=0;
 /* ********* */
 void TR5X6_DECOD_Init()
 {
+	// FIRST, before anything else in this function.
+	// ADIOS_IRQ_Install(EXTI4_15_IRQn) further down arms the interrupt that
+	// calls TR5X6_DECOD_EXTI_LCD_Callback, and the host drives its display
+	// bus permanently - an edge landing while this pointer is still NULL
+	// jumps to address 0 and faults before the screen ever lights up.
+	// Assigning here closes that window, and keeps closing it the day the
+	// choice comes from tr5x6_unit->magic instead of the build.
+	//
+	// A ternary, not an #if: both decoders stay referenced, so neither is
+	// warned about nor stripped. The two machines do not even raise the
+	// same EXTI events, so the whole callback is swapped, not just its body.
+	tr5x6_decod_digits_pos        = (TR5X6_UNIT_SELECT==505) ? tr5x6_decod_digits_pos_505
+	                                                        : tr5x6_decod_digits_pos_626;
+	TR5X6_DECOD_EXTI_LCD_Callback = (TR5X6_UNIT_SELECT==505) ? lcd_callback_505
+	                                                        : lcd_callback_626;
+
 
 
 	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -175,11 +182,10 @@ void TR5X6_DECOD_Init()
 	EXTI_InitStruct.Line_0_31 = LL_EXTI_LINE_13;
 	EXTI_InitStruct.LineCommand = ENABLE;
 	EXTI_InitStruct.Mode = LL_EXTI_MODE_IT;
-#if TR5X6_UNIT_SELECT==505
-	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_FALLING;
-#else
-	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_RISING_FALLING;
-#endif
+	// The 626 validates its frame on the CS rising edge; the 505 has no use
+	// for that edge at all - see the bus map in tr5x6_decod.h.
+	EXTI_InitStruct.Trigger = tr5x6_unit->cs_two_edges ? LL_EXTI_TRIGGER_RISING_FALLING
+	                                                   : LL_EXTI_TRIGGER_FALLING;
 	LL_EXTI_Init(&EXTI_InitStruct);
 	// EXTI TR5X6_DECOD_CLK
 	LL_EXTI_SetEXTISource(LL_EXTI_CONFIG_PORTC, LL_EXTI_CONFIG_LINE15);
@@ -211,11 +217,10 @@ void TR5X6_DECOD_Init()
 	cs_active=0;
 	segment=0;
 	seg_bit=0;
-#if TR5X6_UNIT_SELECT==626
-	tr5x6_decod_buff[0]=0;
-#endif
+	tr5x6_decod_buff[0]=0;	// only the 626 fills it, but it exists on both
 	tr5x6_decod_buttons_old.ALL = 0xf;
 	tr5x6_decod_buttons.ALL = 0xf;
+
 }
 
 
@@ -256,13 +261,19 @@ tr5x6_decod_buttons_t TR5X6_DECOD_BUTT_Handler(void)
 
 
 /* ********* */
-void TR5X6_DECOD_EXTI_LCD_Callback(void)
+void (*TR5X6_DECOD_EXTI_LCD_Callback)(void);
+
+/////////////////////////////////////////////////////////////////////////////
+// TR-505 : two events. CS falling opens a frame, each CLK rising edge
+// captures one bit straight into tr5x6_decod_segments[]. The 32nd byte ends
+// the frame and triggers the decode.
+/////////////////////////////////////////////////////////////////////////////
+static void lcd_callback_505(void)
 {
 	// CLK/MISO lines
 	if (LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_15) != RESET)
 	{
 		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_15);
-#if TR5X6_UNIT_SELECT==505
 		if(segment>31 || !cs_active)return;
 		//ADIOS_IRQ_Disable();
 		if(ADIOS_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
@@ -276,26 +287,33 @@ void TR5X6_DECOD_EXTI_LCD_Callback(void)
 			if(segment>31){
 				cs_active=0;
 
-				TR5X6_DECOD_segments_func();
+				segments_func_505();
 			}
 		}
-#else
-#if 0
-		if(!cs_active)return;
-		//ADIOS_IRQ_Disable();
-		if(decod_reg!=NULL){
-			if(ADIOS_SYS_STM_PINGET(TR5X6_DECOD_MOSI_PORT, TR5X6_DECOD_MOSI))
-				*decod_reg |= (0x80>>seg_bit);
-			else
-				*decod_reg &= ~(0x80>>seg_bit);
-		}
-		seg_bit++;
-		if(seg_bit>=8){
-			seg_bit = 0;
-			segment++;
-			if(decod_reg!=NULL)decod_reg++;
-		}
-#else
+	}
+	// CS line
+	if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_13) != RESET)
+	{
+		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_13);
+		if(segment>31)return;
+		cs_active=1;
+		segment=0;
+		seg_bit=0;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// TR-626 : three events. Bits land in tr5x6_decod_buff[], and the frame is
+// validated on the CS RISING edge - an event the 505 does not have at all.
+// The frame is 47 bytes: 15 of blink data then 32 of segments, split into
+// their own arrays only once the whole thing checks out.
+/////////////////////////////////////////////////////////////////////////////
+static void lcd_callback_626(void)
+{
+	// CLK/MISO lines
+	if (LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_15) != RESET)
+	{
+		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_15);
 		if(decoding)return;
 		if(!cs_active || (segment>=47) )return;
 		//ADIOS_IRQ_Disable();
@@ -314,27 +332,11 @@ void TR5X6_DECOD_EXTI_LCD_Callback(void)
 				cs_active=0;
 			}
 		}
-#endif
-#endif
 	}
 	// CS line
 	if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_13) != RESET)
 	{
 		LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_13);
-#if TR5X6_UNIT_SELECT==505
-		if(segment>31)return;
-		cs_active=1;
-		segment=0;
-		seg_bit=0;
-#else
-#if 0
-		if(decoding)decod_reg = NULL;
-		else if((segment==32) && (seg_bit==0))decod_reg = &tr5x6_decod_blinks[0];
-		else if((segment==15) && (seg_bit==0))decod_reg = &tr5x6_decod_segments[0];
-		cs_active=1;
-		segment=0;
-		seg_bit=0;
-#else
 		if(decoding)return;
 		if(!cs_active || ((cs_active==1) && (segment!=15)) ){
 			segment=0;
@@ -343,25 +345,10 @@ void TR5X6_DECOD_EXTI_LCD_Callback(void)
 
 		}
 		cs_active++;
-#endif
-#endif
 	}
-#if TR5X6_UNIT_SELECT==626
 	if (LL_EXTI_IsActiveRisingFlag_0_31(LL_EXTI_LINE_13) != RESET)
 	{
 		LL_EXTI_ClearRisingFlag_0_31(LL_EXTI_LINE_13);
-#if 0
-		cs_active=0;
-		if(decoding)return;
-		if((segment==32) && (seg_bit==0)){
-			//decoding |=1;
-			TR5X6_DECOD_segments_func();
-
-		}else if((segment==15) && (seg_bit==0)){
-			//decoding |=2;
-			TR5X6_DECOD_blinks_func();
-		}
-#else
 		if(decoding)return;
 		if( (cs_active>2) || (segment> 47)){
 			cs_active=0;
@@ -391,49 +378,21 @@ void TR5X6_DECOD_EXTI_LCD_Callback(void)
 				memcpy(&tr5x6_decod_blinks[0], &tr5x6_decod_buff[0], sizeof(u8)*15);
 				memcpy(&tr5x6_decod_segments[0], &tr5x6_decod_buff[15], sizeof(u8)*32);
 				memcpy(&tr5x6_decod_buff_shadow[0], &tr5x6_decod_buff[0], sizeof(u8)*47);
-				TR5X6_DECOD_blinks_func();
-				TR5X6_DECOD_segments_func();
+				blinks_func_626();
+				segments_func_626();
 				ADIOS_SYS_STM_PINSET(GPIOC, LL_GPIO_PIN_7, 0);
 				//decoding = 0;
 			}
 
 		}
-#endif
 	}
-#endif
-
 }
 
-#if TR5X6_UNIT_SELECT==626
-void TR5X6_DECOD_blinks_func(void){
-#if 0
-	//if(!(decoding & 2))return;
-	decoding=1;
-	ADIOS_IRQ_DeInstall(EXTI4_15_IRQn);
-	decod_reg = NULL;
-	if(tr5x6_decod_blinks[0]!=0xf2){
-		//decoding &=0xfd;
-		ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
-		decoding=0;
-		return;
-	}
-	for(int i=1;i<15;i++){
-		if((tr5x6_decod_blinks[i]&0xf0)!=0xc0){
-			//decoding &=0xfe;
-			ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
-			decoding =0;
-			return;
-		}
-	}
-#else
-	//if(!decoding)return;
-#endif
-	//	for(int i=1;i<14;i++){
-	//		if((tr5x6_decod_segments[0]&0xf0)!=0xd0){
-	//			decoding=0;
-	//			return;
-	//		}
-	//	}
+/////////////////////////////////////////////////////////////////////////////
+// TR-626 only: the 15-byte blink frame carries which instruments are blocked
+/////////////////////////////////////////////////////////////////////////////
+static void blinks_func_626(void)
+{
 	// Instruments select
 	tr5x6_decod_inst_blk= (((tr5x6_decod_blinks[1]&0xe)<<12) | ((tr5x6_decod_blinks[2]&0xf)<<4)
 			| ((tr5x6_decod_blinks[12]&0x1)<<3) | ((tr5x6_decod_blinks[12]&0x2)<<1) | ((tr5x6_decod_blinks[12]&0x4)>>1) | ((tr5x6_decod_blinks[12]&0x8)>>3)
@@ -450,17 +409,13 @@ void TR5X6_DECOD_blinks_func(void){
 		if(tr5x6_decod_blinks[i]!=tr5x6_decod_blinks_shadow[i])blink_test_flag=1;
 		tr5x6_decod_blinks_shadow[i]=tr5x6_decod_blinks[i];
 	}
-#if 0
-	ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
-	//decoding &=0xfd;
-#endif
-	//decoding=0;
 }
-#endif
 
-/* ********* */
-void TR5X6_DECOD_segments_func(void){
-#if TR5X6_UNIT_SELECT==505
+/////////////////////////////////////////////////////////////////////////////
+// TR-505 : turns a 32-byte segment frame into the decoded state
+/////////////////////////////////////////////////////////////////////////////
+static void segments_func_505(void)
+{
 	if(cs_active)return;
 
 	// All digits
@@ -470,15 +425,6 @@ void TR5X6_DECOD_segments_func(void){
 	tr5x6_decod_digits[3]= ((tr5x6_decod_segments[6]&0xf)<<3) | ((tr5x6_decod_segments[7]&0xe)>>1);
 	tr5x6_decod_digits[4]= ((tr5x6_decod_segments[10]&0xf)<<3) | ((tr5x6_decod_segments[11]&0xe)>>1);
 	tr5x6_decod_digits[5]= ((tr5x6_decod_segments[12]&0xf)<<3) | ((tr5x6_decod_segments[13]&0xe)>>1);
-	//#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-	//					if((tr5x6_decod_digits[0]!= 0x03)){
-	//						tft_ready=0;
-	////						for(int i =0;i<15;i++)
-	////						ADIOS_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_blinks[i]);
-	//						for(int i =0;i<32;i++)
-	//						ADIOS_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_segments[i]);
-	//					}
-	//#endif
 	for(int i=0;i<6;i++){
 		if(tr5x6_decod_digits[i]!=tr5x6_decod_digits_old[i]){
 			tr5x6_decod_digits_old[i]=tr5x6_decod_digits[i];
@@ -498,25 +444,12 @@ void TR5X6_DECOD_segments_func(void){
 			| ((tr5x6_decod_segments[26]&0x1)<<3) | ((tr5x6_decod_segments[26]&0x2)<<1) | ((tr5x6_decod_segments[26]&0x4)>>1) | ((tr5x6_decod_segments[26]&0x8)>>3)
 			| ((tr5x6_decod_segments[27]&0x1)<<11) | ((tr5x6_decod_segments[27]&0x2)<<9) | ((tr5x6_decod_segments[27]&0x4)<<7) | ((tr5x6_decod_segments[27]&0x8)<<5)
 			| ((tr5x6_decod_segments[28]&0x1)<<12));
-#if 0
-	u16 decod_inst_tmp = (tr5x6_decod_inst_sel^tr5x6_decod_inst_sel_old)&tr5x6_decod_inst_sel;
-	u8 bit_count=0;
-	for(int i=0;i<16;i++)if(decod_inst_tmp & (1<<i)){
-		bit_count++;
-		// Set selection number
-		//
-	}
-	if(bit_count==1){
-		// FLAG
-	}
-#else
 	for(int i=0;i<16;i++){
 		if((tr5x6_decod_inst_sel &(1<<i)) != (tr5x6_decod_inst_sel_old  &(1<<i))){
 			tr5x6_decod_inst_sel_flags |= (1<<i);
 		}
 	}
 	tr5x6_decod_inst_sel_old = tr5x6_decod_inst_sel;
-#endif
 	// Step Dots
 	tr5x6_decod_step_dots= ((tr5x6_decod_segments[19]&0x1)<<8) | ((tr5x6_decod_segments[19]&0x2)<<9) | ((tr5x6_decod_segments[19]&0x4)<<10) | ((tr5x6_decod_segments[19]&0x8)<<11)
 				 	 							| ((tr5x6_decod_segments[20]&0x1)<<9) | ((tr5x6_decod_segments[20]&0x2)<<10) | ((tr5x6_decod_segments[20]&0x4)<<11) | ((tr5x6_decod_segments[20]&0x8)<<12)
@@ -572,31 +505,14 @@ void TR5X6_DECOD_segments_func(void){
 		}
 	}
 	tr5x6_decod_labels_old = tr5x6_decod_labels.ALL;
-#if PATTERN_DETECT
-	// detect pattern change
-	if(tr5x6_decod_group_flag || (tr5x6_decod_digits_flags & ((1<<TR5X6_DECOD_PAT_DIGIT1) | (1<<TR5X6_DECOD_PAT_DIGIT2))) )TR5X6_DECOD_PatternChange();
-#endif
 	segment=0;
+}
 
-#else // TR5X6_UNIT_SELECT==505
-	//if(!(decoding & 1))return;
-
-#if 0
-	decoding=1;
-	ADIOS_IRQ_DeInstall(EXTI4_15_IRQn);
-	decod_reg = NULL;
-	for(int i=0;i<32;i++){
-		if((tr5x6_decod_segments[i]&0xf0)!=0xd0){
-			//decoding &=0xfe;
-			ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
-			decoding =0;
-			return;
-		}
-	}
-#else
-	//if(!decoding)return;
-#endif
-
+/////////////////////////////////////////////////////////////////////////////
+// TR-626 : same job, different bus layout - and one more digit
+/////////////////////////////////////////////////////////////////////////////
+static void segments_func_626(void)
+{
 	// All digits
 	tr5x6_decod_digits[0]= ((tr5x6_decod_segments[0]&0xf)<<3) | ((tr5x6_decod_segments[1]&0xe)>>1);
 	tr5x6_decod_digits[1]= ((tr5x6_decod_segments[2]&0xf)<<3) | ((tr5x6_decod_segments[3]&0xe)>>1);
@@ -611,16 +527,6 @@ void TR5X6_DECOD_segments_func(void){
 			tr5x6_decod_digits_flags |= (1<<i);
 		}
 	}
-
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-	//	if((tr5x6_decod_digits[0]!= 0x03)){
-	//		tft_ready=0;
-	////		for(int i =0;i<15;i++)
-	////		ADIOS_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_blinks[i]);
-	//		for(int i =0;i<32;i++)
-	//		ADIOS_MIDI_SendDebugMessage("digit#%d=x%02x\n",i, tr5x6_decod_segments[i]);
-	//	}
-#endif
 	// Instruments select
 	tr5x6_decod_inst_sel= (((tr5x6_decod_segments[18]&0xe)<<12) | ((tr5x6_decod_segments[19]&0xf)<<4)
 			| ((tr5x6_decod_segments[29]&0x1)<<3) | ((tr5x6_decod_segments[29]&0x2)<<1) | ((tr5x6_decod_segments[29]&0x4)>>1) | ((tr5x6_decod_segments[29]&0x8)>>3)
@@ -703,82 +609,5 @@ void TR5X6_DECOD_segments_func(void){
 	//ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
 	//decoding &=0xfe;
 	decoding=0;
-	//ADIOS_BOARD_LED_Set(1, 0);
-
-#endif
-	//	for(int i=0;i<32;i++){
-	//		if((tr5x6_decod_segments[i]&0xf0)!=0xd0){
-	//			decoding=0;
-	//			return;
-	//		}
-	//	}
-
 }
-
-#if PATTERN_DETECT
-s32 TR5X6_DECOD_PatternChangeCallback_Init(s32 (*callback_pattern_change)(u8 group, u8 pattern))
-{
-	pattern_change_callback_func = callback_pattern_change;
-
-	return 0; // no error
-}
-
-s32 TR5X6_DECOD_PatternChange(void)
-{
-	if(!tr5x6_decod_labels.grp_pat)return -1;
-	s8 group;
-	if((group=TR5X6_DECOD_Group_Get())<0)return -1;
-	s8 pattern;
-	if((pattern=TR5X6_DECOD_Pattern_Get())<0)return -1;
-	//tr5x6_flash_mem_Bank_t bank_mem = TR5X6_FLASH_MemBank_Get(group, pattern);
-	// optional hook to application
-	ADIOS_MIDI_SendDebugMessage("pattern %X%u\n", group+10, pattern+1);
-	if( pattern_change_callback_func != NULL )
-		pattern_change_callback_func(group, pattern);
-
-	return 0; // no error
-}
-
-
-/* ********* */
-s8 TR5X6_DECOD_Group_Get(void){
-	switch(tr5x6_decod_group){
-	case 0x01: return 0;
-	case 0x02: return 1;
-	case 0x04: return 2;
-	case 0x08: return 3;
-	case 0x10: return 4;
-	case 0x20: return 5;
-	default: return -1;
-	}
-}
-
-/* ********* */
-// out range[0-15]
-s8 TR5X6_DECOD_Pattern_Get(void){
-	u8 pattern;
-	if(tr5x6_decod_digits[TR5X6_DECOD_PAT_DIGIT1]==0x03)pattern = 10;
-	else if(tr5x6_decod_digits[TR5X6_DECOD_PAT_DIGIT1]==0x00)pattern = 0;
-	else return -1; // error (digit not numeric)
-	switch(tr5x6_decod_digits[TR5X6_DECOD_PAT_DIGIT2]){
-
-	case 0x03: pattern += 1; break;
-	case 0x6d: pattern += 2; break;
-	case 0x2f: pattern += 3; break;
-	case 0x33: pattern += 4; break;
-	case 0x3e: pattern += 5; break;
-	case 0x7e: pattern += 6; break;
-	case 0x0b: pattern += 7; break;
-	case 0x7f: pattern += 8; break;
-	case 0x3f: pattern += 9; break;
-	case 0x5f: pattern += 0; break;
-	default: return -1; // error (digit not numeric)
-	}
-
-	if (pattern==0)return -2; //out of range
-	if (pattern>16)return -2; //out of range
-
-	return (pattern-1);
-}
-#endif
 

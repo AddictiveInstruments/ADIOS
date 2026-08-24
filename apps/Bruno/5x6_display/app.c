@@ -1730,15 +1730,22 @@ void Formatting_Page(void){
 // The string itself stays tight - that is what Studio reads back over SysEx.
 // The dot alone is nearly invisible in this font, so it gets a space on each
 // side on its way to the display, and nowhere else.
+//
+// Spelled out by hand on purpose: the vsprintf this project links (see
+// adios/common/printf-stdarg.c) understands a width and s d x X u c - it
+// has NO precision and NO star, so "%.*s" silently prints garbage.
 /////////////////////////////////////////////////////////////////////////////
 void Version_Print(u16 x, u16 y)
 {
-	const char *dot = strchr(ADIOS_APP_VERSION, '.');
-	if(dot)
-		APP_LCD_PrintFormattedString(x, y, 0, APP_LCD_STRING_ALIGN_LEFT, -32,
-			"%.*s . %s", (int)(dot-ADIOS_APP_VERSION), ADIOS_APP_VERSION, dot+1);
-	else
-		APP_LCD_PrintString(x, y, 0, APP_LCD_STRING_ALIGN_LEFT, -32, (char*)ADIOS_APP_VERSION);
+	const char *v = ADIOS_APP_VERSION;
+	char spaced[32];
+	int j = 0;
+	for(int i=0; v[i] && j<(int)sizeof(spaced)-4; i++){
+		if(v[i]=='.'){ spaced[j++]=' '; spaced[j++]='.'; spaced[j++]=' '; }
+		else spaced[j++]=v[i];
+	}
+	spaced[j]=0;
+	APP_LCD_PrintString(x, y, 0, APP_LCD_STRING_ALIGN_LEFT, -32, spaced);
 }
 
 void About_Page(void)

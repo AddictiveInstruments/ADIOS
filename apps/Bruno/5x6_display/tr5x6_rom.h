@@ -146,6 +146,8 @@ typedef struct {
 	u8  magic;			// 0x75 / 0x76 - high nibble = version,
 					// low nibble = unit (5 = 505, 6 = 626)
 	u8  sysex_ack_type;		// 0x50 / 0x62
+	u8  cs_two_edges;		// 0 / 1 - the 626 validates its frame on the CS
+				// RISING edge too, so its EXTI must fire on both
 } tr5x6_unit_t;
 
 extern const tr5x6_unit_t tr5x6_unit_505;
