@@ -117,6 +117,41 @@ tr5x6_decod_buttons_t tr5x6_decod_buttons_flags;
 u8 blink_test_flag=0;
 u8 segment_test_flag=0;
 
+/////////////////////////////////////////////////////////////////////////////
+// How the 4 COM bits of ONE SEG address land in a 16-bit field.
+//
+// This is the PANEL WIRING, and it is identical on both machines - only the
+// SEG addresses differ, which is why every one of these tables is shared.
+// Note the REVERSED ones: the lower halves of the panel are wired the other
+// way round, a fact the TR-626 service notes confirm (see the SEG/COM tables
+// in tr5x6_decod.h).
+//
+// Generated from the original shift-and-mask expressions and verified over
+// all 16 nibble values - not transcribed by hand.
+/////////////////////////////////////////////////////////////////////////////
+enum {
+	MAP_STEP_HI_A,  	// nibble -> bits 8,10,12,14   steps/dots 9,11,13,15
+	MAP_STEP_HI_B,  	// nibble -> bits 9,11,13,15   steps/dots 10,12,14,16
+	MAP_STEP_LO_A,  	// nibble -> bits 6,4,2,0      steps/dots 7,5,3,1  REVERSED
+	MAP_STEP_LO_B,  	// nibble -> bits 7,5,3,1      steps/dots 8,6,4,2  REVERSED
+	MAP_INST_1_4,   	// nibble -> bits 3,2,1,0      instruments 4,3,2,1 REVERSED
+	MAP_INST_5_8,   	// nibble -> bits 4,5,6,7      instruments 5,6,7,8
+	MAP_INST_9_12,  	// nibble -> bits 11,10,9,8    instruments 12,11,10,9 REVERSED
+	MAP_INST_14_16, 	// nibble -> bits 13,14,15     instruments 14,15,16
+	MAP_NUM
+};
+
+static const u16 tr5x6_decod_com_map[MAP_NUM][16] = {
+	[MAP_STEP_HI_A  ] = { 0x0000, 0x0100, 0x0400, 0x0500, 0x1000, 0x1100, 0x1400, 0x1500, 0x4000, 0x4100, 0x4400, 0x4500, 0x5000, 0x5100, 0x5400, 0x5500 },
+	[MAP_STEP_HI_B  ] = { 0x0000, 0x0200, 0x0800, 0x0a00, 0x2000, 0x2200, 0x2800, 0x2a00, 0x8000, 0x8200, 0x8800, 0x8a00, 0xa000, 0xa200, 0xa800, 0xaa00 },
+	[MAP_STEP_LO_A  ] = { 0x0000, 0x0040, 0x0010, 0x0050, 0x0004, 0x0044, 0x0014, 0x0054, 0x0001, 0x0041, 0x0011, 0x0051, 0x0005, 0x0045, 0x0015, 0x0055 },
+	[MAP_STEP_LO_B  ] = { 0x0000, 0x0080, 0x0020, 0x00a0, 0x0008, 0x0088, 0x0028, 0x00a8, 0x0002, 0x0082, 0x0022, 0x00a2, 0x000a, 0x008a, 0x002a, 0x00aa },
+	[MAP_INST_1_4   ] = { 0x0000, 0x0008, 0x0004, 0x000c, 0x0002, 0x000a, 0x0006, 0x000e, 0x0001, 0x0009, 0x0005, 0x000d, 0x0003, 0x000b, 0x0007, 0x000f },
+	[MAP_INST_5_8   ] = { 0x0000, 0x0010, 0x0020, 0x0030, 0x0040, 0x0050, 0x0060, 0x0070, 0x0080, 0x0090, 0x00a0, 0x00b0, 0x00c0, 0x00d0, 0x00e0, 0x00f0 },
+	[MAP_INST_9_12  ] = { 0x0000, 0x0800, 0x0400, 0x0c00, 0x0200, 0x0a00, 0x0600, 0x0e00, 0x0100, 0x0900, 0x0500, 0x0d00, 0x0300, 0x0b00, 0x0700, 0x0f00 },
+	[MAP_INST_14_16 ] = { 0x0000, 0x0000, 0x2000, 0x2000, 0x4000, 0x4000, 0x6000, 0x6000, 0x8000, 0x8000, 0xa000, 0xa000, 0xc000, 0xc000, 0xe000, 0xe000 },
+};
+
 /* ********* */
 void TR5X6_DECOD_Init()
 {
@@ -394,21 +429,16 @@ static void lcd_callback_626(void)
 static void blinks_func_626(void)
 {
 	// Instruments select
-	tr5x6_decod_inst_blk= (((tr5x6_decod_blinks[1]&0xe)<<12) | ((tr5x6_decod_blinks[2]&0xf)<<4)
-			| ((tr5x6_decod_blinks[12]&0x1)<<3) | ((tr5x6_decod_blinks[12]&0x2)<<1) | ((tr5x6_decod_blinks[12]&0x4)>>1) | ((tr5x6_decod_blinks[12]&0x8)>>3)
-			| ((tr5x6_decod_blinks[13]&0x1)<<11) | ((tr5x6_decod_blinks[13]&0x2)<<9) | ((tr5x6_decod_blinks[13]&0x4)<<7) | ((tr5x6_decod_blinks[13]&0x8)<<5)
-			| ((tr5x6_decod_blinks[14]&0x1)<<12));
-	for(int i=0;i<16;i++){
-		if((tr5x6_decod_inst_blk &(1<<i)) != (tr5x6_decod_inst_blk_old  &(1<<i))){
-			tr5x6_decod_inst_blk_flags |= (1<<i);
-		}
-	}
+	tr5x6_decod_inst_blk= tr5x6_decod_com_map[MAP_INST_14_16 ][tr5x6_decod_blinks[1]&0xf]
+	                     | tr5x6_decod_com_map[MAP_INST_5_8   ][tr5x6_decod_blinks[2]&0xf]
+	                     | tr5x6_decod_com_map[MAP_INST_1_4   ][tr5x6_decod_blinks[12]&0xf]
+	                     | tr5x6_decod_com_map[MAP_INST_9_12  ][tr5x6_decod_blinks[13]&0xf]
+	                     | ((tr5x6_decod_blinks[14]&0x1)<<12);	// instrument 13
+	tr5x6_decod_inst_blk_flags |= tr5x6_decod_inst_blk ^ tr5x6_decod_inst_blk_old;
 	tr5x6_decod_inst_blk_old = tr5x6_decod_inst_blk;
 
-	for(int i=0; i<15;i++){
-		if(tr5x6_decod_blinks[i]!=tr5x6_decod_blinks_shadow[i])blink_test_flag=1;
-		tr5x6_decod_blinks_shadow[i]=tr5x6_decod_blinks[i];
-	}
+	if(memcmp(tr5x6_decod_blinks, tr5x6_decod_blinks_shadow, 15))blink_test_flag=1;
+	memcpy(tr5x6_decod_blinks_shadow, tr5x6_decod_blinks, 15);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -417,6 +447,17 @@ static void blinks_func_626(void)
 static void segments_func_505(void)
 {
 	if(cs_active)return;
+
+	// Every byte of the segment plane is a uPD7225 WRITE DATA MEMORY
+	// instruction, 1101 dddd - see the bus map in tr5x6_decod.h. A frame
+	// whose capture started mid-transfer is SHIFTED, and its bytes no
+	// longer carry that opcode: decoding it puts garbage on screen for a
+	// moment. The 626 has validated its frames since day one; the 505
+	// never did, and that stayed invisible only because this function
+	// used to be slow enough to drop such frames on its own. Now that it
+	// is fast, they get through - hence this check.
+	for(int i=0;i<32;i++)
+		if((tr5x6_decod_segments[i]&0xf0)!=0xd0){ segment=0; return; }
 
 	// All digits
 	tr5x6_decod_digits[0]= ((tr5x6_decod_segments[0]&0xf)<<3) | ((tr5x6_decod_segments[1]&0xe)>>1);
@@ -435,43 +476,29 @@ static void segments_func_505(void)
 
 	// Instruments select
 	tr5x6_decod_inst_acc = (tr5x6_decod_segments[28]>>2)&3;
-	for(int i=0;i<2;i++){
-		if((tr5x6_decod_inst_acc &(1<<i)) != (tr5x6_decod_inst_acc_old  &(1<<i)))
-			tr5x6_decod_inst_acc_flags|= (1<<i);
-	}
-	tr5x6_decod_inst_acc_old=tr5x6_decod_inst_acc;
-	tr5x6_decod_inst_sel= (((tr5x6_decod_segments[15]&0xe)<<12) | ((tr5x6_decod_segments[16]&0xf)<<4)
-			| ((tr5x6_decod_segments[26]&0x1)<<3) | ((tr5x6_decod_segments[26]&0x2)<<1) | ((tr5x6_decod_segments[26]&0x4)>>1) | ((tr5x6_decod_segments[26]&0x8)>>3)
-			| ((tr5x6_decod_segments[27]&0x1)<<11) | ((tr5x6_decod_segments[27]&0x2)<<9) | ((tr5x6_decod_segments[27]&0x4)<<7) | ((tr5x6_decod_segments[27]&0x8)<<5)
-			| ((tr5x6_decod_segments[28]&0x1)<<12));
-	for(int i=0;i<16;i++){
-		if((tr5x6_decod_inst_sel &(1<<i)) != (tr5x6_decod_inst_sel_old  &(1<<i))){
-			tr5x6_decod_inst_sel_flags |= (1<<i);
-		}
-	}
+	tr5x6_decod_inst_acc_flags |= tr5x6_decod_inst_acc ^ tr5x6_decod_inst_acc_old;
+	tr5x6_decod_inst_acc_old    = tr5x6_decod_inst_acc;
+	tr5x6_decod_inst_sel= tr5x6_decod_com_map[MAP_INST_14_16 ][tr5x6_decod_segments[15]&0xf]
+	                     | tr5x6_decod_com_map[MAP_INST_5_8   ][tr5x6_decod_segments[16]&0xf]
+	                     | tr5x6_decod_com_map[MAP_INST_1_4   ][tr5x6_decod_segments[26]&0xf]
+	                     | tr5x6_decod_com_map[MAP_INST_9_12  ][tr5x6_decod_segments[27]&0xf]
+	                     | ((tr5x6_decod_segments[28]&0x1)<<12);	// instrument 13
+	tr5x6_decod_inst_sel_flags |= tr5x6_decod_inst_sel ^ tr5x6_decod_inst_sel_old;
 	tr5x6_decod_inst_sel_old = tr5x6_decod_inst_sel;
 	// Step Dots
-	tr5x6_decod_step_dots= ((tr5x6_decod_segments[19]&0x1)<<8) | ((tr5x6_decod_segments[19]&0x2)<<9) | ((tr5x6_decod_segments[19]&0x4)<<10) | ((tr5x6_decod_segments[19]&0x8)<<11)
-				 	 							| ((tr5x6_decod_segments[20]&0x1)<<9) | ((tr5x6_decod_segments[20]&0x2)<<10) | ((tr5x6_decod_segments[20]&0x4)<<11) | ((tr5x6_decod_segments[20]&0x8)<<12)
-												| ((tr5x6_decod_segments[22]&0x1)<<6) | ((tr5x6_decod_segments[22]&0x2)<<3) | (tr5x6_decod_segments[22]&0x4) | ((tr5x6_decod_segments[22]&0x8)>>3)
-												| ((tr5x6_decod_segments[23]&0x1)<<7) | ((tr5x6_decod_segments[23]&0x2)<<4) | ((tr5x6_decod_segments[23]&0x4)<<1) | ((tr5x6_decod_segments[23]&0x8)>>2);
-	for(int i=0;i<16;i++){
-		if((tr5x6_decod_step_dots &(1<<i)) != (tr5x6_decod_step_dots_old  &(1<<i))){
-			tr5x6_decod_step_dots_flags |= (1<<i);
-		}
-	}
+	tr5x6_decod_step_dots= tr5x6_decod_com_map[MAP_STEP_HI_A  ][tr5x6_decod_segments[19]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_HI_B  ][tr5x6_decod_segments[20]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_LO_A  ][tr5x6_decod_segments[22]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_LO_B  ][tr5x6_decod_segments[23]&0xf];
+	tr5x6_decod_step_dots_flags |= tr5x6_decod_step_dots ^ tr5x6_decod_step_dots_old;
 	tr5x6_decod_step_dots_old = tr5x6_decod_step_dots;
 
 	// Last step
-	tr5x6_decod_last_step= ((tr5x6_decod_segments[17]&0x1)<<8) | ((tr5x6_decod_segments[17]&0x2)<<9) | ((tr5x6_decod_segments[17]&0x4)<<10) | ((tr5x6_decod_segments[17]&0x8)<<11)
-				 	 							| ((tr5x6_decod_segments[18]&0x1)<<9) | ((tr5x6_decod_segments[18]&0x2)<<10) | ((tr5x6_decod_segments[18]&0x4)<<11) | ((tr5x6_decod_segments[18]&0x8)<<12)
-												| ((tr5x6_decod_segments[24]&0x1)<<6) | ((tr5x6_decod_segments[24]&0x2)<<3) | (tr5x6_decod_segments[24]&0x4) | ((tr5x6_decod_segments[24]&0x8)>>3)
-												| ((tr5x6_decod_segments[25]&0x1)<<7) | ((tr5x6_decod_segments[25]&0x2)<<4) | ((tr5x6_decod_segments[25]&0x4)<<1) | ((tr5x6_decod_segments[25]&0x8)>>2);
-	for(int i=0;i<16;i++){
-		if((tr5x6_decod_last_step &(1<<i)) != (tr5x6_decod_last_step_old  &(1<<i))){
-			tr5x6_decod_last_step_flags |= (1<<i);
-		}
-	}
+	tr5x6_decod_last_step= tr5x6_decod_com_map[MAP_STEP_HI_A  ][tr5x6_decod_segments[17]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_HI_B  ][tr5x6_decod_segments[18]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_LO_A  ][tr5x6_decod_segments[24]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_LO_B  ][tr5x6_decod_segments[25]&0xf];
+	tr5x6_decod_last_step_flags |= tr5x6_decod_last_step ^ tr5x6_decod_last_step_old;
 	tr5x6_decod_last_step_old = tr5x6_decod_last_step;
 	// Scale
 	tr5x6_decod_scale=tr5x6_decod_segments[21] & 0xf;
@@ -499,11 +526,7 @@ static void segments_func_505(void)
 	tr5x6_decod_labels.chain = tr5x6_decod_segments[8]&0x1;
 	tr5x6_decod_labels.level = tr5x6_decod_segments[9]&0x1;
 	tr5x6_decod_labels.block = tr5x6_decod_segments[11]&0x1;
-	for(int i=0;i<16;i++){
-		if((tr5x6_decod_labels.ALL &(1<<i)) != (tr5x6_decod_labels_old  &(1<<i))){
-			tr5x6_decod_labels_flags.ALL |= (1<<i);
-		}
-	}
+	tr5x6_decod_labels_flags.ALL |= tr5x6_decod_labels.ALL ^ tr5x6_decod_labels_old;
 	tr5x6_decod_labels_old = tr5x6_decod_labels.ALL;
 	segment=0;
 }
@@ -528,39 +551,28 @@ static void segments_func_626(void)
 		}
 	}
 	// Instruments select
-	tr5x6_decod_inst_sel= (((tr5x6_decod_segments[18]&0xe)<<12) | ((tr5x6_decod_segments[19]&0xf)<<4)
-			| ((tr5x6_decod_segments[29]&0x1)<<3) | ((tr5x6_decod_segments[29]&0x2)<<1) | ((tr5x6_decod_segments[29]&0x4)>>1) | ((tr5x6_decod_segments[29]&0x8)>>3)
-			| ((tr5x6_decod_segments[30]&0x1)<<11) | ((tr5x6_decod_segments[30]&0x2)<<9) | ((tr5x6_decod_segments[30]&0x4)<<7) | ((tr5x6_decod_segments[30]&0x8)<<5)
-			| ((tr5x6_decod_segments[31]&0x1)<<12));
-	for(int i=0;i<16;i++){
-		if((tr5x6_decod_inst_sel &(1<<i)) != (tr5x6_decod_inst_sel_old  &(1<<i))){
-			tr5x6_decod_inst_sel_flags |= (1<<i);
-		}
-	}
+	tr5x6_decod_inst_sel= tr5x6_decod_com_map[MAP_INST_14_16 ][tr5x6_decod_segments[18]&0xf]
+	                     | tr5x6_decod_com_map[MAP_INST_5_8   ][tr5x6_decod_segments[19]&0xf]
+	                     | tr5x6_decod_com_map[MAP_INST_1_4   ][tr5x6_decod_segments[29]&0xf]
+	                     | tr5x6_decod_com_map[MAP_INST_9_12  ][tr5x6_decod_segments[30]&0xf]
+	                     | ((tr5x6_decod_segments[31]&0x1)<<12);	// instrument 13
+	tr5x6_decod_inst_sel_flags |= tr5x6_decod_inst_sel ^ tr5x6_decod_inst_sel_old;
 	tr5x6_decod_inst_sel_old = tr5x6_decod_inst_sel;
 
 	// Step Dots
-	tr5x6_decod_step_dots= ((tr5x6_decod_segments[22]&0x1)<<8) | ((tr5x6_decod_segments[22]&0x2)<<9) | ((tr5x6_decod_segments[22]&0x4)<<10) | ((tr5x6_decod_segments[22]&0x8)<<11)
-				 	 							| ((tr5x6_decod_segments[23]&0x1)<<9) | ((tr5x6_decod_segments[23]&0x2)<<10) | ((tr5x6_decod_segments[23]&0x4)<<11) | ((tr5x6_decod_segments[23]&0x8)<<12)
-												| ((tr5x6_decod_segments[25]&0x1)<<6) | ((tr5x6_decod_segments[25]&0x2)<<3) | (tr5x6_decod_segments[25]&0x4) | ((tr5x6_decod_segments[25]&0x8)>>3)
-												| ((tr5x6_decod_segments[26]&0x1)<<7) | ((tr5x6_decod_segments[26]&0x2)<<4) | ((tr5x6_decod_segments[26]&0x4)<<1) | ((tr5x6_decod_segments[26]&0x8)>>2);
-	for(int i=0;i<16;i++){
-		if((tr5x6_decod_step_dots &(1<<i)) != (tr5x6_decod_step_dots_old  &(1<<i))){
-			tr5x6_decod_step_dots_flags |= (1<<i);
-		}
-	}
+	tr5x6_decod_step_dots= tr5x6_decod_com_map[MAP_STEP_HI_A  ][tr5x6_decod_segments[22]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_HI_B  ][tr5x6_decod_segments[23]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_LO_A  ][tr5x6_decod_segments[25]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_LO_B  ][tr5x6_decod_segments[26]&0xf];
+	tr5x6_decod_step_dots_flags |= tr5x6_decod_step_dots ^ tr5x6_decod_step_dots_old;
 	tr5x6_decod_step_dots_old = tr5x6_decod_step_dots;
 
 	// Last step
-	tr5x6_decod_last_step= ((tr5x6_decod_segments[20]&0x1)<<8) | ((tr5x6_decod_segments[20]&0x2)<<9) | ((tr5x6_decod_segments[20]&0x4)<<10) | ((tr5x6_decod_segments[20]&0x8)<<11)
-				 	 							| ((tr5x6_decod_segments[21]&0x1)<<9) | ((tr5x6_decod_segments[21]&0x2)<<10) | ((tr5x6_decod_segments[21]&0x4)<<11) | ((tr5x6_decod_segments[21]&0x8)<<12)
-												| ((tr5x6_decod_segments[27]&0x1)<<6) | ((tr5x6_decod_segments[27]&0x2)<<3) | (tr5x6_decod_segments[27]&0x4) | ((tr5x6_decod_segments[27]&0x8)>>3)
-												| ((tr5x6_decod_segments[28]&0x1)<<7) | ((tr5x6_decod_segments[28]&0x2)<<4) | ((tr5x6_decod_segments[28]&0x4)<<1) | ((tr5x6_decod_segments[28]&0x8)>>2);
-	for(int i=0;i<16;i++){
-		if((tr5x6_decod_last_step &(1<<i)) != (tr5x6_decod_last_step_old  &(1<<i))){
-			tr5x6_decod_last_step_flags |= (1<<i);
-		}
-	}
+	tr5x6_decod_last_step= tr5x6_decod_com_map[MAP_STEP_HI_A  ][tr5x6_decod_segments[20]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_HI_B  ][tr5x6_decod_segments[21]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_LO_A  ][tr5x6_decod_segments[27]&0xf]
+	                     | tr5x6_decod_com_map[MAP_STEP_LO_B  ][tr5x6_decod_segments[28]&0xf];
+	tr5x6_decod_last_step_flags |= tr5x6_decod_last_step ^ tr5x6_decod_last_step_old;
 	tr5x6_decod_last_step_old = tr5x6_decod_last_step;
 
 	// Scale
@@ -594,18 +606,12 @@ static void segments_func_626(void)
 	tr5x6_decod_labels.accent = (tr5x6_decod_segments[31]&0x4)?1:0;
 	tr5x6_decod_labels.chain = tr5x6_decod_segments[11]&0x1;
 	tr5x6_decod_labels.block = tr5x6_decod_segments[14]&0x1;
-	for(int i=0;i<16;i++){
-		if((tr5x6_decod_labels.ALL &(1<<i)) != (tr5x6_decod_labels_old  &(1<<i))){
-			tr5x6_decod_labels_flags.ALL |= (1<<i);
-		}
-	}
+	tr5x6_decod_labels_flags.ALL |= tr5x6_decod_labels.ALL ^ tr5x6_decod_labels_old;
 	tr5x6_decod_labels_old = tr5x6_decod_labels.ALL;
 
 
-	for(int i=0; i<32;i++){
-		if(tr5x6_decod_segments[i]!=tr5x6_decod_segments_shadow[i])segment_test_flag=1;
-		tr5x6_decod_segments_shadow[i]=tr5x6_decod_segments[i];
-	}
+	if(memcmp(tr5x6_decod_segments, tr5x6_decod_segments_shadow, 32))segment_test_flag=1;
+	memcpy(tr5x6_decod_segments_shadow, tr5x6_decod_segments, 32);
 	//ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
 	//decoding &=0xfe;
 	decoding=0;
