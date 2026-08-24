@@ -68,6 +68,9 @@
 // here we force the slots number to 32 slots instead of 30
 #define TR5X6_FLASH_BANK_INFO_OFFSET 	((TR5X6_FLASH_BANK_DIVIDER*32)*TR5X6_FLASH_INFO_SIZE)
 #endif
+
+// the magic the next format will write - see its definition in tr5x6_rom.c
+extern u8 tr5x6_format_magic;
 /* Structures ----------------------------------------------------------------*/
 typedef enum
 {

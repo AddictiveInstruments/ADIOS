@@ -471,6 +471,12 @@ s32 TR5X6_ROM_Data_Get(void){
 }
 
 /* ********* */
+// The magic the NEXT format will write. Defaults to this build's unit and
+// normally never moves - only the first-boot unit choice overrides it. The
+// day the unit comes from flash instead of the build, this byte is what
+// carries the user's answer (unit = magic % 10, version = magic).
+u8 tr5x6_format_magic = TR5X6_MAGIC_NUMBER;
+
 s32 TR5X6_MEM_Format(void){
 
 	tr5x6_rom_format_stat=(s32)TR5X6_ROM_OK;
@@ -574,7 +580,7 @@ s32 TR5X6_MEM_Format(void){
 		// there - the device ID has to be carried over explicitly, or a
 		// format would silently reset the instrument's identity.
 		if(p==3){
-			datas[TR5X6_FLASH_SYS_MAGIC_OFS]     = TR5X6_MAGIC_NUMBER;
+			datas[TR5X6_FLASH_SYS_MAGIC_OFS]     = tr5x6_format_magic;
 			datas[TR5X6_FLASH_SYS_BANK_OFS]      = 0; // stored bank num
 			datas[TR5X6_FLASH_SYS_ID_CONFIRM_OFS]= 0x42;
 			datas[TR5X6_FLASH_SYS_ID_OFS]        = ADIOS_MIDI_DeviceIDGet();

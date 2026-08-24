@@ -54,6 +54,7 @@ static void Legend_Draw(int x, int y, const char *func, const char *butt);
 static void SettingsMenu_Draw(void);
 static void SettingsMenu_Legend(void);
 static void Formatting_Page(void);
+static void UnitSelect_Page(u8 unit_sel);
 static void About_Page(void);
 static void TASK_SettingsMenu(void *pvParameters);
 static void TASK_TFT_Periodic(void *pvParameters);
@@ -162,6 +163,33 @@ void APP_Init(void)
 		last_id = curr_id;
 		if(rom_empty){
 			APP_LCD_Lite(1);	// swwitch on
+			// First boot: the unit type is unknown, ask before anything is
+			// written. INC/DEC (UP/DOWN) toggle, INST confirms. The default
+			// under the cursor is this build's own unit. Buttons already live
+			// here by interrupt - the 0x0a combo test above relies on it too.
+			u8 unit_sel = (TR5X6_UNIT_SELECT==505) ? 5 : 6;
+			UnitSelect_Page(unit_sel);
+			u8 chosen = 0;
+			while(!chosen){
+				for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);	// the tasks' 40 ms pace
+				// the flag edge-detector normally runs from APP_Tick, driven by
+				// the scheduler - which has not started yet. Pump it by hand.
+				TR5X6_DECOD_BUTT_Handler();
+				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+					unit_sel = (unit_sel==5) ? 6 : 5;
+					UnitSelect_Page(unit_sel);
+					tr5x6_decod_buttons_flags.inc = 0;
+				}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+					unit_sel = (unit_sel==5) ? 6 : 5;
+					UnitSelect_Page(unit_sel);
+					tr5x6_decod_buttons_flags.dec = 0;
+				}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+					chosen = 1;
+					tr5x6_decod_buttons_flags.inst = 0;
+				}
+			}
+			tr5x6_format_magic = 70 + unit_sel;		// 75 = 505, 76 = 626
+			APP_LCD_Clear();
 			// periodic screen task
 			menu_pos = 1;
 			menu_edit = 1;
@@ -1669,6 +1697,30 @@ void SettingsMenu_Legend(void){
 		}
 	}
 
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// first-boot unit choice. No magic in flash means the machine has never
+// said what it is - a production jumper was planned, the built boards do
+// not have it, so the answer comes from the user, once, before the very
+// first format. Mandatory: the page has no exit.
+/////////////////////////////////////////////////////////////////////////////
+static void UnitSelect_Page(u8 unit_sel)
+{
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_PrintString(240, y_offset+40, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Please,  select  your  unit  type:");
+
+	APP_LCD_FColourSet((unit_sel==5) ? APP_LCD_WHITE : APP_LCD_LIGHTGREY);
+	APP_LCD_PrintString(180, y_offset+90, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "505");
+	APP_LCD_FColourSet((unit_sel==6) ? APP_LCD_WHITE : APP_LCD_LIGHTGREY);
+	APP_LCD_PrintString(300, y_offset+90, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "626");
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+
+	Legend_Draw(x_offset+420, y_offset+52, "SEL", "UP");
+	Legend_Draw(x_offset+420, y_offset+72, "SEL", "DOWN");
+	Legend_Draw(x_offset+420, y_offset+32, "ENTER", "INST");
 }
 
 void Formatting_Page(void){
