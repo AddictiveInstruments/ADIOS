@@ -54,7 +54,12 @@ static void Legend_Draw(int x, int y, const char *func, const char *butt);
 static void SettingsMenu_Draw(void);
 static void SettingsMenu_Legend(void);
 static void Formatting_Page(void);
-static void UnitSelect_Page(u8 unit_sel);
+static void UnitSelect_Page(u8 unit_sel, u8 allow_exit);
+static u8   UnitSelect_Ask(u8 unit_sel, u8 allow_exit);
+// UnitSelect_Ask returns this when the user walks out instead of choosing.
+#define UNIT_SEL_EXIT	0xff
+static void UnitChange_Page(u8 new_unit);
+static u8   UnitChange_Confirm(u8 new_unit);
 static void About_Page(void);
 static void Version_Print(u16 x, u16 y);
 static void TASK_SettingsMenu(void *pvParameters);
@@ -63,9 +68,7 @@ static u8   TFT_BankInhibit(void);
 static void TFT_Digits(void);
 static void TFT_Beat(void);
 static void TFT_BankSelect(void);
-#if TR5X6_UNIT_SELECT==626
 static void TFT_InstGridDraw(void);
-#endif
 static void TFT_XferInstFlagsLatch(void);
 static void TFT_XferRefresh(void);
 static u8   TFT_XferIsIdle(void);
@@ -92,13 +95,12 @@ static u8 bank_change_inhibit = 0;
 static u8 first_start = 1;
 static u8 bank_changed = 0;
 
-#if TR5X6_UNIT_SELECT==626
+// Grid state - only the 626 has a grid, but one firmware serves both.
 static u8 inst_change_exit=0;
 static u8 inst_grid_name=0;
 static u8 inst_grid_shown=0;
 static u8 inst_grid_sel=0;
 static u8 inst_grid_blink=0;
-#endif
 
 static s8 xfer_delay=0;
 static u16 xfer_flag=0;
@@ -128,88 +130,159 @@ static u8 formatting=0;
 
 
 /////////////////////////////////////////////////////////////////////////////
+// warns that the unit type is about to change, and asks again
+//
+// Only ever seen from the settings menu, and only when the choice differs
+// from what this board currently says it is. Changing it re-lays the whole
+// flash in the other machine's geometry, so it deserves its own confirmation
+// - same page shape as the format one, same buttons.
+/////////////////////////////////////////////////////////////////////////////
+static void UnitChange_Page(u8 new_unit)
+{
+	APP_LCD_Clear();
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Unit   Type");
+	APP_LCD_FColourSet(APP_LCD_RED);
+	APP_LCD_PrintString(240, y_offset+40, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "You're  about  to  change");
+	APP_LCD_PrintFormattedString(240, y_offset+60, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "the  Unit  Type  to  %d", (new_unit==5) ? 505 : 626);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_PrintString(240, y_offset+120, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Are you sure?");
+	Legend_Draw(x_offset+160, y_offset+150, "NO", "LAST");
+	Legend_Draw(x_offset+290, y_offset+150, "YES", "INST");
+}
+
+static u8 UnitChange_Confirm(u8 new_unit)
+{
+	UnitChange_Page(new_unit);
+	for(;;){
+		for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);
+		TR5X6_DECOD_BUTT_Handler();
+		if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+			tr5x6_decod_buttons_flags.inst = 0;
+			return 1;
+		}
+		if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+			tr5x6_decod_buttons_flags.last = 0;
+			return 0;		// back to the choice page
+		}
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// asks which machine this board is bolted into, and does not return until
+// answered
+//
+// Called from two places: the very first boot of an unformatted board, and a
+// re-format from the settings menu - one firmware serves both machines, so a
+// board can be moved and has to be able to say so.
+//
+// Runs OUTSIDE the scheduler in the first case, so the button edge detector
+// (normally pumped by APP_Tick) is called by hand here.
+/////////////////////////////////////////////////////////////////////////////
+static u8 UnitSelect_Ask(u8 unit_sel, u8 allow_exit)
+{
+	// Clears here, not at the call sites: this page can come up over the
+	// format confirmation of the settings menu as well as over a blank
+	// first boot, and neither caller should have to remember.
+	APP_LCD_Clear();
+	UnitSelect_Page(unit_sel, allow_exit);
+	u8 chosen = 0;
+	while(!chosen){
+		for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);	// the tasks' 40 ms pace
+		TR5X6_DECOD_BUTT_Handler();
+		if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+			unit_sel = (unit_sel==5) ? 6 : 5;
+			UnitSelect_Page(unit_sel, allow_exit);
+			tr5x6_decod_buttons_flags.inc = 0;
+		}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+			unit_sel = (unit_sel==5) ? 6 : 5;
+			UnitSelect_Page(unit_sel, allow_exit);
+			tr5x6_decod_buttons_flags.dec = 0;
+		}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+			chosen = 1;
+			tr5x6_decod_buttons_flags.inst = 0;
+		}else if(allow_exit && tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+			tr5x6_decod_buttons_flags.last = 0;
+			return UNIT_SEL_EXIT;	// back to the settings menu, nothing written
+		}
+	}
+	return unit_sel;
+}
+
+/////////////////////////////////////////////////////////////////////////////
 // This hook is called after startup to initialize the application
 /////////////////////////////////////////////////////////////////////////////
 void APP_Init(void)
 {
 	// ROM R/W init
-	TR5X6_ROM_Init();
-	TR5X6_ROM_HOST();
+	// ---- 1. machine-independent -----------------------------------------
+	// Buttons first: same pins and same edge on both hosts, and the unit
+	// choice below cannot be answered without them.
+	TR5X6_DECOD_BUTT_Init();
 	// initialize all LEDs
 	ADIOS_SOL_Init();
-
-	// initialize LCD Bus Decoder.
-	TR5X6_DECOD_Init();
-
-	// TFT init - the driver is started HERE, after the bus decoder it talks
-	// through and before anything is drawn. Nothing starts a display behind
-	// your back any more: this call is the application's, and its place in
-	// this sequence is a decision, not a default.
+	// TFT init - before anything is drawn. It is self-contained: its own
+	// GPIO clock, its own SPI, its own pins. It does NOT go through the bus
+	// decoder, which only listens to the host's display lines as inputs.
 	APP_LCD_Init(0);
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 	APP_LCD_FColourSet(APP_LCD_WHITE);
 	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
 	APP_LCD_Clear();	// clear the TFT
-	// check magic number and boot page request
-	u8 rom_empty = 0;
-	// NOT the very last byte of flash any more: the last two belong to the
-	// persistent device-ID record (see tr5x6_rom.h). A machine formatted by an
-	// older firmware still carries its magic at the old address, looks empty
-	// here, and would be formatted - hence the one-shot migration app, to be
-	// run once after the bootloader update and before this firmware.
-	if((*((volatile u8*)(TR5X6_FLASH_MAGIC_ADDR)))!=tr5x6_unit->magic)rom_empty = 1;
-	if( (tr5x6_decod_buttons.ALL==0x0a) || rom_empty ){
+
+	// ---- 2. WHICH machine this board is bolted into -----------------------
+	// The magic byte carries it: low nibble 5 = 505, 6 = 626, high nibble is
+	// the format version. NOT the very last byte of flash - the last two
+	// belong to the persistent device-ID record (see tr5x6_rom.h). A machine
+	// formatted by an older firmware carries its magic at the old address,
+	// reads as empty here, and would be formatted - hence the one-shot
+	// migration app, to be run once after the bootloader update.
+	u8 magic     = *((volatile u8*)(TR5X6_FLASH_MAGIC_ADDR));
+	u8 unit_sel  = magic & 0x0f;
+	u8 rom_empty = (unit_sel != 5) && (unit_sel != 6);
+
+	if( rom_empty ){
+		// This board has never said what it is. A production jumper was
+		// planned; the built boards do not have it, so the answer comes from
+		// the user - once, and it cannot be skipped.
+		APP_LCD_Lite(1);	// swwitch on
+		unit_sel = UnitSelect_Ask(5, 0);	// no way out: the cursor has to
+						// start somewhere and the answer is
+						// needed before anything is written
+		APP_LCD_Clear();
+	}
+
+	// ---- THE fusion point, reached exactly once ---------------------------
+	// Everything below reads tr5x6_unit. Nothing above may.
+	tr5x6_unit = (unit_sel==6) ? &tr5x6_unit_626 : &tr5x6_unit_505;
+
+	// ---- 3. machine-dependent ---------------------------------------------
+	TR5X6_ROM_Init();		// bank shift, A17 mux, slot table
+	TR5X6_ROM_HOST();
+	TR5X6_DECOD_LCD_Init();		// the right decoder, the right CS edge,
+					// and only then the interrupt
+
+	// ---- and now the three roads ------------------------------------------
+	if( rom_empty ){
+		menu_pos = 1;
+		menu_edit = 1;
+		formatting = 1;
+		APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Format   BANKs");
+		Formatting_Page();
+		for(u16 d=0; d<2000; d++)ADIOS_DELAY_Wait_uS(1000);		// wait 2s
+		ADIOS_SYS_Reset();
+
+	}else if( tr5x6_decod_buttons.ALL==0x0a ){
 		tr5x6_decod_buttons_flags.ALL=0;
 		curr_id = ADIOS_MIDI_DeviceIDGet();
 		last_id = curr_id;
-		if(rom_empty){
-			APP_LCD_Lite(1);	// swwitch on
-			// First boot: the unit type is unknown, ask before anything is
-			// written. INC/DEC (UP/DOWN) toggle, INST confirms. The default
-			// under the cursor is this build's own unit. Buttons already live
-			// here by interrupt - the 0x0a combo test above relies on it too.
-			u8 unit_sel = tr5x6_unit->magic & 0x0f;	// this build's unit
-			UnitSelect_Page(unit_sel);
-			u8 chosen = 0;
-			while(!chosen){
-				for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);	// the tasks' 40 ms pace
-				// the flag edge-detector normally runs from APP_Tick, driven by
-				// the scheduler - which has not started yet. Pump it by hand.
-				TR5X6_DECOD_BUTT_Handler();
-				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
-					unit_sel = (unit_sel==5) ? 6 : 5;
-					UnitSelect_Page(unit_sel);
-					tr5x6_decod_buttons_flags.inc = 0;
-				}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
-					unit_sel = (unit_sel==5) ? 6 : 5;
-					UnitSelect_Page(unit_sel);
-					tr5x6_decod_buttons_flags.dec = 0;
-				}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
-					chosen = 1;
-					tr5x6_decod_buttons_flags.inst = 0;
-				}
-			}
-			// the choice IS the unit: aim the descriptor and everything
-			// follows - the format then lays flash out in the chosen
-			// machine's geometry, not this build's
-			tr5x6_unit = (unit_sel==5) ? &tr5x6_unit_505 : &tr5x6_unit_626;
-			APP_LCD_Clear();
-			// periodic screen task
-			menu_pos = 1;
-			menu_edit = 1;
-			formatting = 1;
-			APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Format   BANKs");
-			Formatting_Page();
-			for(u16 d=0; d<2000; d++)ADIOS_DELAY_Wait_uS(1000);		// wait 2s
-			ADIOS_SYS_Reset();
-			//TR5X6_MEM_Format();
-		}else{
-			SettingsMenu_Draw();
-			SettingsMenu_Legend();
-			APP_LCD_Lite(1);
-			// periodic screen task
-			xTaskCreate(TASK_SettingsMenu, "Settings_Menu", (TFT_TASK_STACK_SIZE)/4, NULL, PRIORITY_TASK_TFT_HANDLER, &xSettings);
-		}
+		SettingsMenu_Draw();
+		SettingsMenu_Legend();
+		APP_LCD_Lite(1);
+		// periodic screen task
+		xTaskCreate(TASK_SettingsMenu, "Settings_Menu", (TFT_TASK_STACK_SIZE)/4, NULL, PRIORITY_TASK_TFT_HANDLER, &xSettings);
 
 	}else {
 		adios_lcd_bitmap_t logo_bmp = APP_LCD_BitmapInit((u8*)tr5x6_logo, 400, 56, 400, Is1BIT);
@@ -448,12 +521,12 @@ void APP_TFT_Background(void){
 
 	APP_LCD_Rectangle(x_offset, y_offset+93, w_max, 71, 2, APP_LCD_DARKGREY, 0, 0);
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
-#if TR5X6_UNIT_SELECT==505
-	APP_LCD_PrintString(x_offset+48, y_offset+103, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "INSTRUMENT");
-	APP_LCD_PrintString(x_offset+48, y_offset+118, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "/ ACCENT");
-#else // TR5X6_UNIT_SELECT==626
-	APP_LCD_PrintString(x_offset+48, y_offset+110, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "INSTRUMENT");
-#endif
+	if(IS_505){
+		APP_LCD_PrintString(x_offset+48, y_offset+103, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "INSTRUMENT");
+		APP_LCD_PrintString(x_offset+48, y_offset+118, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "/ ACCENT");
+	}else{
+		APP_LCD_PrintString(x_offset+48, y_offset+110, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "INSTRUMENT");
+	}
 	APP_LCD_PrintString(x_offset+48, y_offset+144, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "SOUND  BANK");
 	APP_LCD_DrawFastHLine(x_offset+2, y_offset+136, w_max-4, APP_LCD_DARKGREY);
 	APP_LCD_DrawFastVLine(x_offset+94, y_offset+95,  69, APP_LCD_DARKGREY);
@@ -462,35 +535,35 @@ void APP_TFT_Background(void){
 
 	APP_LCD_Rectangle(x_offset, y_offset+166, w_max, 114, 2, APP_LCD_DARKGREY, 0, 0);
 	APP_LCD_DrawFastHLine(x_offset+2, y_offset+188, w_max-4, APP_LCD_DARKGREY);
-#if TR5X6_UNIT_SELECT==505
-	APP_LCD_PrintString(x_offset+30, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
-	APP_LCD_PrintString(x_offset+393, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MODE");
-	APP_LCD_DrawFastVLine(x_offset+58, y_offset+168, 110, APP_LCD_DARKGREY);
-	APP_LCD_DrawFastVLine(x_offset+186, y_offset+168, 110, APP_LCD_DARKGREY);
-	APP_LCD_DrawFastVLine(x_offset+324, y_offset+168, 110, APP_LCD_DARKGREY);
-	APP_LCD_PrintString(x_offset+335, y_offset+249, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "MIDI ACT.");
-	APP_LCD_DrawFastHLine(x_offset+325, y_offset+243, 139, APP_LCD_DARKGREY);
-	//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
-	APP_LCD_PrintString(x_offset+350, y_offset+262, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "RX");
-	APP_LCD_PrintString(x_offset+438, y_offset+249, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "505 TX");
-	APP_LCD_PrintString(x_offset+438, y_offset+262, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "5x6 TX");
-#else // TR5X6_UNIT_SELECT==626
-	APP_LCD_PrintString(x_offset+27, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "BANK");
-	APP_LCD_PrintString(x_offset+79, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
-	APP_LCD_PrintString(x_offset+236, y_offset+173, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "GROUP");
-	APP_LCD_PrintString(x_offset+340, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "PATTERN");
-	APP_LCD_PrintString(x_offset+404, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MODE");
-	APP_LCD_DrawFastVLine(x_offset+53, y_offset+168, 110, APP_LCD_DARKGREY);
-	APP_LCD_DrawFastVLine(x_offset+106, y_offset+168, 110, APP_LCD_DARKGREY);
-	APP_LCD_DrawFastVLine(x_offset+230, y_offset+168, 110, APP_LCD_DARKGREY);
-	APP_LCD_DrawFastVLine(x_offset+344, y_offset+168, 110, APP_LCD_DARKGREY);
-	APP_LCD_PrintString(x_offset+350, y_offset+249, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "MIDI ACT.");
-	APP_LCD_DrawFastHLine(x_offset+345, y_offset+232, 119, APP_LCD_DARKGREY);
-	//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
-	APP_LCD_PrintString(x_offset+365, y_offset+262, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "RX");
-	APP_LCD_PrintString(x_offset+443, y_offset+249, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "626 TX");
-	APP_LCD_PrintString(x_offset+443, y_offset+262, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "5x6 TX");
-#endif
+	if(IS_505){
+		APP_LCD_PrintString(x_offset+30, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
+		APP_LCD_PrintString(x_offset+393, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MODE");
+		APP_LCD_DrawFastVLine(x_offset+58, y_offset+168, 110, APP_LCD_DARKGREY);
+		APP_LCD_DrawFastVLine(x_offset+186, y_offset+168, 110, APP_LCD_DARKGREY);
+		APP_LCD_DrawFastVLine(x_offset+324, y_offset+168, 110, APP_LCD_DARKGREY);
+		APP_LCD_PrintString(x_offset+335, y_offset+249, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "MIDI ACT.");
+		APP_LCD_DrawFastHLine(x_offset+325, y_offset+243, 139, APP_LCD_DARKGREY);
+		//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+		APP_LCD_PrintString(x_offset+350, y_offset+262, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "RX");
+		APP_LCD_PrintString(x_offset+438, y_offset+249, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "505 TX");
+		APP_LCD_PrintString(x_offset+438, y_offset+262, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "5x6 TX");
+	}else{
+		APP_LCD_PrintString(x_offset+27, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "BANK");
+		APP_LCD_PrintString(x_offset+79, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TRACK");
+		APP_LCD_PrintString(x_offset+236, y_offset+173, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "GROUP");
+		APP_LCD_PrintString(x_offset+340, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "PATTERN");
+		APP_LCD_PrintString(x_offset+404, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MODE");
+		APP_LCD_DrawFastVLine(x_offset+53, y_offset+168, 110, APP_LCD_DARKGREY);
+		APP_LCD_DrawFastVLine(x_offset+106, y_offset+168, 110, APP_LCD_DARKGREY);
+		APP_LCD_DrawFastVLine(x_offset+230, y_offset+168, 110, APP_LCD_DARKGREY);
+		APP_LCD_DrawFastVLine(x_offset+344, y_offset+168, 110, APP_LCD_DARKGREY);
+		APP_LCD_PrintString(x_offset+350, y_offset+249, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "MIDI ACT.");
+		APP_LCD_DrawFastHLine(x_offset+345, y_offset+232, 119, APP_LCD_DARKGREY);
+		//APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+		APP_LCD_PrintString(x_offset+365, y_offset+262, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "RX");
+		APP_LCD_PrintString(x_offset+443, y_offset+249, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "626 TX");
+		APP_LCD_PrintString(x_offset+443, y_offset+262, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "5x6 TX");
+	}
 
 
 	// last step
@@ -666,29 +739,29 @@ static void TFT_XferSlotProgress(u8 _progress)
 static void TFT_Slotinfo(void)
 {
 	u8 draw;
-#if TR5X6_UNIT_SELECT==505
-	if( ((tr5x6_decod_inst_acc_flags&0x1) & (tr5x6_decod_inst_acc&0x1))
-	 || ((tr5x6_decod_inst_acc&0x1) && xfer_flag) ){
-		xfer_flag = 0;
-		if(!bank_changed){
-			// ACCENT owns the zone: wipe the whole slot info window in two passes.
-			// The top pass goes WITH its separator bar and the horizontal line;
-			// the bottom pass, one row higher than the bank window, goes WITHOUT
-			// the bar column - the lower bar piece right of the beat is constant,
-			// never overwritten, and keeps its head pixel at the line level.
-			APP_LCD_Rectangle(x_offset+w_max-3-xfer_bmp_width, y_offset+95, xfer_bmp_width+1, xfer_bmp_slot_height, 0, 0, 1, 0);
-			APP_LCD_Rectangle(x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height, xfer_bmp_width, xfer_bmp_bank_height, 0, 0, 1, 0);
+	if(IS_505){
+		if( ((tr5x6_decod_inst_acc_flags&0x1) & (tr5x6_decod_inst_acc&0x1))
+		 || ((tr5x6_decod_inst_acc&0x1) && xfer_flag) ){
+			xfer_flag = 0;
+			if(!bank_changed){
+				// ACCENT owns the zone: wipe the whole slot info window in two passes.
+				// The top pass goes WITH its separator bar and the horizontal line;
+				// the bottom pass, one row higher than the bank window, goes WITHOUT
+				// the bar column - the lower bar piece right of the beat is constant,
+				// never overwritten, and keeps its head pixel at the line level.
+				APP_LCD_Rectangle(x_offset+w_max-3-xfer_bmp_width, y_offset+95, xfer_bmp_width+1, xfer_bmp_slot_height, 0, 0, 1, 0);
+				APP_LCD_Rectangle(x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height, xfer_bmp_width, xfer_bmp_bank_height, 0, 0, 1, 0);
+			}
+			return;
 		}
-		return;
+		draw = ((((tr5x6_decod_inst_acc_flags&0x2) & (tr5x6_decod_inst_acc&0x2)) ||
+		         (tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel)) && (!bank_changed))
+		    || ((tr5x6_decod_inst_acc&0x2) && xfer_flag);
+	}else{
+		draw = (((tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel) ||
+		         (tr5x6_decod_inst_blk_flags & tr5x6_decod_inst_blk)) && (!bank_changed))
+		    || xfer_flag;
 	}
-	draw = ((((tr5x6_decod_inst_acc_flags&0x2) & (tr5x6_decod_inst_acc&0x2)) ||
-	         (tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel)) && (!bank_changed))
-	    || ((tr5x6_decod_inst_acc&0x2) && xfer_flag);
-#else
-	draw = (((tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel) ||
-	         (tr5x6_decod_inst_blk_flags & tr5x6_decod_inst_blk)) && (!bank_changed))
-	    || xfer_flag;
-#endif
 	if(!draw) return;
 	xfer_flag = 0;
 
@@ -703,12 +776,12 @@ static void TFT_Slotinfo(void)
 	for(int i=0; i<16; i++){
 		if(tr5x6_decod_inst_sel &(1<<i)){
 			selected = i;
-#if TR5X6_UNIT_SELECT==626
-			if(tr5x6_decod_inst_blk &(1<<i))selected += 16;
-			if(selected > 29) selected = 29;	// 30 instruments: 1-16 then
-							// 17-30, the last two grid
-							// cells have no second layer
-#endif
+	if(IS_626){
+				if(tr5x6_decod_inst_blk &(1<<i))selected += 16;
+				if(selected > 29) selected = 29;	// 30 instruments: 1-16 then
+								// 17-30, the last two grid
+								// cells have no second layer
+	}
 			break;
 		}
 	}
@@ -766,7 +839,6 @@ static void TFT_XferError(u8 _error)
 	APP_LCD_DrawFastVLine(x_offset+w_max-3-xfer_bmp_width, y_offset+95, 40, APP_LCD_DARKGREY);
 }
 
-#if TR5X6_UNIT_SELECT==626
 /////////////////////////////////////////////////////////////////////////////
 // prepares and prints an Instrument Grid Cell
 /////////////////////////////////////////////////////////////////////////////
@@ -859,7 +931,6 @@ static void TFT_InstGridDraw(void)
 	if( !inst_grid_name && (inst_grid_blink & 3) == 0 )
 		TFT_InstGridCellDraw(inst_grid_sel, (inst_grid_blink & 4) ? 2 : 1);
 }
-#endif
 
 #if 0
 static void TFT_BankChange(u8 bank_num)
@@ -908,11 +979,8 @@ static void TFT_BankChange(u8 bank_num)
 static u8 TFT_BankInhibit(void)
 {
 	u8 on_bank_page;
-#if TR5X6_UNIT_SELECT==505
-	on_bank_page = tr5x6_decod_labels.grp_pat;
-#else
-	on_bank_page = tr5x6_decod_labels.measure || tr5x6_decod_labels.tempo;
-#endif
+	on_bank_page = IS_505 ? tr5x6_decod_labels.grp_pat
+	                      : (tr5x6_decod_labels.measure || tr5x6_decod_labels.tempo);
 
 	return on_bank_page ? 0 : 1;
 }
@@ -957,16 +1025,16 @@ static void TFT_BankSelect(void)
 	// its trigger already requiring INST.
 	u8 trigger;
 	u8 allowed;
-#if TR5X6_UNIT_SELECT==505
-	trigger = (tr5x6_decod_buttons_flags.inc & tr5x6_decod_buttons.inc)
-	       || (tr5x6_decod_buttons_flags.dec & tr5x6_decod_buttons.dec);
-	allowed = !bank_change_inhibit;
-#else
-	trigger = tr5x6_decod_buttons.inst
-	       && ( (tr5x6_decod_buttons_flags.inc & tr5x6_decod_buttons.inc)
-	         || (tr5x6_decod_buttons_flags.dec & tr5x6_decod_buttons.dec) );
-	allowed = 1;
-#endif
+	if(IS_505){
+		trigger = (tr5x6_decod_buttons_flags.inc & tr5x6_decod_buttons.inc)
+		       || (tr5x6_decod_buttons_flags.dec & tr5x6_decod_buttons.dec);
+		allowed = !bank_change_inhibit;
+	}else{
+		trigger = tr5x6_decod_buttons.inst
+		       && ( (tr5x6_decod_buttons_flags.inc & tr5x6_decod_buttons.inc)
+		         || (tr5x6_decod_buttons_flags.dec & tr5x6_decod_buttons.dec) );
+		allowed = 1;
+	}
 
 	if( !(trigger || first_start || tr5x6_sysex_bank_info_refresh) )
 		return;
@@ -995,12 +1063,9 @@ static void TFT_BankSelect(void)
 	// The trailing state, kept inside the trigger on BOTH hosts. On the 626 it
 	// used to sit outside, so it ran on every pass of the display task even
 	// when no button had been pressed.
-#if TR5X6_UNIT_SELECT==505
-	tr5x6_decod_buttons_flags.ALL = 0;
-#else
-	tr5x6_decod_buttons_flags.inc = 0;
-	tr5x6_decod_buttons_flags.dec = 0;
-#endif
+	if(IS_505) tr5x6_decod_buttons_flags.ALL = 0;
+	else     { tr5x6_decod_buttons_flags.inc = 0;
+	           tr5x6_decod_buttons_flags.dec = 0; }
 	tr5x6_sysex_bank_info_refresh = 0;
 	if(first_start)bank_changed=0;
 	first_start=0;
@@ -1011,11 +1076,8 @@ static void TFT_BankSelect(void)
 // the 626 the instrument-select bits.
 static void TFT_XferInstFlagsLatch(void)
 {
-#if TR5X6_UNIT_SELECT==505
-	tr5x6_decod_inst_acc_flags = tr5x6_decod_inst_acc;
-#else
-	tr5x6_decod_inst_sel_flags = tr5x6_decod_inst_sel;
-#endif
+	if(IS_505) tr5x6_decod_inst_acc_flags = tr5x6_decod_inst_acc;
+	else       tr5x6_decod_inst_sel_flags = tr5x6_decod_inst_sel;
 }
 
 
@@ -1106,31 +1168,31 @@ static u8 TFT_XferIsIdle(void)
 static void TFT_InstSelect(void)
 {
 	u8 draw;
-#if TR5X6_UNIT_SELECT==505
-	if( (tr5x6_decod_inst_acc_flags&0x1) & (tr5x6_decod_inst_acc&0x1) ){
-		APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
-		APP_LCD_PrintString(x_offset+104, y_offset+111, 11*23-10, APP_LCD_STRING_ALIGN_LEFT, -32, "ACCENT");
-		return;
+	if(IS_505){
+		if( (tr5x6_decod_inst_acc_flags&0x1) & (tr5x6_decod_inst_acc&0x1) ){
+			APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+			APP_LCD_PrintString(x_offset+104, y_offset+111, 11*23-10, APP_LCD_STRING_ALIGN_LEFT, -32, "ACCENT");
+			return;
+		}
+		draw = ((tr5x6_decod_inst_acc_flags&0x2) & (tr5x6_decod_inst_acc&0x2))
+		    || (tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel)
+		    || bank_changed;
+	}else{
+		draw = (tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel)
+		    || (tr5x6_decod_inst_blk_flags & tr5x6_decod_inst_blk)
+		    || bank_changed;
 	}
-	draw = ((tr5x6_decod_inst_acc_flags&0x2) & (tr5x6_decod_inst_acc&0x2))
-	    || (tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel)
-	    || bank_changed;
-#else
-	draw = (tr5x6_decod_inst_sel_flags & tr5x6_decod_inst_sel)
-	    || (tr5x6_decod_inst_blk_flags & tr5x6_decod_inst_blk)
-	    || bank_changed;
-#endif
 	if(!draw) return;
 
 	for(int i=0; i<16; i++){
 		if(tr5x6_decod_inst_sel &(1<<i)){
 			u8 inst_num = i;
-#if TR5X6_UNIT_SELECT==626
-			// a blocked instrument lives 16 slots higher
-			if(tr5x6_decod_inst_blk &(1<<i))inst_num +=16;
-			if(inst_num > 29) inst_num = 29;
-			inst_grid_sel = i;	// remembered as the grid view s starting blink cell
-#endif
+	if(IS_626){
+				// a blocked instrument lives 16 slots higher
+				if(tr5x6_decod_inst_blk &(1<<i))inst_num +=16;
+				if(inst_num > 29) inst_num = 29;
+				inst_grid_sel = i;	// remembered as the grid view s starting blink cell
+	}
 			APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
 			tr5x6_flash_info_t slot;
 			slot.bank=TR5X6_ROM_BankGet();
@@ -1256,61 +1318,61 @@ static void TFT_Scale(void)
 static void TFT_Labels(void)
 {
 	u16 chain_x, block_x, onoff_y;
-#if TR5X6_UNIT_SELECT==505
-	chain_x=232; block_x=278; onoff_y=262;
+	if(IS_505){
+		chain_x=232; block_x=278; onoff_y=262;
 
-	if(tr5x6_decod_labels_flags.tempo || tr5x6_decod_labels_flags.measure){
-		APP_LCD_Rectangle(x_offset+93, y_offset+173, 58, 10, 0, 0, 1, 0);
-		if(tr5x6_decod_labels.tempo)
-			APP_LCD_PrintString(x_offset+122, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TEMPO");
-		if(tr5x6_decod_labels.measure)
-			APP_LCD_PrintString(x_offset+122, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MEASURE");
-	}
-	if(tr5x6_decod_labels_flags.grp_pat || tr5x6_decod_labels_flags.level){
-		APP_LCD_Rectangle(x_offset+202, y_offset+173, 107, 10, 0, 0, 1, 0);
-		if(tr5x6_decod_labels.grp_pat){
-			APP_LCD_PrintString(x_offset+202, y_offset+173, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "GROUP");
-			APP_LCD_PrintString(x_offset+309, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "PATTERN");}
-		if(tr5x6_decod_labels.level)
-			APP_LCD_PrintString(x_offset+309, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "LEVEL");
-	}
-	if(tr5x6_decod_labels_flags.sync){
-		if(tr5x6_decod_labels.sync)
-			APP_LCD_PrintString(x_offset+122, y_offset+262, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MIDI  SYNC");
-		else APP_LCD_Rectangle(x_offset+82, y_offset+262, 80, 10, 0, 0, 1, 0);
-	}
-#else
-	chain_x=262; block_x=308; onoff_y=250;
+		if(tr5x6_decod_labels_flags.tempo || tr5x6_decod_labels_flags.measure){
+			APP_LCD_Rectangle(x_offset+93, y_offset+173, 58, 10, 0, 0, 1, 0);
+			if(tr5x6_decod_labels.tempo)
+				APP_LCD_PrintString(x_offset+122, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TEMPO");
+			if(tr5x6_decod_labels.measure)
+				APP_LCD_PrintString(x_offset+122, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MEASURE");
+		}
+		if(tr5x6_decod_labels_flags.grp_pat || tr5x6_decod_labels_flags.level){
+			APP_LCD_Rectangle(x_offset+202, y_offset+173, 107, 10, 0, 0, 1, 0);
+			if(tr5x6_decod_labels.grp_pat){
+				APP_LCD_PrintString(x_offset+202, y_offset+173, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "GROUP");
+				APP_LCD_PrintString(x_offset+309, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "PATTERN");}
+			if(tr5x6_decod_labels.level)
+				APP_LCD_PrintString(x_offset+309, y_offset+173, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, "LEVEL");
+		}
+		if(tr5x6_decod_labels_flags.sync){
+			if(tr5x6_decod_labels.sync)
+				APP_LCD_PrintString(x_offset+122, y_offset+262, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MIDI  SYNC");
+			else APP_LCD_Rectangle(x_offset+82, y_offset+262, 80, 10, 0, 0, 1, 0);
+		}
+	}else{
+		chain_x=262; block_x=308; onoff_y=250;
 
-	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
-	if(tr5x6_decod_labels_flags.ALL &0x7f){
-		APP_LCD_Rectangle(x_offset+140, y_offset+173, 60, 10, 0, 0, 1, 0);
-		if(tr5x6_decod_labels.tempo)
-			APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TEMPO");
-		else if(tr5x6_decod_labels.measure)
-			APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MEASURE");
-		else if(tr5x6_decod_labels.pitch)
-			APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PITCH");
-		else if(tr5x6_decod_labels.level)
-			APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "LEVEL");
-		else if(tr5x6_decod_labels.shuffle)
-			APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "SHUFFLE");
-		else if(tr5x6_decod_labels.flam)
-			APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "FLAM");
-		else if(tr5x6_decod_labels.accent)
-			APP_LCD_PrintString( x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "ACCENT");
-	}
-	if(tr5x6_decod_labels_flags.sync){
-		if(tr5x6_decod_labels.sync){
-			APP_LCD_FColourSet(APP_LCD_WHITE);
-			APP_LCD_PrintString( x_offset+404, y_offset+236, 0, APP_LCD_STRING_ALIGN_CENTER, -32, " EXT SYNC ON ");
-		}else {
-			APP_LCD_FColourSet(APP_LCD_DARKGREY);
-			APP_LCD_PrintString(x_offset+404, y_offset+236, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "EXT SYNC OFF");
-			APP_LCD_FColourSet(APP_LCD_WHITE);
+		APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
+		if(tr5x6_decod_labels_flags.ALL &0x7f){
+			APP_LCD_Rectangle(x_offset+140, y_offset+173, 60, 10, 0, 0, 1, 0);
+			if(tr5x6_decod_labels.tempo)
+				APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "TEMPO");
+			else if(tr5x6_decod_labels.measure)
+				APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MEASURE");
+			else if(tr5x6_decod_labels.pitch)
+				APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "PITCH");
+			else if(tr5x6_decod_labels.level)
+				APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "LEVEL");
+			else if(tr5x6_decod_labels.shuffle)
+				APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "SHUFFLE");
+			else if(tr5x6_decod_labels.flam)
+				APP_LCD_PrintString(x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "FLAM");
+			else if(tr5x6_decod_labels.accent)
+				APP_LCD_PrintString( x_offset+170, y_offset+173, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "ACCENT");
+		}
+		if(tr5x6_decod_labels_flags.sync){
+			if(tr5x6_decod_labels.sync){
+				APP_LCD_FColourSet(APP_LCD_WHITE);
+				APP_LCD_PrintString( x_offset+404, y_offset+236, 0, APP_LCD_STRING_ALIGN_CENTER, -32, " EXT SYNC ON ");
+			}else {
+				APP_LCD_FColourSet(APP_LCD_DARKGREY);
+				APP_LCD_PrintString(x_offset+404, y_offset+236, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "EXT SYNC OFF");
+				APP_LCD_FColourSet(APP_LCD_WHITE);
+			}
 		}
 	}
-#endif
 
 	// CHAIN and BLOCK, common to both hosts - only the three numbers above move
 	if(tr5x6_decod_labels_flags.chain){
@@ -1336,12 +1398,8 @@ static void TFT_Labels(void)
 /////////////////////////////////////////////////////////////////////////////
 static void TFT_Mode(void)
 {
-	u16 mx, my;
-#if TR5X6_UNIT_SELECT==505
-	mx=355; my=200;
-#else
-	mx=366; my=195;
-#endif
+	u16 mx = IS_505 ? 355 : 366;
+	u16 my = IS_505 ? 200 : 195;
 
 	if(tr5x6_decod_mode_flag){
 		tr5x6_decod_mode_flag=0;
@@ -1392,12 +1450,8 @@ static void TFT_Mode(void)
 /////////////////////////////////////////////////////////////////////////////
 static void TFT_Group(void)
 {
-	u16 gx, gy;
-#if TR5X6_UNIT_SELECT==505
-	gx=221; gy=201;
-#else
-	gx=261; gy=205;
-#endif
+	u16 gx = IS_505 ? 221 : 261;
+	u16 gy = IS_505 ? 201 : 205;
 
 	if(tr5x6_decod_group_flag){
 		tr5x6_decod_group_flag=0;
@@ -1440,12 +1494,8 @@ static void TFT_Group(void)
 /////////////////////////////////////////////////////////////////////////////
 static void TFT_MidiActivity(void)
 {
-	u16 in_x, hs_x;
-#if TR5X6_UNIT_SELECT==505
-	in_x=335; hs_x=441;
-#else
-	in_x=350; hs_x=446;
-#endif
+	u16 in_x = IS_505 ? 335 : 350;
+	u16 hs_x = IS_505 ? 441 : 446;
 
 	u8 act_midi_in = ADIOS_MIDI_ActGet(DIN2) & ADIOS_MIDI_ACT_RX;
 	u8 act_host    = ADIOS_MIDI_ActGet(DIN0) & ADIOS_MIDI_ACT_RX;
@@ -1488,42 +1538,42 @@ static void TASK_TFT_Periodic(void *pvParameters)
 			// Instruments select - the ONE island the two hosts do not
 			// share: the 626 runs it through its 16-instrument grid, the
 			// 505 has no grid and runs the sequence directly.
-#if TR5X6_UNIT_SELECT==505
-			// Slot Info
-			if(TFT_XferIsIdle())TFT_Slotinfo();
-			// Instrument Select
-			TFT_InstSelect();
-
-			bank_changed = 0;
-			tr5x6_decod_inst_acc_flags=0;
-			tr5x6_decod_inst_sel_flags = 0x0000;
-#else
-			// How much instruments shown
-			u8 num_sel=0;
-			for(int i=0; i<16; i++)if(tr5x6_decod_inst_sel & (1<<i))num_sel++;
-
-			if((num_sel==16) && TFT_XferIsIdle()){
-				// prints the Instrument Grid
-				TFT_InstGridDraw();
-
-			} else if(num_sel==1){
-				// prints the Instrument selection and slot info
-				if(inst_change_exit){
-					inst_grid_shown=0;
-					inst_change_exit=0;
-					tr5x6_decod_inst_sel_flags=tr5x6_decod_inst_sel;
-					APP_LCD_Rectangle(x_offset+95, y_offset+95, 367, 41, 0, 0, 1, 0);
-					APP_LCD_DrawFastVLine(x_offset+w_max-(5*23)-2, y_offset+95,  69, APP_LCD_DARKGREY);
-				}
-
+	if(IS_505){
+				// Slot Info
 				if(TFT_XferIsIdle())TFT_Slotinfo();
+				// Instrument Select
 				TFT_InstSelect();
-			}
-			// flags reset
-			bank_changed = 0;
-			tr5x6_decod_inst_sel_flags=0;
-			tr5x6_decod_inst_blk_flags=0;
-#endif
+
+				bank_changed = 0;
+				tr5x6_decod_inst_acc_flags=0;
+				tr5x6_decod_inst_sel_flags = 0x0000;
+	}else{
+				// How much instruments shown
+				u8 num_sel=0;
+				for(int i=0; i<16; i++)if(tr5x6_decod_inst_sel & (1<<i))num_sel++;
+
+				if((num_sel==16) && TFT_XferIsIdle()){
+					// prints the Instrument Grid
+					TFT_InstGridDraw();
+
+				} else if(num_sel==1){
+					// prints the Instrument selection and slot info
+					if(inst_change_exit){
+						inst_grid_shown=0;
+						inst_change_exit=0;
+						tr5x6_decod_inst_sel_flags=tr5x6_decod_inst_sel;
+						APP_LCD_Rectangle(x_offset+95, y_offset+95, 367, 41, 0, 0, 1, 0);
+						APP_LCD_DrawFastVLine(x_offset+w_max-(5*23)-2, y_offset+95,  69, APP_LCD_DARKGREY);
+					}
+
+					if(TFT_XferIsIdle())TFT_Slotinfo();
+					TFT_InstSelect();
+				}
+				// flags reset
+				bank_changed = 0;
+				tr5x6_decod_inst_sel_flags=0;
+				tr5x6_decod_inst_blk_flags=0;
+	}
 			// Steps
 			APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
 			APP_LCD_FColourSet(APP_LCD_WHITE);
@@ -1696,22 +1746,28 @@ void SettingsMenu_Legend(void){
 // not have it, so the answer comes from the user, once, before the very
 // first format. Mandatory: the page has no exit.
 /////////////////////////////////////////////////////////////////////////////
-static void UnitSelect_Page(u8 unit_sel)
+static void UnitSelect_Page(u8 unit_sel, u8 allow_exit)
 {
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
 	APP_LCD_FColourSet(APP_LCD_WHITE);
-	APP_LCD_PrintString(240, y_offset+40, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Please,  select  your  unit  type:");
+	// Same rows as the format confirmation of the settings menu: the question
+	// where its "Are you sure?" sits, the two choices where its YES/NO sit.
+	APP_LCD_PrintString(240, y_offset+120, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Please,  select  your  unit  type:");
 
-	APP_LCD_FColourSet((unit_sel==5) ? APP_LCD_WHITE : APP_LCD_LIGHTGREY);
-	APP_LCD_PrintString(180, y_offset+90, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "505");
-	APP_LCD_FColourSet((unit_sel==6) ? APP_LCD_WHITE : APP_LCD_LIGHTGREY);
-	APP_LCD_PrintString(300, y_offset+90, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "626");
+	// DARKGREY, not LIGHTGREY: 128 against 255 reads at a glance, 192 does not.
+	APP_LCD_FColourSet((unit_sel==5) ? APP_LCD_WHITE : APP_LCD_DARKGREY);
+	APP_LCD_PrintString(180, y_offset+150, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "505");
+	APP_LCD_FColourSet((unit_sel==6) ? APP_LCD_WHITE : APP_LCD_DARKGREY);
+	APP_LCD_PrintString(300, y_offset+150, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "626");
 	APP_LCD_FColourSet(APP_LCD_WHITE);
 
 	Legend_Draw(x_offset+420, y_offset+52, "SEL", "UP");
 	Legend_Draw(x_offset+420, y_offset+72, "SEL", "DOWN");
 	Legend_Draw(x_offset+420, y_offset+32, "ENTER", "INST");
+	// Only the settings menu offers a way out: on a blank first boot there
+	// is nothing to go back to, and the answer cannot be skipped.
+	if(allow_exit) Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
 }
 
 void Formatting_Page(void){
@@ -1848,8 +1904,31 @@ void TASK_SettingsMenu(void *pvParameters){
 				}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
 					tr5x6_decod_buttons_flags.dec = 0;
 				}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+					// A format is also the only chance to re-declare which machine
+					// this board sits in - one firmware serves both, so a board can
+					// be moved. The choice only picks the magic to write and the
+					// geometry to lay out; the reset at the end of the format is
+					// what makes it take effect, on a clean boot.
+					u8 cur_unit = tr5x6_unit->magic & 0x0f;
+					u8 unit_sel;
+					// pre-selected on what this board already says it is; only a
+					// CHANGE gets a warning, and saying no comes back here
+					do { unit_sel = UnitSelect_Ask(cur_unit, 1); }
+					while( unit_sel != UNIT_SEL_EXIT
+					    && unit_sel != cur_unit
+					    && !UnitChange_Confirm(unit_sel) );
+					if( unit_sel == UNIT_SEL_EXIT ){
+						// walked out - nothing chosen, nothing formatted
+						menu_edit = 0;
+						APP_LCD_Clear();
+						SettingsMenu_Draw();
+						SettingsMenu_Legend();
+						tr5x6_decod_buttons_flags.inst=0;
+						continue;
+					}
+					tr5x6_unit = (unit_sel==6) ? &tr5x6_unit_626 : &tr5x6_unit_505;
+					APP_LCD_Clear();
 					formatting = 1;
-					//vTaskSuspend(xSettings);
 					Formatting_Page();
 					SettingsMenu_Legend();
 					//vTaskResume(xSettings);
@@ -1879,14 +1958,14 @@ void TASK_SettingsMenu(void *pvParameters){
 
 		}else{
 			if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
-				menu_pos += 1;
-				if(menu_pos>2) menu_pos= 0;
+				menu_pos -= 1;
+				if(menu_pos>2) menu_pos= 2;
 				SettingsMenu_Draw();
 				SettingsMenu_Legend();
 				tr5x6_decod_buttons_flags.inc = 0;
 			}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
-				menu_pos -= 1;
-				if(menu_pos>2) menu_pos= 2;
+				menu_pos += 1;
+				if(menu_pos>2) menu_pos= 0;
 				SettingsMenu_Draw();
 				SettingsMenu_Legend();
 				tr5x6_decod_buttons_flags.dec = 0;

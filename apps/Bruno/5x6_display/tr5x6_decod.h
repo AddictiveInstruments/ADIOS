@@ -200,9 +200,14 @@ typedef union {
 } tr5x6_decod_buttons_t;
 
 /* Prototypes ----------------------------------------------------------------*/
-extern void TR5X6_DECOD_Init();
+// Split in two on purpose: the buttons do not depend on which machine this
+// board is in, the display bus does. APP_Init calls BUTT_Init early - the
+// unit-select page cannot be answered without it - and LCD_Init only once
+// tr5x6_unit is aimed from the flash magic.
+extern void TR5X6_DECOD_BUTT_Init(void);
+extern void TR5X6_DECOD_LCD_Init(void);
 extern tr5x6_decod_buttons_t TR5X6_DECOD_BUTT_Handler(void);
-// The LCD bus callback is a POINTER, aimed at boot by TR5X6_DECOD_Init().
+// The LCD bus callback is a POINTER, aimed by TR5X6_DECOD_LCD_Init().
 // The two hosts do not even raise the same events - the 626 has a third
 // one, on the CS rising edge - so the whole callback diverges, not just
 // its body. Callers write TR5X6_DECOD_EXTI_LCD_Callback() as before.

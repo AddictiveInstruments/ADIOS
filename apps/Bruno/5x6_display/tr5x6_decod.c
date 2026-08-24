@@ -153,29 +153,16 @@ static const u16 tr5x6_decod_com_map[MAP_NUM][16] = {
 };
 
 /* ********* */
-void TR5X6_DECOD_Init()
+/////////////////////////////////////////////////////////////////////////////
+// BUTTONS - independent of which machine this board is in: same pins, same
+// EXTI line 3, same edge. Runs BEFORE the unit is known, because the
+// unit-select page cannot be answered without buttons.
+/////////////////////////////////////////////////////////////////////////////
+void TR5X6_DECOD_BUTT_Init(void)
 {
-	// FIRST, before anything else in this function.
-	// ADIOS_IRQ_Install(EXTI4_15_IRQn) further down arms the interrupt that
-	// calls TR5X6_DECOD_EXTI_LCD_Callback, and the host drives its display
-	// bus permanently - an edge landing while this pointer is still NULL
-	// jumps to address 0 and faults before the screen ever lights up.
-	// Assigning here closes that window, and keeps closing it the day the
-	// choice comes from tr5x6_unit->magic instead of the build.
-	//
-	// A ternary, not an #if: both decoders stay referenced, so neither is
-	// warned about nor stripped. The two machines do not even raise the
-	// same EXTI events, so the whole callback is swapped, not just its body.
-	tr5x6_decod_digits_pos        = (TR5X6_UNIT_SELECT==505) ? tr5x6_decod_digits_pos_505
-	                                                        : tr5x6_decod_digits_pos_626;
-	TR5X6_DECOD_EXTI_LCD_Callback = (TR5X6_UNIT_SELECT==505) ? lcd_callback_505
-	                                                        : lcd_callback_626;
-
-
-
 	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
 	LL_EXTI_InitTypeDef EXTI_InitStruct = {0};
-	/* GPIO Ports Clock Enable */
+	/* GPIO Ports Clock Enable - shared with the display bus below */
 	LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOB);
 	LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOC);
 	LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOD);
@@ -197,6 +184,30 @@ void TR5X6_DECOD_Init()
 	EXTI_InitStruct.Mode = LL_EXTI_MODE_IT;
 	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_RISING;
 	LL_EXTI_Init(&EXTI_InitStruct);
+
+	ADIOS_IRQ_Install(EXTI2_3_IRQn, TR5X6_DECOD_IRQ_PRIOR);
+	tr5x6_decod_buttons_old.ALL = 0xf;
+	tr5x6_decod_buttons.ALL = 0xf;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// THE HOST'S DISPLAY BUS - depends on the machine: the 626 needs both CS
+// edges, its own decoder, its own digit positions. Must run only once
+// tr5x6_unit is aimed, which APP_Init does from the flash magic.
+//
+// The callback pointer is set FIRST and the interrupt armed LAST. The host
+// drives its bus permanently: an edge landing while the pointer is still
+// NULL jumps to address 0 and faults before the screen ever lights up.
+/////////////////////////////////////////////////////////////////////////////
+void TR5X6_DECOD_LCD_Init(void)
+{
+	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+	LL_EXTI_InitTypeDef EXTI_InitStruct = {0};
+
+	tr5x6_decod_digits_pos        = IS_505 ? tr5x6_decod_digits_pos_505
+	                                       : tr5x6_decod_digits_pos_626;
+	TR5X6_DECOD_EXTI_LCD_Callback = IS_505 ? lcd_callback_505
+	                                       : lcd_callback_626;
 
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT;
 	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
@@ -230,11 +241,6 @@ void TR5X6_DECOD_Init()
 	EXTI_InitStruct.Trigger = LL_EXTI_TRIGGER_RISING;
 	LL_EXTI_Init(&EXTI_InitStruct);
 
-	/* EXTI interrupt init*/
-	ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
-	ADIOS_IRQ_Install(EXTI2_3_IRQn, TR5X6_DECOD_IRQ_PRIOR);
-
-
 	//temp
 	  LL_GPIO_StructInit(&GPIO_InitStruct);
 	  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_HIGH;
@@ -253,9 +259,9 @@ void TR5X6_DECOD_Init()
 	segment=0;
 	seg_bit=0;
 	tr5x6_decod_buff[0]=0;	// only the 626 fills it, but it exists on both
-	tr5x6_decod_buttons_old.ALL = 0xf;
-	tr5x6_decod_buttons.ALL = 0xf;
 
+	// LAST: everything the callback needs is in place now.
+	ADIOS_IRQ_Install(EXTI4_15_IRQn, TR5X6_DECOD_IRQ_PRIOR);
 }
 
 

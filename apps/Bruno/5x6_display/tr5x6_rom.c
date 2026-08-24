@@ -163,9 +163,9 @@ const tr5x6_slot_t tr5x6_slots_626[30]={
 		{"Mid Tom 2\0    ", "MT2\0", 0x26000, SIZE_8K, SLOT_EVEN},
 		{"Hi Tom 2\0     ", "HT2\0", 0x24000, SIZE_8K, SLOT_EVEN}};
 
-//                                    slots        slot bank div shift dig magic  ack  cs2
-const tr5x6_unit_t tr5x6_unit_505 = { tr5x6_slots_505, 16, 16,  4,  17,  6, 0x75, 0x50, 0 };
-const tr5x6_unit_t tr5x6_unit_626 = { tr5x6_slots_626, 30,  8,  2,  18,  7, 0x76, 0x62, 1 };
+//                                    slots        slot bank div shift dig magic  ack cs2 a17  cs2
+const tr5x6_unit_t tr5x6_unit_505 = { tr5x6_slots_505, 16, 16,  4,  17,  6, 0x75, 0x50, 0, 1 };
+const tr5x6_unit_t tr5x6_unit_626 = { tr5x6_slots_626, 30,  8,  2,  18,  7, 0x76, 0x62, 1, 0 };
 
 // The unit descriptor every user goes through. Aimed once at boot.
 const tr5x6_unit_t *tr5x6_unit;
@@ -173,14 +173,9 @@ const tr5x6_unit_t *tr5x6_unit;
 /* ROM init function */
 void TR5X6_ROM_Init(void)
 {
-	// Aim the unit descriptor. This runs FIRST in APP_Init, before
-	// TR5X6_DECOD_Init and everything else - anything reading tr5x6_unit
-	// depends on that order.
-#if TR5X6_UNIT_SELECT==505
-	tr5x6_unit = &tr5x6_unit_505;
-#else
-	tr5x6_unit = &tr5x6_unit_626;
-#endif
+	// tr5x6_unit is ALREADY aimed when we get here - APP_Init reads the flash
+	// magic (or asks the user) and points it before calling us. Everything
+	// below reads it: bank shift, A17 mux, slot table.
 
 	// configure GPIO
 	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -256,7 +251,8 @@ s32 TR5X6_ROM_BankSet(u8 bank, u8 address_set){
 	return 0;
 }
 
-#if TR5X6_UNIT_SELECT==626
+// Only the 626 calls this - its display task defers the bank write out of
+// the decoding window. Compiled on both, called on one.
 s32 TR5X6_ROM_BankStore_Req(){
 	if(bank_store_req){
 		ADIOS_IRQ_DeInstall(EXTI4_15_IRQn);
@@ -266,7 +262,6 @@ s32 TR5X6_ROM_BankStore_Req(){
 	}
 	return 0;
 }
-#endif
 
 /* ********* */
 u32 TR5X6_ROM_ProgAddr(u8 bank){
@@ -427,11 +422,10 @@ void TR5X6_ROM_Addr_Set(uint32_t address){
 	// Set ROM address
 
 
-#if TR5X6_UNIT_SELECT==505
-	// A17 is the low bit of the bank number here, so it belongs to the latch in
-	// both modes - the mux stays on. See the bus map at the top of this file.
-	address |= 0x00800000;
-#endif
+	// On the 505 A17 is the low bit of the bank number, so it belongs to the
+	// latch in BOTH modes and the mux stays on. On the 626 A17 belongs to the
+	// host and the mux must follow the mode. See the bus map at the top.
+	if(tr5x6_unit->a17_from_latch) address |= 0x00800000;
 	// Three POLLED byte transfers, not TransferBlock. The DMA path spends some
 	// twenty peripheral register writes reconfiguring both channels to move
 	// three bytes - overhead that dwarfs the 12 us actually spent clocking them

@@ -18,9 +18,9 @@
 // over, in milliseconds. 0 = no hold.
 #define APP_SPLASH_MS 2000
 
-// temporary 5x6 define
-// 505 config
-#define TR5X6_UNIT_SELECT 505
+// ONE firmware, BOTH machines. Which one this board is bolted into comes
+// from the flash magic at boot - see APP_Init and tr5x6_unit_t. There is
+// no build-time unit switch any more.
 
 //#define REDUCED_APP_LCD
 // (ADIOS_MIDI_DEFAULT_PORT / _DEBUG_PORT are set in the BSL_RELAY block of

@@ -148,11 +148,20 @@ typedef struct {
 	u8  sysex_ack_type;		// 0x50 / 0x62
 	u8  cs_two_edges;		// 0 / 1 - the 626 validates its frame on the CS
 				// RISING edge too, so its EXTI must fire on both
+	u8  a17_from_latch;		// 1 / 0 - on the 505 A17 is the low bit of the
+				// bank number, so the latch owns it in BOTH modes and the
+				// mux stays on. On the 626 A17 belongs to the host.
 } tr5x6_unit_t;
 
 extern const tr5x6_unit_t tr5x6_unit_505;
 extern const tr5x6_unit_t tr5x6_unit_626;
 extern const tr5x6_unit_t *tr5x6_unit;
+
+// Which machine this board is bolted into, at runtime. Reads the descriptor
+// aimed ONCE in APP_Init from the flash magic - so these are valid from that
+// point on, and NOT before. Nothing that runs earlier may use them.
+#define IS_505	(tr5x6_unit->magic == 0x75)
+#define IS_626	(tr5x6_unit->magic == 0x76)
 
 // BOTH tables live in flash on both builds - that is the price of the one
 // firmware to come. Reached through tr5x6_unit->slots, never mirrored.
@@ -185,9 +194,7 @@ extern s32 TR5X6_ROM_BankStore(u8 bank);
    ADIOS finds it at the next power-up - and so does the bootloader */
 extern s32 TR5X6_ROM_DeviceIDStore(u8 device_id);
 extern u8 TR5X6_ROM_BankRecall(void);
-#if TR5X6_UNIT_SELECT==626
 extern s32 TR5X6_ROM_BankStore_Req();
-#endif
 #if 0
 extern s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_mem);
 extern tr5x6_flash_mem_Bank_t TR5X6_FLASH_MemBank_Get(u8 group, u8 pattern);
