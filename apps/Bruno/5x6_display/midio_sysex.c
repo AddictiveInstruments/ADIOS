@@ -55,11 +55,6 @@
 #define MIDIO_SYSEX_ACK_CMD_END			      	0x05
 
 
-#if TR5X6_UNIT_SELECT==505
-		#define TR5X6_SYSEX_ACK_UNIT_TYPE      	0x50
-#else // TR5X6_UNIT_SELECT==626
-		#define TR5X6_SYSEX_ACK_UNIT_TYPE      	0x62
-#endif
 #define MIDIO_SYSEX_XFER_TIMEOUT      			1000
 
 
@@ -287,6 +282,8 @@ s32 MIDIO_SYSEX_Send_Block(adios_midi_port_t port)
 	int i;
 	int sysex_buffer_ix = 0;
 	u8 checksum;
+	// the host's slot table, resolved once for this function
+	const tr5x6_slot_t *slots = tr5x6_unit->slots;
 
 	// send header
 	for(i=0; i<sizeof(sysex_header); ++i)
@@ -311,13 +308,13 @@ s32 MIDIO_SYSEX_Send_Block(adios_midi_port_t port)
 	checksum += sysex_block;
 
 	u32 addr;
-	switch(tr5x6_slots[sysex_slot].size){
+	switch(slots[sysex_slot].size){
 	case SIZE_4K:
-		tr5x6_slot_parity_t even_odd = (tr5x6_slot_parity_t)tr5x6_slots[sysex_slot].parity;
+		tr5x6_slot_parity_t even_odd = (tr5x6_slot_parity_t)slots[sysex_slot].parity;
 		u8 sector= (sysex_block/8);
 		u8 block=sysex_block%8;
 
-		addr = TR5X6_ROM_ProgAddr(sysex_bank) | tr5x6_slots[sysex_slot].addr_offset | (sector*TR5X6_ROM_SECTOR_SIZE) | (block<<9) | (even_odd^1);
+		addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sector*TR5X6_ROM_SECTOR_SIZE) | (block<<9) | (even_odd^1);
 		for(int i=0;i<(MIDIO_SYSEX_BLOCK_SIZE>>1);i++){
 			u8 data = TR5X6_ROM_Read(addr);
 			u8 data_msb = (u8)(data >>4);
@@ -337,7 +334,7 @@ s32 MIDIO_SYSEX_Send_Block(adios_midi_port_t port)
 	case SIZE_16K:
 	case SIZE_32K:
 
-		addr = TR5X6_ROM_ProgAddr(sysex_bank) | tr5x6_slots[sysex_slot].addr_offset | (sysex_block<<8);
+		addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sysex_block<<8);
 		for(int i=0; i<(MIDIO_SYSEX_BLOCK_SIZE>>1); addr++, i++) {
 			u8 data = TR5X6_ROM_Read(addr);
 			u8 data_msb = (u8)(data >>4);
@@ -724,7 +721,7 @@ s32 MIDIO_SYSEX_Cmd_ReadBlock(u8 cmd_state, u8 midi_in)
 	default: // MIDIO_SYSEX_CMD_STATE_END
 			MIDIO_SYSEX_Send_Block(sysex_port);
 			//ADIOS_IRQ_Enable();
-			switch(tr5x6_slots[sysex_slot].size){
+			switch(tr5x6_unit->slots[sysex_slot].size){
 			case SIZE_4K:sysex_total_block=16;break;
 			case SIZE_8K:sysex_total_block=32;break;
 			case SIZE_16K:sysex_total_block=64;break;
@@ -777,7 +774,7 @@ s32 MIDIO_SYSEX_Cmd_WriteBlock(u8 cmd_state, u8 midi_in)
 			sysex_checksum += midi_in;
 		} else if( !sysex_state.SLOT_RECEIVED ) {
 			sysex_slot = midi_in; // store block number
-			switch(tr5x6_slots[sysex_slot].size){
+			switch(tr5x6_unit->slots[sysex_slot].size){
 			case SIZE_4K:sysex_total_block=16;break;
 			case SIZE_8K:sysex_total_block=32;break;
 			case SIZE_16K:sysex_total_block=64;break;
@@ -935,10 +932,12 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 	if(!write_block_req)return 0;
 
 	write_block_req=0;
+		// the host's slot table, resolved once for this function
+		const tr5x6_slot_t *slots = tr5x6_unit->slots;
 		u32 addr;
-		switch(tr5x6_slots[sysex_slot].size){
+		switch(slots[sysex_slot].size){
 		case SIZE_4K:
-			tr5x6_slot_parity_t even_odd = (tr5x6_slot_parity_t)tr5x6_slots[sysex_slot].parity;
+			tr5x6_slot_parity_t even_odd = (tr5x6_slot_parity_t)slots[sysex_slot].parity;
 			u8 sector= (sysex_block/8);
 			u8 block=sysex_block%8;
 			u8* data_ptr;
@@ -947,7 +946,7 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 			case 0: //
 				// store the existing sector in RAM
 				data_ptr = &datas[0];
-				addr = TR5X6_ROM_ProgAddr(sysex_bank) | tr5x6_slots[sysex_slot].addr_offset | (sector*TR5X6_ROM_SECTOR_SIZE);
+				addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sector*TR5X6_ROM_SECTOR_SIZE);
 				for(int i=0;i<TR5X6_ROM_SECTOR_SIZE;i++){
 					u8 data = TR5X6_ROM_Read(addr++);
 					*(data_ptr++) = data;
@@ -970,7 +969,7 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 					data_ptr +=2;
 				}
 
-				addr = TR5X6_ROM_ProgAddr(sysex_bank) | tr5x6_slots[sysex_slot].addr_offset | (sector*TR5X6_ROM_SECTOR_SIZE);
+				addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sector*TR5X6_ROM_SECTOR_SIZE);
 				if( ((addr&0x007FFFFF) >= TR5X6_ROM_START_ADDR) && ((addr&0x007FFFFF) <= TR5X6_ROM_END_ADDR) ) {
 					tr5x6_rom_status status;
 					// sector erase
@@ -1026,7 +1025,7 @@ s32 MIDIO_SYSEX_Cmd_WriteBlockRequest(void)
 			case SIZE_16K:
 			case SIZE_32K:
 
-				addr = TR5X6_ROM_ProgAddr(sysex_bank) | tr5x6_slots[sysex_slot].addr_offset | (sysex_block<<8);
+				addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sysex_block<<8);
 				if( ((addr&0x007FFFFF) >= TR5X6_ROM_START_ADDR) && ((addr&0x007FFFFF) <= TR5X6_ROM_END_ADDR) ) {
 					tr5x6_rom_status status;
 					//TR5X6_SPI_TransferModeInit();
@@ -1152,7 +1151,7 @@ s32 MIDIO_SYSEX_Cmd_Ping(u8 cmd_state, u8 midi_in)
 	  
 		MIDIO_SYSEX_Send_Footer(0);
 		// send acknowledge with unit type			  
-		MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_ACK, TR5X6_SYSEX_ACK_UNIT_TYPE);
+		MIDIO_SYSEX_Send_Ack(sysex_port, MIDIO_SYSEX_ACK, tr5x6_unit->sysex_ack_type);
       
 		break;
 	}

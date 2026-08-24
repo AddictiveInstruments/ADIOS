@@ -59,18 +59,10 @@
 
 
 #define TR5X6_FLASH_INFO_SIZE 			28
-#define TR5X6_FLASH_BANK_DIVIDER		(u8)(TR5X6_BANK_NUM/4)		//	16/4=4
-#if TR5X6_UNIT_SELECT==505
-#define TR5X6_MAGIC_NUMBER				75
-#define TR5X6_FLASH_BANK_INFO_OFFSET 	((TR5X6_FLASH_BANK_DIVIDER*TR5X6_SLOT_NUM)*TR5X6_FLASH_INFO_SIZE)
-#else //TR5X6_UNIT_SELECT==626
-#define TR5X6_MAGIC_NUMBER				76
-// here we force the slots number to 32 slots instead of 30
-#define TR5X6_FLASH_BANK_INFO_OFFSET 	((TR5X6_FLASH_BANK_DIVIDER*32)*TR5X6_FLASH_INFO_SIZE)
-#endif
-
-// the magic the next format will write - see its definition in tr5x6_rom.c
-extern u8 tr5x6_format_magic;
+// (4 banks x 16 slots) on the 505, (2 x 32) on the 626: 1792 either way.
+// It never diverged - the 626 line forced 32 slots instead of its real 30
+// precisely so both would land on the same offset.
+#define TR5X6_FLASH_BANK_INFO_OFFSET 	(64*TR5X6_FLASH_INFO_SIZE)
 /* Structures ----------------------------------------------------------------*/
 typedef enum
 {
@@ -92,15 +84,17 @@ typedef enum {
 	SLOT_ODD
 } tr5x6_slot_parity_t;
 
-#if TR5X6_UNIT_SELECT==505
+// ONE slot structure for both hosts - the 626 layout. The 505 never shows
+// the shortnames (it has no grid), they sleep in flash, ready for the day
+// the unit comes from the flash magic instead of the build.
 typedef struct {
 	char name[14];
+	char shortname[4];
 	u32 addr_offset:18;
 	u32 size:2;
 	u32 parity:1;
 	u32 dummy:11;
 } tr5x6_slot_t;
-
 
 //typedef union {
 //	struct __attribute__((__packed__)){
@@ -112,18 +106,6 @@ typedef struct {
 //		u8 diummy[1664];
 //	};
 //} tr5x6_flash_t;
-
-#else //TR5X6_UNIT_SELECT==626
-typedef struct {
-	char name[14];
-	char shortname[4];
-	u32 addr_offset:18;
-	u32 size:2;
-	u32 parity:1;
-	u32 dummy:11;
-} tr5x6_slot_t;
-
-#endif
 
 typedef union {
 	struct __attribute__((__packed__)){
@@ -151,13 +133,29 @@ typedef union {
 	};
 } tr5x6_flash_mem_Bank_t;
 
-#if TR5X6_UNIT_SELECT==505
-extern const tr5x6_slot_t tr5x6_slots[16];
+// Everything that makes a host what it is, in one place. Two const instances
+// in flash, one pointer aimed at boot - the ONE line that changes the day the
+// unit comes from the flash magic instead of the build.
+typedef struct {
+	const tr5x6_slot_t *slots;	// the slot table
+	u8  slot_num;			// 16 / 30
+	u8  bank_num;			// 16 / 8
+	u8  bank_divider;		// bank_num/4: 4 / 2
+	u8  bank_shift;			// host address shift: 17 / 18
+	u8  digits_num;			// 6 / 7 seven-segment digits
+	u8  magic;			// 0x75 / 0x76 - high nibble = version,
+					// low nibble = unit (5 = 505, 6 = 626)
+	u8  sysex_ack_type;		// 0x50 / 0x62
+} tr5x6_unit_t;
 
-#else //TR5X6_UNIT_SELECT==626
-extern const tr5x6_slot_t tr5x6_slots[30];
+extern const tr5x6_unit_t tr5x6_unit_505;
+extern const tr5x6_unit_t tr5x6_unit_626;
+extern const tr5x6_unit_t *tr5x6_unit;
 
-#endif
+// BOTH tables live in flash on both builds - that is the price of the one
+// firmware to come. Reached through tr5x6_unit->slots, never mirrored.
+extern const tr5x6_slot_t tr5x6_slots_505[16];
+extern const tr5x6_slot_t tr5x6_slots_626[30];
 
 extern const char tr5x6_slot_name[4][4];
 extern const char tr5x6_slot_duration[4][6];

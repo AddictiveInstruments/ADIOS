@@ -12,7 +12,7 @@
 // How this program identifies itself to a host (see adios_midi.h)
 #define ADIOS_APP_NAME1 "5x6 Display/ROM"
 #define ADIOS_APP_NAME2 "(C) 2024 B.Dupeyron"
-#define ADIOS_APP_VERSION "v1.000"
+#define ADIOS_APP_VERSION "b0.005 (beta)"
 
 // How long the startup screen stays up before the running display takes
 // over, in milliseconds. 0 = no hold.
@@ -22,18 +22,6 @@
 // 505 config
 #define TR5X6_UNIT_SELECT 505
 
-#if TR5X6_UNIT_SELECT==505
-#define TR5X6_SYSEX_ACK_UNIT_TYPE      	0x50
-#define TR5X6_BANK_NUM      	16
-#define TR5X6_SLOT_NUM      	16
-#define TR5X6_VERSION      		"b0 . 004 (beta)"
-// 626 config
-#else // TR5X6_UNIT_SELECT==626
-#define TR5X6_SYSEX_ACK_UNIT_TYPE      	0x62
-#define TR5X6_BANK_NUM      	8
-#define TR5X6_SLOT_NUM      	30
-#define TR5X6_VERSION      		"b0 . 002 (beta)"
-#endif
 //#define REDUCED_APP_LCD
 // (ADIOS_MIDI_DEFAULT_PORT / _DEBUG_PORT are set in the BSL_RELAY block of
 // the UART section below, with the rest of this board's MIDI wiring)

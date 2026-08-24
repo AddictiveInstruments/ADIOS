@@ -56,6 +56,7 @@ static void SettingsMenu_Legend(void);
 static void Formatting_Page(void);
 static void UnitSelect_Page(u8 unit_sel);
 static void About_Page(void);
+static void Version_Print(u16 x, u16 y);
 static void TASK_SettingsMenu(void *pvParameters);
 static void TASK_TFT_Periodic(void *pvParameters);
 static u8   TFT_BankInhibit(void);
@@ -156,7 +157,7 @@ void APP_Init(void)
 	// older firmware still carries its magic at the old address, looks empty
 	// here, and would be formatted - hence the one-shot migration app, to be
 	// run once after the bootloader update and before this firmware.
-	if((*((volatile u8*)(TR5X6_FLASH_MAGIC_ADDR)))!=TR5X6_MAGIC_NUMBER)rom_empty = 1;
+	if((*((volatile u8*)(TR5X6_FLASH_MAGIC_ADDR)))!=tr5x6_unit->magic)rom_empty = 1;
 	if( (tr5x6_decod_buttons.ALL==0x0a) || rom_empty ){
 		tr5x6_decod_buttons_flags.ALL=0;
 		curr_id = ADIOS_MIDI_DeviceIDGet();
@@ -167,7 +168,7 @@ void APP_Init(void)
 			// written. INC/DEC (UP/DOWN) toggle, INST confirms. The default
 			// under the cursor is this build's own unit. Buttons already live
 			// here by interrupt - the 0x0a combo test above relies on it too.
-			u8 unit_sel = (TR5X6_UNIT_SELECT==505) ? 5 : 6;
+			u8 unit_sel = tr5x6_unit->magic & 0x0f;	// this build's unit
 			UnitSelect_Page(unit_sel);
 			u8 chosen = 0;
 			while(!chosen){
@@ -188,7 +189,10 @@ void APP_Init(void)
 					tr5x6_decod_buttons_flags.inst = 0;
 				}
 			}
-			tr5x6_format_magic = 70 + unit_sel;		// 75 = 505, 76 = 626
+			// the choice IS the unit: aim the descriptor and everything
+			// follows - the format then lays flash out in the chosen
+			// machine's geometry, not this build's
+			tr5x6_unit = (unit_sel==5) ? &tr5x6_unit_505 : &tr5x6_unit_626;
 			APP_LCD_Clear();
 			// periodic screen task
 			menu_pos = 1;
@@ -215,7 +219,7 @@ void APP_Init(void)
 			APP_LCD_SendBitmap(bmp2print, 40+w, y_offset+110);
 		}
 		APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
-		APP_LCD_PrintString(40, y_offset+167, 0, APP_LCD_STRING_ALIGN_LEFT, -32, (char*)TR5X6_VERSION);
+		Version_Print(40, y_offset+167);
 		APP_LCD_Lite(1);
 		// initialize SysEx mgnt.
 		MIDIO_SYSEX_Init(0);
@@ -688,28 +692,9 @@ static void TFT_Slotinfo(void)
 	if(!draw) return;
 	xfer_flag = 0;
 
-#if 0
-	u8 xfer_bmp_array[xfer_bmp_size];
-	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
-	adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_height, xfer_bmp_width, Is1BIT);
-	//memset(sysex_bmp.memory, 0x00, size);
-	s8 selected = -1;
-	for(int i=0; i<16; i++)if(tr5x6_decod_inst_sel &(1<<i)){selected = i; break;}
-	// prints messages in bitmap
-	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%d-%s", selected+1, tr5x6_slots[selected].name);
-	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot: %s/%s", tr5x6_slot_name[tr5x6_slots[selected].size], tr5x6_slot_duration[tr5x6_slots[selected].size]);
-	APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
-	APP_LCD_BColourSet(APP_LCD_RED);
-	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
-	//APP_LCD_FColourSet(APP_LCD_RED);
-	for (int w=0; w<xfer_bmp_width;w++){
-		u8* bmp_mem_ptr = xfer_bmp.memory +w;
-		adios_lcd_bitmap_t bmp2print = APP_LCD_BitmapInit(bmp_mem_ptr, 1, xfer_bmp_height, xfer_bmp_width, Is1BIT);
-		APP_LCD_SendBitmap(bmp2print, x_offset+w_max-2-xfer_bmp_width+w, y_offset+95);
-	}
-	APP_LCD_BColourSet(APP_LCD_BLACK);
-#else
 
+	// the host's slot table, resolved once for this function
+	const tr5x6_slot_t *slots = tr5x6_unit->slots;
 	u8 xfer_bmp_array[xfer_bmp_size];
 	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
 	adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_height, xfer_bmp_width, Is1BIT);
@@ -720,19 +705,23 @@ static void TFT_Slotinfo(void)
 			selected = i;
 #if TR5X6_UNIT_SELECT==626
 			if(tr5x6_decod_inst_blk &(1<<i))selected += 16;
+			if(selected > 29) selected = 29;	// 30 instruments: 1-16 then
+							// 17-30, the last two grid
+							// cells have no second layer
 #endif
 			break;
 		}
 	}
+	if(selected < 0) return;	// nothing selected: no slot to describe
 
 	// prints messages in bitmap
 	char name[15];
-	memcpy(name, tr5x6_slots[selected].name, 14);
+	memcpy(name, slots[selected].name, 14);
 	for(int i=1; i<14; i++)name[i]=toupper(name[i]);
 
 	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot# %d", selected+1);
 	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 27, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%s", name);
-	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 44, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Size: %s/%s", tr5x6_slot_name[tr5x6_slots[selected].size], tr5x6_slot_duration[tr5x6_slots[selected].size]);
+	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 44, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Size: %s/%s", tr5x6_slot_name[slots[selected].size], tr5x6_slot_duration[slots[selected].size]);
 	APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
 	//APP_LCD_BColourSet(APP_LCD_RED);
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
@@ -747,7 +736,6 @@ static void TFT_Slotinfo(void)
 	// the ACCENT wipe may have taken the separator bar with it - whoever
 	// redraws the window puts the bar back
 	APP_LCD_DrawFastVLine(x_offset+w_max-3-xfer_bmp_width, y_offset+95, 40, APP_LCD_DARKGREY);
-#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -796,6 +784,8 @@ static void TFT_InstGridCellDraw(u8 inst, u8 blink)
 	adios_lcd_bitmap_t bmp = APP_LCD_BitmapInit((u8*)bmp_array, 45, 20, 45, Is1BIT);
 
 	if(blocked) inst += 16;
+	if(inst > 29) inst = 29;	// 30 instruments: 1-16 then 17-30, the last
+					// two grid cells have no second layer
 
 	tr5x6_flash_info_t slot;
 	slot.bank=TR5X6_ROM_BankGet();
@@ -805,7 +795,7 @@ static void TFT_InstGridCellDraw(u8 inst, u8 blink)
 	// blink: 0 = full draw, 1 = blink ON phase, 2 = blink OFF phase (no label)
 	if(blink != 2){
 	if(inst_grid_name)
-		APP_LCD_BitmapPrintFormattedString(bmp, 0, 22, 4, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%s", tr5x6_slots[inst].shortname);
+		APP_LCD_BitmapPrintFormattedString(bmp, 0, 22, 4, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%s", tr5x6_unit->slots[inst].shortname);
 	else APP_LCD_BitmapPrintFormattedString(bmp, 0, 22, 4, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%d", (inst+1));
 	}
 
@@ -933,7 +923,7 @@ static u8 TFT_BankInhibit(void)
 /////////////////////////////////////////////////////////////////////////////
 static void TFT_Digits(void)
 {
-	for(int i=0; i<tr5x6_digits_num; i++){
+	for(int i=0; i<tr5x6_unit->digits_num; i++){
 		if( tr5x6_decod_digits_flags & (1<<i) ){
 			tr5x6_decod_digits_flags &= ~(1<<i);
 			APP_LCD_Digits_draw(tr5x6_decod_digits[i], x_offset + tr5x6_decod_digits_pos[i], y_offset+197, 1, APP_LCD_WHITE, APP_LCD_BLACK);
@@ -985,11 +975,11 @@ static void TFT_BankSelect(void)
 			u8 bank_num = TR5X6_ROM_BankGet();
 			if((tr5x6_decod_buttons_flags.inc==1) && (tr5x6_decod_buttons.inc==1) ){
 				bank_num +=1;
-				bank_num &=(TR5X6_BANK_NUM-1);
+				bank_num &=(tr5x6_unit->bank_num-1);
 				TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
 			}else if((tr5x6_decod_buttons_flags.dec==1) && (tr5x6_decod_buttons.dec==1) ){
 				bank_num -=1;
-				bank_num &=(TR5X6_BANK_NUM-1);
+				bank_num &=(tr5x6_unit->bank_num-1);
 				TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
 			}
 
@@ -1138,6 +1128,7 @@ static void TFT_InstSelect(void)
 #if TR5X6_UNIT_SELECT==626
 			// a blocked instrument lives 16 slots higher
 			if(tr5x6_decod_inst_blk &(1<<i))inst_num +=16;
+			if(inst_num > 29) inst_num = 29;
 			inst_grid_sel = i;	// remembered as the grid view s starting blink cell
 #endif
 			APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
@@ -1733,6 +1724,23 @@ void Formatting_Page(void){
 
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// prints the application version, spaced out for this screen
+//
+// The string itself stays tight - that is what Studio reads back over SysEx.
+// The dot alone is nearly invisible in this font, so it gets a space on each
+// side on its way to the display, and nowhere else.
+/////////////////////////////////////////////////////////////////////////////
+void Version_Print(u16 x, u16 y)
+{
+	const char *dot = strchr(ADIOS_APP_VERSION, '.');
+	if(dot)
+		APP_LCD_PrintFormattedString(x, y, 0, APP_LCD_STRING_ALIGN_LEFT, -32,
+			"%.*s . %s", (int)(dot-ADIOS_APP_VERSION), ADIOS_APP_VERSION, dot+1);
+	else
+		APP_LCD_PrintString(x, y, 0, APP_LCD_STRING_ALIGN_LEFT, -32, (char*)ADIOS_APP_VERSION);
+}
+
 void About_Page(void)
 {
 	APP_LCD_Clear();	// clear the TFT
@@ -1746,7 +1754,7 @@ void About_Page(void)
 		APP_LCD_SendBitmap(bmp2print, 40+w, y_offset+25);
 	}
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
-	APP_LCD_PrintString(40, y_offset+82, 0, APP_LCD_STRING_ALIGN_LEFT, -32, (char*)TR5X6_VERSION);
+	Version_Print(40, y_offset+82);
 
 	logo_bmp = APP_LCD_BitmapInit((u8*)ai_logo, 49, 32, 49, Is1BIT);
 	for (int w=0; w<49;w++){

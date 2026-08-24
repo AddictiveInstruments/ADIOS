@@ -58,11 +58,6 @@ extern s8 TR5X6_DECOD_Pattern_Get(void);
 #endif
 
 /* Variables -----------------------------------------------------------------*/
-// How many 7-segment digits this machine has. A VARIABLE, not a #define: the
-// day the host is read from the flash magic instead of the build, only the
-// assignment in TR5X6_DECOD_Init() changes - nothing that uses it moves.
-// It cannot size an array, and that is deliberate.
-extern u8 tr5x6_digits_num;
 extern u8 tr5x6_decod_blinks[15];
 extern u8 tr5x6_decod_segments[32];
 #if TR5X6_UNIT_SELECT==505

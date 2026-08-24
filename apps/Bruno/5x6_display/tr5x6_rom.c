@@ -113,26 +113,25 @@ s32 tr5x6_flash_format_stat;
 // Anything but zero means a ROM operation was aimed at a stale latch value.
 s32 tr5x6_rom_spi_err;
 
-#if TR5X6_UNIT_SELECT==505
-const tr5x6_slot_t tr5x6_slots[TR5X6_SLOT_NUM]={{"Low ConGa\0    ", 0x08000, SIZE_4K, SLOT_ODD},
-		{"Hi ConGa\0     ", 0x0a000, SIZE_4K, SLOT_ODD},
-		{"TimBale\0      ", 0x00000, SIZE_8K, SLOT_EVEN},
-		{"Low CowBell\0  ", 0x0c000, SIZE_4K, SLOT_ODD},
-		{"Hi CowBell\0   ", 0x0e000, SIZE_4K, SLOT_ODD},
-		{"Hand ClaP\0    ", 0x0c000, SIZE_4K, SLOT_EVEN},
-		{"Crash Cymbal\0 ", 0x10000, SIZE_32K, SLOT_EVEN},
-		{"Ride Cymbal\0  ", 0x18000, SIZE_16K, SLOT_EVEN},
-		{"Bass Drum\0    ", 0x08000, SIZE_4K, SLOT_EVEN},
-		{"Snare Drum\0   ", 0x0a000, SIZE_4K, SLOT_EVEN},
-		{"Low Tom\0      ", 0x02000, SIZE_8K, SLOT_EVEN},
-		{"Mid Tom\0      ", 0x06000, SIZE_8K, SLOT_EVEN},
-		{"Hi Tom\0       ", 0x04000, SIZE_8K, SLOT_EVEN},
-		{"Rim Shot\0     ", 0x0e000, SIZE_4K, SLOT_EVEN},
-		{"Closed Hi-hat\0", 0x1e000, SIZE_8K, SLOT_EVEN},
-		{"Open Hi-hat\0  ", 0x1c000, SIZE_8K, SLOT_EVEN}};
+const tr5x6_slot_t tr5x6_slots_505[16]={{"Low ConGa\0    ", "LC\0 ", 0x08000, SIZE_4K, SLOT_ODD},
+		{"Hi ConGa\0     ", "HC\0 ", 0x0a000, SIZE_4K, SLOT_ODD},
+		{"TimBale\0      ", "TB\0 ", 0x00000, SIZE_8K, SLOT_EVEN},
+		{"Low CowBell\0  ", "LCB\0", 0x0c000, SIZE_4K, SLOT_ODD},
+		{"Hi CowBell\0   ", "HCB\0", 0x0e000, SIZE_4K, SLOT_ODD},
+		{"Hand ClaP\0    ", "HCP\0", 0x0c000, SIZE_4K, SLOT_EVEN},
+		{"Crash Cymbal\0 ", "CC\0 ", 0x10000, SIZE_32K, SLOT_EVEN},
+		{"Ride Cymbal\0  ", "RC\0 ", 0x18000, SIZE_16K, SLOT_EVEN},
+		{"Bass Drum\0    ", "BD\0 ", 0x08000, SIZE_4K, SLOT_EVEN},
+		{"Snare Drum\0   ", "SD\0 ", 0x0a000, SIZE_4K, SLOT_EVEN},
+		{"Low Tom\0      ", "LT\0 ", 0x02000, SIZE_8K, SLOT_EVEN},
+		{"Mid Tom\0      ", "MT\0 ", 0x06000, SIZE_8K, SLOT_EVEN},
+		{"Hi Tom\0       ", "HT\0 ", 0x04000, SIZE_8K, SLOT_EVEN},
+		{"Rim Shot\0     ", "RS\0 ", 0x0e000, SIZE_4K, SLOT_EVEN},
+		{"Closed Hi-hat\0", "CH\0 ", 0x1e000, SIZE_8K, SLOT_EVEN},
+		{"Open Hi-hat\0  ", "OH\0 ", 0x1c000, SIZE_8K, SLOT_EVEN}};
 
-#else //TR5X6_UNIT_SELECT==626
-const tr5x6_slot_t tr5x6_slots[TR5X6_SLOT_NUM]={
+
+const tr5x6_slot_t tr5x6_slots_626[30]={
 		{"CowBell\0      ", "CB\0 ", 0x08000, SIZE_4K, SLOT_ODD},
 		{"Low TimBale\0  ", "LTB\0", 0x3c000, SIZE_8K, SLOT_EVEN},
 		{"Hi TimBale\0   ", "HTB\0", 0x3e000, SIZE_8K, SLOT_EVEN},
@@ -164,11 +163,25 @@ const tr5x6_slot_t tr5x6_slots[TR5X6_SLOT_NUM]={
 		{"Mid Tom 2\0    ", "MT2\0", 0x26000, SIZE_8K, SLOT_EVEN},
 		{"Hi Tom 2\0     ", "HT2\0", 0x24000, SIZE_8K, SLOT_EVEN}};
 
+//                                    slots        slot bank div shift dig magic  ack
+const tr5x6_unit_t tr5x6_unit_505 = { tr5x6_slots_505, 16, 16,  4,  17,  6, 0x75, 0x50 };
+const tr5x6_unit_t tr5x6_unit_626 = { tr5x6_slots_626, 30,  8,  2,  18,  7, 0x76, 0x62 };
 
-#endif
+// The unit descriptor every user goes through. Aimed once at boot.
+const tr5x6_unit_t *tr5x6_unit;
+
 /* ROM init function */
 void TR5X6_ROM_Init(void)
 {
+	// Aim the unit descriptor. This runs FIRST in APP_Init, before
+	// TR5X6_DECOD_Init and everything else - anything reading tr5x6_unit
+	// depends on that order.
+#if TR5X6_UNIT_SELECT==505
+	tr5x6_unit = &tr5x6_unit_505;
+#else
+	tr5x6_unit = &tr5x6_unit_626;
+#endif
+
 	// configure GPIO
 	LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
 
@@ -261,14 +274,8 @@ u32 TR5X6_ROM_ProgAddr(u8 bank){
 }
 /* ********* */
 u32 TR5X6_ROM_HostAddr(u8 bank){
-#if TR5X6_UNIT_SELECT==505
-	if(bank>15)bank=15;
-	u32 base_addr =bank<<17;
-#else //TR5X6_UNIT_SELECT==626
-	if(bank>7)bank=7;
-	u32 base_addr =bank<<18;
-#endif
-	return base_addr;
+	if(bank > tr5x6_unit->bank_num-1) bank = tr5x6_unit->bank_num-1;
+	return (u32)bank << tr5x6_unit->bank_shift;
 }
 
 /* ********* */
@@ -471,12 +478,6 @@ s32 TR5X6_ROM_Data_Get(void){
 }
 
 /* ********* */
-// The magic the NEXT format will write. Defaults to this build's unit and
-// normally never moves - only the first-boot unit choice overrides it. The
-// day the unit comes from flash instead of the build, this byte is what
-// carries the user's answer (unit = magic % 10, version = magic).
-u8 tr5x6_format_magic = TR5X6_MAGIC_NUMBER;
-
 s32 TR5X6_MEM_Format(void){
 
 	tr5x6_rom_format_stat=(s32)TR5X6_ROM_OK;
@@ -557,8 +558,8 @@ s32 TR5X6_MEM_Format(void){
 	memset(slot.ToWrite, 0, TR5X6_FLASH_INFO_SIZE);
 	sprintf(slot.name, (char*)"No Name...");
 	slot.color = 0x00ffffff;
-	for(int b=0; b<TR5X6_FLASH_BANK_DIVIDER;b++){
-		for(int s=0; s<TR5X6_SLOT_NUM;s++){
+	for(int b=0; b<tr5x6_unit->bank_divider;b++){
+		for(int s=0; s<tr5x6_unit->slot_num;s++){
 			memcpy(data_ptr, slot.ToWrite, TR5X6_FLASH_INFO_SIZE);
 			data_ptr +=TR5X6_FLASH_INFO_SIZE;
 		}
@@ -569,7 +570,7 @@ s32 TR5X6_MEM_Format(void){
 	memset(slot.ToWrite, 0, TR5X6_FLASH_INFO_SIZE);
 	sprintf(slot.name, (char*)"User Bank");
 	slot.color = 0x00ffffff;
-	for(int b=0; b<TR5X6_FLASH_BANK_DIVIDER;b++){
+	for(int b=0; b<tr5x6_unit->bank_divider;b++){
 		memcpy(data_ptr, slot.ToWrite, TR5X6_FLASH_INFO_SIZE);
 		data_ptr +=TR5X6_FLASH_INFO_SIZE;
 	}
@@ -580,7 +581,7 @@ s32 TR5X6_MEM_Format(void){
 		// there - the device ID has to be carried over explicitly, or a
 		// format would silently reset the instrument's identity.
 		if(p==3){
-			datas[TR5X6_FLASH_SYS_MAGIC_OFS]     = tr5x6_format_magic;
+			datas[TR5X6_FLASH_SYS_MAGIC_OFS]     = tr5x6_unit->magic;
 			datas[TR5X6_FLASH_SYS_BANK_OFS]      = 0; // stored bank num
 			datas[TR5X6_FLASH_SYS_ID_CONFIRM_OFS]= 0x42;
 			datas[TR5X6_FLASH_SYS_ID_OFS]        = ADIOS_MIDI_DeviceIDGet();
@@ -651,8 +652,8 @@ s32 TR5X6_FLASH_Bank_Write(tr5x6_flash_info_t slot){
 		//ADIOS_MIDI_SendDebugMessage("bank#%d slot#%d; %s and color 0x%04x\n", slot.bank, slot.slot, slot.name, slot.color);
 #endif
 	// determine the page and address range depending on host 505/626
-	u8 page= slot.bank/TR5X6_FLASH_BANK_DIVIDER;		// TR5X6_FLASH_PAGE_BASE
-	u32 bank_addr = TR5X6_FLASH_BANK_INFO_OFFSET + ((slot.bank%TR5X6_FLASH_BANK_DIVIDER)*TR5X6_FLASH_INFO_SIZE);
+	u8 page= slot.bank/tr5x6_unit->bank_divider;		// TR5X6_FLASH_PAGE_BASE
+	u32 bank_addr = TR5X6_FLASH_BANK_INFO_OFFSET + ((slot.bank%tr5x6_unit->bank_divider)*TR5X6_FLASH_INFO_SIZE);
 	// store page content to RAM
 	for(int i=0;i<0x800;i++)
 		datas[i]=(*((volatile u8*)(TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*page)+i)));
@@ -699,8 +700,8 @@ s32 TR5X6_FLASH_Bank_Write(tr5x6_flash_info_t slot){
 /* ********* */
 s32 TR5X6_FLASH_BankRead(tr5x6_flash_info_t* slot){
 	// determine the page and address range depending on host 505/626
-	u8 page= slot->bank/TR5X6_FLASH_BANK_DIVIDER;
-	u32 bank_addr = TR5X6_FLASH_BANK_INFO_OFFSET + ((slot->bank%TR5X6_FLASH_BANK_DIVIDER)*TR5X6_FLASH_INFO_SIZE);
+	u8 page= slot->bank/tr5x6_unit->bank_divider;
+	u32 bank_addr = TR5X6_FLASH_BANK_INFO_OFFSET + ((slot->bank%tr5x6_unit->bank_divider)*TR5X6_FLASH_INFO_SIZE);
 	u32 addr=TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*page) + bank_addr;
 	for(int i=0;i<TR5X6_FLASH_INFO_SIZE;i++){
 		slot->ToWrite[i]=(*((volatile u8*)(addr++)));
@@ -795,8 +796,8 @@ s32 TR5X6_FLASH_Slot_Write(tr5x6_flash_info_t slot){
 		//ADIOS_MIDI_SendDebugMessage("bank#%d slot#%d; %s and color 0x%04x\n", slot.bank, slot.slot, slot.name, slot.color);
 #endif
 	// determine the page and address range depending on host 505/626
-	u8 page= slot.bank/TR5X6_FLASH_BANK_DIVIDER;		// TR5X6_FLASH_PAGE_BASE
-	u32 slot_addr = ((slot.bank%TR5X6_FLASH_BANK_DIVIDER)*TR5X6_SLOT_NUM + slot.slot)*TR5X6_FLASH_INFO_SIZE;
+	u8 page= slot.bank/tr5x6_unit->bank_divider;		// TR5X6_FLASH_PAGE_BASE
+	u32 slot_addr = ((slot.bank%tr5x6_unit->bank_divider)*tr5x6_unit->slot_num + slot.slot)*TR5X6_FLASH_INFO_SIZE;
 	// store page content to RAM
 	for(int i=0;i<0x800;i++)
 		datas[i]=(*((volatile u8*)(TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*page)+i)));
@@ -843,8 +844,8 @@ s32 TR5X6_FLASH_Slot_Write(tr5x6_flash_info_t slot){
 /* ********* */
 s32 TR5X6_FLASH_SlotRead(tr5x6_flash_info_t* slot){
 	// determine the page and address range depending on host 505/626
-	u8 page= slot->bank/TR5X6_FLASH_BANK_DIVIDER;
-	u32 slot_addr = ((slot->bank%TR5X6_FLASH_BANK_DIVIDER)*TR5X6_SLOT_NUM + slot->slot)*TR5X6_FLASH_INFO_SIZE;
+	u8 page= slot->bank/tr5x6_unit->bank_divider;
+	u32 slot_addr = ((slot->bank%tr5x6_unit->bank_divider)*tr5x6_unit->slot_num + slot->slot)*TR5X6_FLASH_INFO_SIZE;
 	u32 addr=TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*page) + slot_addr;
 	for(int i=0;i<TR5X6_FLASH_INFO_SIZE;i++){
 		slot->ToWrite[i]=(*((volatile u8*)(addr++)));
@@ -861,15 +862,8 @@ s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_
 
 #endif
 
-#if TR5X6_UNIT_SELECT==505
 	u8 page= 3;		// TR5X6_FLASH_PAGE_BASE
-	//u8 slot_addr = ((slot->bank%4)*16 + slot->slot)*24;
 	u32 bank_addr = 0x780;
-#else //TR5X6_UNIT_SELECT==626
-	u8 page= 3;
-	//u8 slot_addr = ((slot->bank%2)*32 + slot->slot)*24);
-	u32 bank_addr = 0x780;
-#endif
 	// store page content to RAM
 	for(int i=0;i<0x800;i++)
 		datas[i]=(*((volatile u8*)(TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*page)+i)));
@@ -917,15 +911,8 @@ s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_
 /* ********* */
 tr5x6_flash_mem_Bank_t TR5X6_FLASH_MemBank_Get(u8 group, u8 pattern){
 	// determine the page and address range depending on host 505/626
-#if TR5X6_UNIT_SELECT==505
 	u8 page= 3;		// TR5X6_FLASH_PAGE_BASE
-	//u8 slot_addr = ((slot->bank%4)*16 + slot->slot)*24;
 	u32 bank_addr = 0x780;
-#else //TR5X6_UNIT_SELECT==626
-	u8 page= 3;
-	//u8 slot_addr = ((slot->bank%2)*32 + slot->slot)*24);
-	u32 bank_addr = 0x780;
-#endif
 	u32 addr=TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*page)+bank_addr+(group*16)+pattern;
 	tr5x6_flash_mem_Bank_t result;
 	result.ALL = (*((volatile u8*)(addr)));
