@@ -567,8 +567,18 @@ s32 TR5X6_FLASH_Flush(void){ return 0; }
 // Waits a running internal write cycle out (5 ms typical): the part NAKs
 // every address until it is done. The probe is two address bytes and no
 // data, which programs nothing. Called with the port already owned.
+// TEMPORARY flight recorder, 2026-08-25 freeze hunt. Read over SWD in RAM:
+// the probe connection resets the chip, so the PERIPHERAL state has to be
+// photographed into RAM by the firmware itself, each display pass.
+// [0] EE_Poll entries      [1] exits on ACK       [2] exhausted (scan ran)
+// [3] before Wait_uS(200)  [4] after Wait_uS(200) [5] last poll status
+// [6] EE_Write calls       [7] EE_Read calls
+// [8] TIM14->CNT sampled   [9] RCC APBENR2       [10] display passes
+volatile u32 tr5x6_ee_dbg[12];
+
 static s32 EE_Poll(void)
 {
+	tr5x6_ee_dbg[0]++;
 	// Two rounds: a hundred refusals is not a write cycle any more, it is a
 	// wedged bus (a slave abandoned mid-transfer holds SDA until it sees
 	// enough clocks - measured 2026-08-25, NACK for ever until power cycle).
@@ -578,16 +588,38 @@ static s32 EE_Poll(void)
 			u8 probe[2] = {0,0};
 			s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, TR5X6_EE_IIC_ADDR, probe, 2);
 			if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
-			if( status == 0 ) return 0;
+			tr5x6_ee_dbg[5] = (u32)status;
+			if( status == 0 ){ tr5x6_ee_dbg[1]++; return 0; }
+			tr5x6_ee_dbg[3]++;
 			ADIOS_DELAY_Wait_uS(200);
+			tr5x6_ee_dbg[4]++;
 		}
 		ADIOS_I2C_BusClear(TR5X6_EE_PORT);
 	}
-	return -1;	// clocked clear and still nothing: a missing chip
+	tr5x6_ee_dbg[2]++;
+	// Still nothing after a bus clear: the master and the lines are fine (a
+	// clean NACK means the START and the address went out), so WHO answers?
+	// Scan the eight EEPROM addresses and say so - a chip that moved to
+	// another address has floating A0..A2 pins, a chip that answers nowhere
+	// needs a power-on reset (brown-out during its write cycles). TEMPORARY
+	// diagnostic for the 2026-08-25 wedge hunt, remove with TR5X6_EE_Test.
+	{
+		char map[9];
+		for(int a=0; a<8; a++){
+			u8 probe[2] = {0,0};
+			s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, 0xA0 | (a<<1), probe, 2);
+			if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
+			map[a] = (status == 0) ? 'A' : ((status == ADIOS_I2C_ERROR_SLAVE_NOT_CONNECTED) ? '.' : 'e');
+		}
+		map[8] = 0;
+		ADIOS_MIDI_SendDebugMessage("[EE] wedge: scan A0..AE = %s (A=ack .=nack e=err)\n", map);
+	}
+	return -1;
 }
 
 static s32 EE_Read(u16 addr, u8 *buf, u16 len)
 {
+	tr5x6_ee_dbg[7]++;
 	ADIOS_I2C_TransferBegin(TR5X6_EE_PORT, ADIOS_I2C_BLOCKING);
 	s32 status = EE_Poll();
 	if( status == 0 ){
@@ -605,6 +637,7 @@ static s32 EE_Read(u16 addr, u8 *buf, u16 len)
 
 static s32 EE_Write(u16 addr, u8 *buf, u16 len)
 {
+	tr5x6_ee_dbg[6]++;
 	// The part writes within ONE 32-byte page: a transfer running past its
 	// end wraps to the page START and overwrites what it just wrote. Split.
 	while( len ){

@@ -672,6 +672,13 @@ s32 MIDIO_SYSEX_Cmd_WriteInfo(u8 cmd_state, u8 midi_in)
 			// start writing the block data, erase the ROM if necessary
 			// check for flash memory range
 			//while(ADIOS_UART_TxBufferUsed(0)>0){};
+			// TEMPORARY trap, 2026-08-25 wedge hunt: the request slot is a single
+			// cell consumed by TASK_ROM_Periodic, and an EEPROM write keeps that
+			// task busy ~10 ms per record - long enough for a streamed editor to
+			// land the NEXT command on top of an unconsumed one. One execution,
+			// one ACK, and the editor waits for the second for ever.
+			if( write_info_req )
+				ADIOS_MIDI_SendDebugMessage("[SYX] info req OVERWRITTEN (%02x -> %02x) bank %d slot %d\n", write_info_req, sysex_cmd, sysex_bank, sysex_slot);
 			write_info_req=sysex_cmd;
 			tr5x6_xfer_state.STAT=XFER_INFO;
 			xfer_time_out=MIDIO_SYSEX_XFER_TIMEOUT;

@@ -228,17 +228,27 @@ static void ADIOS_I2C_V2_ArmWindow(adios_i2c_v2_rec_t *rec, u8 first)
 
 
 /////////////////////////////////////////////////////////////////////////////
+// Silences every interrupt source of the port. The line into the NVIC is
+// level-triggered - OR(flag AND enable) - so disabling the enables is what
+// GUARANTEES it drops, whatever flag is standing.
+/////////////////////////////////////////////////////////////////////////////
+static void ADIOS_I2C_V2_Disarm(I2CV2_TypeDef *base)
+{
+  I2CV2(DisableIT_TX)(base);
+  I2CV2(DisableIT_RX)(base);
+  I2CV2(DisableIT_NACK)(base);
+  I2CV2(DisableIT_ERR)(base);
+  I2CV2(DisableIT_STOP)(base);
+  I2CV2(DisableIT_TC)(base);
+}
+
+/////////////////////////////////////////////////////////////////////////////
 // Ends a transfer: records the outcome, silences the interrupts, releases
 // the caller waiting in TransferWait().
 /////////////////////////////////////////////////////////////////////////////
 static void ADIOS_I2C_V2_Finish(adios_i2c_v2_rec_t *rec, s32 error)
 {
-  I2CV2(DisableIT_TX)(rec->base);
-  I2CV2(DisableIT_RX)(rec->base);
-  I2CV2(DisableIT_NACK)(rec->base);
-  I2CV2(DisableIT_ERR)(rec->base);
-  I2CV2(DisableIT_STOP)(rec->base);
-  I2CV2(DisableIT_TC)(rec->base);
+  ADIOS_I2C_V2_Disarm(rec->base);
 
   rec->error = error;
   rec->busy = 0;
@@ -256,8 +266,22 @@ static void ADIOS_I2C_V2_Step(adios_i2c_v2_rec_t *rec)
 {
   I2CV2_TypeDef *base = rec->base;
 
-  if( !rec->busy )
+  if( !rec->busy ) {
+    // A flag with no transfer running is a flag NOBODY will ever clear - and
+    // this interrupt is level-triggered: returning without disarming means
+    // re-entering for ever, at hardware priority, with every task dead
+    // (hunted through five RAM autopsies on 2026-08-25 before this guard).
+    // Disarm categorically, sweep what is sweepable, drain what is drainable.
+    ADIOS_I2C_V2_Disarm(base);
+    I2CV2(ClearFlag_NACK)(base);
+    I2CV2(ClearFlag_STOP)(base);
+    I2CV2(ClearFlag_BERR)(base);
+    I2CV2(ClearFlag_ARLO)(base);
+    I2CV2(ClearFlag_OVR)(base);
+    if( I2CV2(IsActiveFlag_RXNE)(base) )
+      (void)I2CV2(ReceiveData8)(base);
     return;
+  }
 
   // errors first - any of them ends the transfer
 

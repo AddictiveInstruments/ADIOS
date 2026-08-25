@@ -1612,6 +1612,17 @@ static void TASK_TFT_Periodic(void *pvParameters)
 		if(!APP_LCD_IsReady())return;
 		if(first_start)APP_TFT_Background();	// prints the background
 		if(normal_start){
+#if APP_HARD_REV == 2
+			{ // TEMPORARY flight recorder - see tr5x6_ee_dbg in tr5x6_rom.c
+				extern volatile u32 tr5x6_ee_dbg[12];
+				// [11] counts display passes that saw CNT NOT move - a frozen
+				// timer shows here as a big number in a single snapshot
+				if( (u32)TIM14->CNT == tr5x6_ee_dbg[8] ) tr5x6_ee_dbg[11]++;
+				tr5x6_ee_dbg[8] = TIM14->CNT;
+				tr5x6_ee_dbg[9] = RCC->APBENR2;
+				tr5x6_ee_dbg[10]++;
+			}
+#endif
 			// Digits
 			TFT_Digits();
 			// Heart Beat
