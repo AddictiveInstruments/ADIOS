@@ -351,6 +351,16 @@ static s32 ADIOS_I2C_V2_TransferStart(adios_i2c_v2_rec_t *rec,
     return prev + ADIOS_I2C_ERROR_PREV_OFFSET;
   }
 
+  // Sweep the flags a previous transfer may have left standing. A NACKed
+  // AUTOEND write is the known case: the peripheral sends its automatic
+  // STOP after the NACK, but the NACK branch of Step() has already ended
+  // the transfer and silenced the interrupts, so nobody clears STOPF - and
+  // a stale STOPF makes the NEXT transfer look complete the moment it is
+  // armed, while it is still on the wire. An EEPROM acknowledge-poll is
+  // exactly that NACK hail, which is how this was found (2026-08-25).
+  I2CV2(ClearFlag_STOP)(rec->base);
+  I2CV2(ClearFlag_NACK)(rec->base);
+
   rec->buffer = buffer;
   rec->len = len;
   rec->ix = 0;
