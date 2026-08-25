@@ -72,6 +72,23 @@
 // It never diverged - the 626 line forced 32 slots instead of its real 30
 // precisely so both would land on the same offset.
 #define TR5X6_FLASH_BANK_INFO_OFFSET 	(64*TR5X6_FLASH_INFO_SIZE)
+#if APP_HARD_REV == 2
+/* AT24C64 on I2C2 (PB13/PB14), 8K. Byte addressed and erase-free, so the
+   page geometry above does not apply: the records pack flat.
+     0x0000  slot records   (bank*slot_num + slot)*28   505: 7168 bytes
+     0x1C00  bank records    bank*28                    505:  448 bytes
+     0x1FFF  current bank number
+   The system fields (magic, device ID, MIDI bank change settings) do NOT
+   move here: they stay on the last internal flash page, where the
+   bootloader and the boot-time magic read expect them. */
+#define TR5X6_EE_PORT			1		/* ADIOS port 1 = the I2C2 peripheral */
+#define TR5X6_EE_IIC_ADDR		0xA0	/* A0..A2 grounded */
+#define TR5X6_EE_PAGE_SIZE		32
+#define TR5X6_EE_SLOT_BASE		0x0000
+#define TR5X6_EE_BANK_BASE		0x1C00
+#define TR5X6_EE_BANKNUM_ADDR	0x1FFF
+extern s32 TR5X6_EE_Test(void);	/* TEMPORARY bring-up test - remove with its call */
+#endif
 /* Structures ----------------------------------------------------------------*/
 typedef enum
 {
@@ -226,6 +243,10 @@ extern u8 tr5x6_bc_chn;		/* 1..16 - TX always, RX when OMNI is off   */
 extern u8 tr5x6_bc_omni;	/* RX on every channel                      */
 extern s32  TR5X6_ROM_BankChangeStore(u8 ctrl, u8 chn, u8 omni);
 extern void TR5X6_ROM_BankChangeRecall(void);
+/* burns the record page held in RAM, if one owes it (APP_HARD_REV 1; always
+   a no-op on 2 - EEPROM writes do not pend). Call it when the line is
+   quiet: the burn freezes the core. */
+extern s32 TR5X6_FLASH_Flush(void);
 #if 0
 extern s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_mem);
 extern tr5x6_flash_mem_Bank_t TR5X6_FLASH_MemBank_Get(u8 group, u8 pattern);

@@ -27,12 +27,21 @@ ADIOS_USE_DYNAMIC_BSL_BOUNDARY = 1
 # (TR5X6_ROM_DeviceIDStore) and the bootloader reads the same two bytes.
 ADIOS_DEVICE_ID_PERSIST = 1
 
-# The last 4 pages of flash are the sound-bank ROM, written at runtime - they
-# are NOT part of the application image, so they have to leave the linker's
-# FLASH region: otherwise a growing application would be placed on top of them
-# and destroy them at the first bank write, without a word at build time.
-# The device-ID record above lives in the last two bytes of this same region.
+# Flash pages at the top of memory that belong to the application but not to
+# its image - they leave the linker's FLASH region, so a growing application
+# fails to LINK instead of destroying them at the first write.
+# How many depends on the board revision, and the revision is decided in
+# adios_config.h (APP_HARD_REV, where the C side reads it) - so it is
+# extracted from there rather than repeated here, where the two copies
+# would drift apart:
+#   1 - no EEPROM: the bank records live in the last 4 pages
+#   2 - AT24C64:   only the system page (magic, device ID, settings) stays
+APP_HARD_REV := $(shell sed -n 's/^\#define APP_HARD_REV[ \t]*\([0-9]*\).*/\1/p' adios_config.h)
+ifeq ($(APP_HARD_REV),2)
+ADIOS_USERDATA_PAGES = 1
+else
 ADIOS_USERDATA_PAGES = 4
+endif
 
 
 ################################################################################

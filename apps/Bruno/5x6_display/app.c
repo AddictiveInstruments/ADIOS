@@ -304,6 +304,11 @@ void APP_Init(void)
 	TR5X6_ROM_Init();		// bank shift, A17 mux, slot table
 	TR5X6_ROM_BankChangeRecall();	// the MIDI bank change settings, or their
 					// defaults on a board that predates them
+#if APP_HARD_REV == 2
+	// TEMPORARY bring-up: prove the EEPROM before anything relies on it.
+	// Reports on the debug port, then boots on. Remove with TR5X6_EE_Test.
+	TR5X6_EE_Test();
+#endif
 	TR5X6_ROM_HOST();
 	TR5X6_DECOD_LCD_Init();		// the right decoder, the right CS edge,
 					// and only then the interrupt
@@ -1672,6 +1677,10 @@ static void TASK_TFT_Periodic(void *pvParameters)
 			TFT_Group();
 			// MIDI activity
 			TFT_MidiActivity();
+			// Burn whatever the record writers piled up, the moment no
+			// transfer runs any more - burning under an incoming stream is
+			// the timeout bug of 25/08. A no-op when nothing is pending.
+			if( tr5x6_xfer_state.STAT == XFER_IDLE ) TR5X6_FLASH_Flush();
 
 			APP_LCD_FColourSet(APP_LCD_WHITE);
 		}

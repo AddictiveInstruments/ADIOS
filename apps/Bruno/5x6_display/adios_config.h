@@ -28,7 +28,22 @@
 //       there: byte addressable, no erase, a million cycles.
 // The SysEx device ID never moves - last two bytes of internal flash in
 // BOTH revisions, because that is where the bootloader looks.
-#define APP_HARD_REV 1
+#define APP_HARD_REV 1	// the Makefile reads this line too: it sizes
+				// ADIOS_USERDATA_PAGES (4 pages of records, or 1
+				// system page) and with it the linker reservation
+
+#if APP_HARD_REV == 2
+// The AT24C64's bus - the one I2C pair this board has left: I2C1's three pin
+// options all land on the ROM bus or a MIDI line, and I2C2's default
+// PB10/PB11 are the TFT's SPI. So I2C2 on PB13/PB14 (AF6), the only free
+// pair. ADIOS numbering starts at 0: ADIOS_I2C1 IS the I2C2 peripheral, and
+// core/main.c initialises it by itself.
+#define ADIOS_USE_I2C1
+#define ADIOS_I2C1_SCL_PORT	GPIOB
+#define ADIOS_I2C1_SCL_PIN	LL_GPIO_PIN_13
+#define ADIOS_I2C1_SDA_PORT	GPIOB
+#define ADIOS_I2C1_SDA_PIN	LL_GPIO_PIN_14
+#endif
 
 // ONE firmware, BOTH machines. Which one this board is bolted into comes
 // from the flash magic at boot - see APP_Init and tr5x6_unit_t. There is
