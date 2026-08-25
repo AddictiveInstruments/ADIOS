@@ -500,6 +500,88 @@ s32 ADIOS_I2C_TransferFinished(u8 i2c_port)
 }
 
 
+
+/////////////////////////////////////////////////////////////////////////////
+//! Clocks a wedged bus clear again.
+//!
+//! A slave abandoned mid-transfer keeps driving SDA (it is still shifting
+//! out the byte it was asked for) and the bus is dead until it sees enough
+//! clocks to finish - power cycling was the only cure. The standard remedy:
+//! up to nine SCL pulses by hand, then a STOP, then the peripheral's state
+//! machine reset through PE.
+//!
+//! HOW TO USE IT
+//!   1. call it when a transfer chain fails persistently (NACK or timeout
+//!      on every retry), with the port taken via ADIOS_I2C_TransferBegin()
+//!   2. retry the transfer ONCE afterwards - a second failure means the
+//!      problem is not a wedged slave
+//!
+//! \param[in] i2c_port the port (0..2)
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 ADIOS_I2C_BusClear(u8 i2c_port)
+{
+  GPIO_TypeDef *scl_port, *sda_port;
+  u32 scl_pin, sda_pin;
+  I2CV2_TypeDef *base;
+
+  switch( i2c_port ) {
+#ifdef ADIOS_USE_I2C0
+    case 0:
+      scl_port = ADIOS_I2C0_SCL_PORT; scl_pin = ADIOS_I2C0_SCL_PIN;
+      sda_port = ADIOS_I2C0_SDA_PORT; sda_pin = ADIOS_I2C0_SDA_PIN;
+      base = ADIOS_I2C0_PTR;
+      break;
+#endif
+#ifdef ADIOS_USE_I2C1
+    case 1:
+      scl_port = ADIOS_I2C1_SCL_PORT; scl_pin = ADIOS_I2C1_SCL_PIN;
+      sda_port = ADIOS_I2C1_SDA_PORT; sda_pin = ADIOS_I2C1_SDA_PIN;
+      base = ADIOS_I2C1_PTR;
+      break;
+#endif
+    default:
+      return ADIOS_I2C_ERROR_INVALID_PORT;
+  }
+
+  // take SCL over as a plain output - it keeps its open-drain and pull-up
+  // from the init, so this only changes WHO drives it. ODR high first, or
+  // the mode switch itself would glitch the line low.
+  LL_GPIO_SetOutputPin(scl_port, scl_pin);
+  LL_GPIO_SetPinMode(scl_port, scl_pin, LL_GPIO_MODE_OUTPUT);
+
+  // nine clocks at ~100 kHz, or fewer if SDA lets go before that
+  for(int i=0; i<9; ++i) {
+    LL_GPIO_ResetOutputPin(scl_port, scl_pin);
+    ADIOS_DELAY_Wait_uS(5);
+    LL_GPIO_SetOutputPin(scl_port, scl_pin);
+    ADIOS_DELAY_Wait_uS(5);
+    if( LL_GPIO_IsInputPinSet(sda_port, sda_pin) )
+      break;
+  }
+
+  // a STOP by hand: SDA low, then released while SCL is high
+  LL_GPIO_SetOutputPin(sda_port, sda_pin);
+  LL_GPIO_SetPinMode(sda_port, sda_pin, LL_GPIO_MODE_OUTPUT);
+  LL_GPIO_ResetOutputPin(sda_port, sda_pin);
+  ADIOS_DELAY_Wait_uS(5);
+  LL_GPIO_SetOutputPin(sda_port, sda_pin);
+  ADIOS_DELAY_Wait_uS(5);
+
+  // both lines back to the peripheral
+  LL_GPIO_SetPinMode(scl_port, scl_pin, LL_GPIO_MODE_ALTERNATE);
+  LL_GPIO_SetPinMode(sda_port, sda_pin, LL_GPIO_MODE_ALTERNATE);
+
+  // and ITS state machine reset too - PE low resets it and releases the
+  // lines (RM0454), configuration registers are kept
+  I2CV2(Disable)(base);
+  (void)I2CV2(IsEnabled)(base);   // PE must stay low a few APB cycles
+  I2CV2(Enable)(base);
+
+  return 0;
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
 //! Starts a transfer. Returns as soon as it is armed - use
 //! ADIOS_I2C_TransferWait() to know how it ended.

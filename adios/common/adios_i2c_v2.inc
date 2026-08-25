@@ -408,6 +408,14 @@ static s32 ADIOS_I2C_V2_TransferWait(adios_i2c_v2_rec_t *rec)
     // nothing came back: drop the peripheral out of the transfer rather
     // than leave it half-armed for the next caller
     ADIOS_I2C_V2_Finish(rec, ADIOS_I2C_ERROR_TIMEOUT);
+    // A timed-out transfer is still ON THE WIRE - the slave may sit mid
+    // byte, stretching for ever, and rearming CR2 over it desynchronises
+    // the poor thing into a permanent NACK (measured 2026-08-25: an EEPROM
+    // wedged until power cycle). PE low resets the peripheral's state
+    // machine and releases the lines; the configuration is kept.
+    I2CV2(Disable)(rec->base);
+    (void)I2CV2(IsEnabled)(rec->base);   // PE must stay low a few APB cycles
+    I2CV2(Enable)(rec->base);
     return ADIOS_I2C_ERROR_TIMEOUT;
   }
 

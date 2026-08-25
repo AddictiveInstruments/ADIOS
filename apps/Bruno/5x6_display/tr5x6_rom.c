@@ -569,14 +569,21 @@ s32 TR5X6_FLASH_Flush(void){ return 0; }
 // data, which programs nothing. Called with the port already owned.
 static s32 EE_Poll(void)
 {
-	for(int i=0; i<100; i++){
-		u8 probe[2] = {0,0};
-		s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, TR5X6_EE_IIC_ADDR, probe, 2);
-		if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
-		if( status == 0 ) return 0;
-		ADIOS_DELAY_Wait_uS(200);
+	// Two rounds: a hundred refusals is not a write cycle any more, it is a
+	// wedged bus (a slave abandoned mid-transfer holds SDA until it sees
+	// enough clocks - measured 2026-08-25, NACK for ever until power cycle).
+	// Clock it clear and give it ONE more round.
+	for(int round=0; round<2; round++){
+		for(int i=0; i<100; i++){
+			u8 probe[2] = {0,0};
+			s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, TR5X6_EE_IIC_ADDR, probe, 2);
+			if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
+			if( status == 0 ) return 0;
+			ADIOS_DELAY_Wait_uS(200);
+		}
+		ADIOS_I2C_BusClear(TR5X6_EE_PORT);
 	}
-	return -1;	// 20 ms without an ACK: not a write cycle, a missing chip
+	return -1;	// clocked clear and still nothing: a missing chip
 }
 
 static s32 EE_Read(u16 addr, u8 *buf, u16 len)

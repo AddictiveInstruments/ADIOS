@@ -28,7 +28,7 @@
 //       there: byte addressable, no erase, a million cycles.
 // The SysEx device ID never moves - last two bytes of internal flash in
 // BOTH revisions, because that is where the bootloader looks.
-#define APP_HARD_REV 1	// the Makefile reads this line too: it sizes
+#define APP_HARD_REV 2	// the Makefile reads this line too: it sizes
 				// ADIOS_USERDATA_PAGES (4 pages of records, or 1
 				// system page) and with it the linker reservation
 
@@ -39,6 +39,11 @@
 // pair. ADIOS numbering starts at 0: ADIOS_I2C1 IS the I2C2 peripheral, and
 // core/main.c initialises it by itself.
 #define ADIOS_USE_I2C1
+// The bus shares the machine with the decoder's EXTI storm, which delays
+// the I2C interrupt - the master stretches SCL meanwhile, and the default
+// 5 ms wait budget can expire on a perfectly healthy 28-byte read. The
+// abort that follows is what wedged the EEPROM on 2026-08-25.
+#define ADIOS_I2C_TIMEOUT_VALUE 50000
 #define ADIOS_I2C1_SCL_PORT	GPIOB
 #define ADIOS_I2C1_SCL_PIN	LL_GPIO_PIN_13
 #define ADIOS_I2C1_SDA_PORT	GPIOB
