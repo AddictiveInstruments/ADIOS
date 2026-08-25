@@ -609,6 +609,16 @@ void *__dso_handle = NULL;
 
 
 /////////////////////////////////////////////////////////////////////////////
+// The hard fault BLACK BOX, filled before anything else is attempted: the
+// debug prints below rarely get out (a fault inside a masked region leaves
+// the UART interrupt dead), but this record survives in RAM while the
+// machine sits in _abort() - read it over SWD. A soft reset clears it with
+// the rest of .bss, so read BEFORE any probe connection that resets the
+// target. Learned the hard way on 2026-08-25: a freeze whose only witness
+// was an EMPTY HardFault_Handler left nothing to read at all.
+// [0] 0xDEADFA17  [1] pc  [2] lr  [3] psr  [4..7] r0..r3  [8] r12
+volatile unsigned int adios_hardfault_record[9];
+
 // Customized HardFault Handler which prints out debugging informations
 /////////////////////////////////////////////////////////////////////////////
 void HardFault_Handler_c(unsigned int * hardfault_args)
@@ -633,6 +643,16 @@ void HardFault_Handler_c(unsigned int * hardfault_args)
   stacked_lr = ((unsigned long) hardfault_args[5]);
   stacked_pc = ((unsigned long) hardfault_args[6]);
   stacked_psr = ((unsigned long) hardfault_args[7]);
+
+  adios_hardfault_record[0] = 0xDEADFA17;
+  adios_hardfault_record[1] = stacked_pc;
+  adios_hardfault_record[2] = stacked_lr;
+  adios_hardfault_record[3] = stacked_psr;
+  adios_hardfault_record[4] = stacked_r0;
+  adios_hardfault_record[5] = stacked_r1;
+  adios_hardfault_record[6] = stacked_r2;
+  adios_hardfault_record[7] = stacked_r3;
+  adios_hardfault_record[8] = stacked_r12;
   ADIOS_MIDI_SendDebugMessage("Hard Fault PC = %08x\n", stacked_pc); // ensure that at least the PC will be sent
   ADIOS_MIDI_SendDebugMessage("==================\n");
   ADIOS_MIDI_SendDebugMessage("!!! HARD FAULT !!!\n");
@@ -645,23 +665,39 @@ void HardFault_Handler_c(unsigned int * hardfault_args)
   ADIOS_MIDI_SendDebugMessage("LR = %08x\n", stacked_lr);
   ADIOS_MIDI_SendDebugMessage("PC = %08x\n", stacked_pc);
   ADIOS_MIDI_SendDebugMessage("PSR = %08x\n", stacked_psr);
+#if (__CORTEX_M >= 3)
+  // fault status registers - ARMv7-M only. Reading these addresses on an
+  // M0+ is itself a fault, which would recurse right back in here.
   ADIOS_MIDI_SendDebugMessage("BFAR = %08x\n", (*((volatile unsigned long *)(0xE000ED38))));
   ADIOS_MIDI_SendDebugMessage("CFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED28))));
   ADIOS_MIDI_SendDebugMessage("HFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED2C))));
   ADIOS_MIDI_SendDebugMessage("DFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED30))));
   ADIOS_MIDI_SendDebugMessage("AFSR = %08x\n", (*((volatile unsigned long *)(0xE000ED3C))));
+#endif
 
   _abort();
 }
 
 
-void HardFault_Handler(void)
+// Hands the STACKED FRAME to the C handler above. The frame went onto MSP or
+// PSP depending on who faulted - bit 2 of EXC_RETURN says which. Written in
+// ARMv6-M (no IT blocks, no MRSEQ): the M3 version that used to sit here,
+// commented out, left the handler EMPTY on M0+ - so a fault RETURNED to the
+// faulting instruction and refaulted for ever, freezing the machine without
+// one byte of trace. That silence cost a full SWD autopsy on 2026-08-25.
+__attribute__((naked)) void HardFault_Handler(void)
 {
-//  __asm("TST LR, #4");
-//  __asm("ITE EQ");
-//  __asm("MRSEQ R0, MSP");
-//  __asm("MRSNE R0, PSP");
-//  __asm("B HardFault_Handler_c");
+  __asm volatile(
+    "  movs r0, #4        \n"
+    "  mov  r1, lr        \n"
+    "  tst  r1, r0        \n"
+    "  beq  1f            \n"
+    "  mrs  r0, psp       \n"
+    "  b    2f            \n"
+    "1: mrs  r0, msp      \n"
+    "2: ldr  r1, =HardFault_Handler_c \n"
+    "  bx   r1            \n"
+  );
 }
 
 // used if configCHECK_FOR_STACK_OVERFLOW enabled (set to 1 or 2) in FreeRTOSConfig.h
