@@ -53,6 +53,9 @@
 static void Legend_Draw(int x, int y, const char *func, const char *butt);
 static void SettingsMenu_Draw(void);
 static void SettingsMenu_Legend(void);
+static void SettingsMenu_Value(u8 row);
+static void SettingsMenu_List(u8 sel);
+static void BankChange_Page(void);
 static void Formatting_Page(void);
 static void UnitSelect_Page(u8 unit_sel, u8 allow_exit);
 static u8   UnitSelect_Ask(u8 unit_sel, u8 allow_exit);
@@ -64,7 +67,6 @@ static void About_Page(void);
 static void Version_Print(u16 x, u16 y);
 static void TASK_SettingsMenu(void *pvParameters);
 static void TASK_TFT_Periodic(void *pvParameters);
-static u8   TFT_BankInhibit(void);
 static void TFT_Digits(void);
 static void TFT_Beat(void);
 static void TFT_BankSelect(void);
@@ -84,6 +86,8 @@ static void TASK_ROM_Periodic(void *pvParameters);
 static void APP_TFT_Background(void);
 static s32 NOTIFY_MIDI_TimeOut(adios_midi_port_t port);
 static s32 NOTIFY_MIDI_Rx(adios_midi_port_t port, u8 byte);
+static void MIDI_BankChange_Rx(adios_midi_package_t midi_package);
+static void MIDI_BankChange_Tx(u8 bank);
 
 TaskHandle_t xSettings = NULL;
 TaskHandle_t xTFTRefresh = NULL;
@@ -91,9 +95,15 @@ TaskHandle_t xROMCheck = NULL;
 static u8 normal_start = 0;
 u32 old_count;
 u8 old_segments[40];
-static u8 bank_change_inhibit = 0;
 static u8 first_start = 1;
 static u8 bank_changed = 0;
+
+// A bank number that arrived over MIDI, waiting for the display task to act
+// on it. Deliberately NOT applied by the callback: it owns neither the ROM
+// bus, nor the transfer state, nor the screen. TFT_BankSelect owns all three
+// and stays the one place a bank change happens, buttons and MIDI alike.
+static u8 midi_bank_req = 0;
+static u8 midi_bank_num = 0;
 
 // Grid state - only the 626 has a grid, but one firmware serves both.
 static u8 inst_change_exit=0;
@@ -115,6 +125,38 @@ static u8 menu_edit = 0;
 static u8 last_id = 0;
 static u8 curr_id = 0;
 static u8 formatting=0;
+
+// ---- the settings menu, its rows and its columns -------------------------
+#define MENU_NUM	4
+#define MENU_SEL_NONE	0xff
+// SysEx device ID, 0-15. The protocol carries seven bits, but nothing on
+// this bus ever needed more than a nibble, and a shorter roll is quicker to
+// walk through on four buttons.
+#define DEVICE_ID_MASK	0x0f
+enum {
+	MENU_DEVICE_ID = 0,
+	MENU_BANK_CHANGE,
+	MENU_FORMAT,
+	MENU_ABOUT
+};
+// its MIDI bank change page
+#define MENU_BC_NUM	3
+enum {
+	MENU_BC_CTRL = 0,
+	MENU_BC_CHN,
+	MENU_BC_OMNI
+};
+// The list moved left: "SYSEX Device ID:" is eight characters longer than the
+// label it replaces and used to run into its own value.
+#define MENU_X_LABEL	60
+#define MENU_X_VALUE	290
+#define MENU_Y_ROW(i)	(y_offset+40+20*(i))
+
+static u8 menu_sub = 0;		// which line of the bank change page
+static u8 menu_sub_edit = 0;	// ...and whether its value is being edited
+static u8 bc_ctrl_cur = 0;	// the three settings while under the cursor,
+static u8 bc_chn_cur = 0;	// loaded from tr5x6_bc_* on entering the page
+static u8 bc_omni_cur = 0;	// and written back one at a time on ENTER
 
 //// define a Mutex for LCD access
 //xSemaphoreHandle xSPISemaphore;
@@ -260,13 +302,15 @@ void APP_Init(void)
 
 	// ---- 3. machine-dependent ---------------------------------------------
 	TR5X6_ROM_Init();		// bank shift, A17 mux, slot table
+	TR5X6_ROM_BankChangeRecall();	// the MIDI bank change settings, or their
+					// defaults on a board that predates them
 	TR5X6_ROM_HOST();
 	TR5X6_DECOD_LCD_Init();		// the right decoder, the right CS edge,
 					// and only then the interrupt
 
 	// ---- and now the three roads ------------------------------------------
 	if( rom_empty ){
-		menu_pos = 1;
+		menu_pos = MENU_FORMAT;
 		menu_edit = 1;
 		formatting = 1;
 		APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Format   BANKs");
@@ -276,7 +320,7 @@ void APP_Init(void)
 
 	}else if( tr5x6_decod_buttons.ALL==0x0a ){
 		tr5x6_decod_buttons_flags.ALL=0;
-		curr_id = ADIOS_MIDI_DeviceIDGet();
+		curr_id = ADIOS_MIDI_DeviceIDGet() & DEVICE_ID_MASK;
 		last_id = curr_id;
 		SettingsMenu_Draw();
 		SettingsMenu_Legend();
@@ -372,6 +416,59 @@ void APP_MIDI_NotifyPackage(adios_midi_port_t port, adios_midi_package_t midi_pa
 {
 	if(port==DIN0){
 		if(normal_start)ADIOS_MIDI_SendPackage(DIN2,  midi_package);
+	}else if(port==DIN2){
+		MIDI_BankChange_Rx(midi_package);
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// external bank change, in
+//
+// Whichever message is chosen acts ALONE - we do not wait for the Program
+// Change that the standard makes follow a Bank Select, because half the
+// senders never send one.
+//
+// Runs in the MIDI callback: it records the request and nothing more, the
+// display task does the work. See midi_bank_req.
+/////////////////////////////////////////////////////////////////////////////
+static void MIDI_BankChange_Rx(adios_midi_package_t midi_package)
+{
+	if(!normal_start || tr5x6_bc_ctrl == BC_CTRL_NONE) return;
+	if(!tr5x6_bc_omni && midi_package.chn != (tr5x6_bc_chn-1)) return;
+
+	u8 bank;
+	switch(tr5x6_bc_ctrl){
+		case BC_CTRL_PC:
+			if(midi_package.event != ProgramChange) return;
+			bank = midi_package.program_change;
+			break;
+		case BC_CTRL_CC00:
+		case BC_CTRL_CC32:
+			if(midi_package.event != CC) return;
+			if(midi_package.cc_number != ((tr5x6_bc_ctrl==BC_CTRL_CC00) ? 0 : 32)) return;
+			bank = midi_package.value;
+			break;
+		default: return;
+	}
+	midi_bank_num = bank;	// masked to this machine's bank count by TFT_BankSelect
+	midi_bank_req = 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// ...and out
+//
+// Only ever from the button path: echoing back what came in over MIDI would
+// loop against any sender that echoes too. Neither first_start nor a bank
+// rename from the editor is a bank change either - they only redraw.
+/////////////////////////////////////////////////////////////////////////////
+static void MIDI_BankChange_Tx(u8 bank)
+{
+	adios_midi_chn_t chn = (adios_midi_chn_t)(tr5x6_bc_chn-1);
+	switch(tr5x6_bc_ctrl){
+		case BC_CTRL_PC:   ADIOS_MIDI_SendProgramChange(DIN2, chn, bank); break;
+		case BC_CTRL_CC00: ADIOS_MIDI_SendCC(DIN2, chn,  0, bank); break;
+		case BC_CTRL_CC32: ADIOS_MIDI_SendCC(DIN2, chn, 32, bank); break;
+		default: break;
 	}
 }
 
@@ -968,24 +1065,6 @@ static void TFT_BankChange(u8 bank_num)
 /////////////////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////
-// Sound bank change is only allowed while the machine is showing its bank
-// page. The rule is the same on both hosts - only the labels that mean "we
-// are on that page" differ, because the two front panels do not carry the
-// same legends.
-// Returns the flag instead of writing it: these elements are meant to move
-// to a file of their own, and nothing that leaves app.c may touch app.c's
-// statics.
-/////////////////////////////////////////////////////////////////////////////
-static u8 TFT_BankInhibit(void)
-{
-	u8 on_bank_page;
-	on_bank_page = IS_505 ? tr5x6_decod_labels.grp_pat
-	                      : (tr5x6_decod_labels.measure || tr5x6_decod_labels.tempo);
-
-	return on_bank_page ? 0 : 1;
-}
-
-/////////////////////////////////////////////////////////////////////////////
 // The unit's own 7-segment digits, mirrored on the TFT. One digit per bit of
 // tr5x6_decod_digits_flags, cleared as it is drawn.
 /////////////////////////////////////////////////////////////////////////////
@@ -1015,60 +1094,65 @@ static void TFT_Beat(void)
 	}
 }
 
-// Sound bank up/down, then read the bank name back from flash and show it.
+/////////////////////////////////////////////////////////////////////////////
+// Update the selected bank on request and prints it
+/////////////////////////////////////////////////////////////////////////////
 static void TFT_BankSelect(void)
 {
-	// The two hosts do not trigger this the same way: the 505 acts on inc/dec
-	// alone, the 626 wants INST held down at the same time - its front panel
-	// gives those two buttons another job otherwise. The inhibit is honoured
-	// on the 505 only; on the 626 it was commented out and stays that way,
-	// its trigger already requiring INST.
-	u8 trigger;
-	u8 allowed;
-	if(IS_505){
-		trigger = (tr5x6_decod_buttons_flags.inc & tr5x6_decod_buttons.inc)
-		       || (tr5x6_decod_buttons_flags.dec & tr5x6_decod_buttons.dec);
-		allowed = !bank_change_inhibit;
-	}else{
-		trigger = tr5x6_decod_buttons.inst
-		       && ( (tr5x6_decod_buttons_flags.inc & tr5x6_decod_buttons.inc)
-		         || (tr5x6_decod_buttons_flags.dec & tr5x6_decod_buttons.dec) );
-		allowed = 1;
-	}
+	// INST held is what tells BOTH hosts to leave INC/DEC alone: the 626 by
+	// design, the 505 the same way. Without it the press belongs to whatever
+	// parameter page the host is on, and changing the bank would edit that
+	// parameter at the same time - so it is not even a redraw reason.
+	u8 inc = tr5x6_decod_buttons.inst && (tr5x6_decod_buttons_flags.inc & tr5x6_decod_buttons.inc);
+	u8 dec = tr5x6_decod_buttons.inst && (tr5x6_decod_buttons_flags.dec & tr5x6_decod_buttons.dec);
+	u8 trigger = inc || dec
+	          || first_start
+	          || tr5x6_sysex_bank_info_refresh
+	          || midi_bank_req;
+	if( trigger ){
+		u8 bank_num = TR5X6_ROM_BankGet();
 
-	if( !(trigger || first_start || tr5x6_sysex_bank_info_refresh) )
-		return;
-
-	if(allowed){
-			u8 bank_num = TR5X6_ROM_BankGet();
-			if((tr5x6_decod_buttons_flags.inc==1) && (tr5x6_decod_buttons.inc==1) ){
+		// on MIDI Bank Change event (has priority)
+		if( midi_bank_req ){
+			bank_num = midi_bank_num;
+			bank_num &=(tr5x6_unit->bank_num-1);
+			TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
+		// on Panel Buttons Bank Change
+		}else{
+			if( inc ){
 				bank_num +=1;
 				bank_num &=(tr5x6_unit->bank_num-1);
 				TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
-			}else if((tr5x6_decod_buttons_flags.dec==1) && (tr5x6_decod_buttons.dec==1) ){
+				MIDI_BankChange_Tx(bank_num);
+			}else if( dec ){
 				bank_num -=1;
 				bank_num &=(tr5x6_unit->bank_num-1);
 				TR5X6_ROM_BankSet(bank_num, (tr5x6_xfer_state.STAT<=XFER_END)?1:0);
+				MIDI_BankChange_Tx(bank_num);
 			}
+		}
 
-			bank_changed=1;
-			tr5x6_flash_info_t slot;
-			slot.bank=bank_num;
-			slot.slot=0;
-			TR5X6_FLASH_BankRead(&slot);
-			APP_LCD_FColourSetRGB(slot.color);
-			APP_LCD_PrintFormattedString(x_offset+104, y_offset+144, (10*23)-10, APP_LCD_STRING_ALIGN_LEFT, -32, "%d-%s", bank_num+1, slot.name);
+		// Screen Refresh
+		bank_changed=1;
+		tr5x6_flash_info_t slot;
+		slot.bank=bank_num;
+		slot.slot=0;
+		TR5X6_FLASH_BankRead(&slot);
+		APP_LCD_FColourSetRGB(slot.color);
+		APP_LCD_PrintFormattedString(x_offset+104, y_offset+144, (10*23)-10, APP_LCD_STRING_ALIGN_LEFT, -32, "%d-%s", bank_num+1, slot.name);
+
+		// The trailing state, kept inside the trigger on BOTH hosts. On the 626 it
+		// used to sit outside, so it ran on every pass of the display task even
+		// when no button had been pressed.
+		midi_bank_req = 0;
+		if(first_start)bank_changed=0;
+		first_start=0;
+		tr5x6_sysex_bank_info_refresh = 0;
 	}
-
-	// The trailing state, kept inside the trigger on BOTH hosts. On the 626 it
-	// used to sit outside, so it ran on every pass of the display task even
-	// when no button had been pressed.
 	if(IS_505) tr5x6_decod_buttons_flags.ALL = 0;
 	else     { tr5x6_decod_buttons_flags.inc = 0;
 	           tr5x6_decod_buttons_flags.dec = 0; }
-	tr5x6_sysex_bank_info_refresh = 0;
-	if(first_start)bank_changed=0;
-	first_start=0;
+
 }
 
 // The ONE line the transfer state machine does not share: which selection
@@ -1523,8 +1607,6 @@ static void TASK_TFT_Periodic(void *pvParameters)
 		if(!APP_LCD_IsReady())return;
 		if(first_start)APP_TFT_Background();	// prints the background
 		if(normal_start){
-			// check Bank Inhibit
-			bank_change_inhibit = TFT_BankInhibit();
 			// Digits
 			TFT_Digits();
 			// Heart Beat
@@ -1628,20 +1710,103 @@ s32 NOTIFY_MIDI_TimeOut(adios_midi_port_t port){
 }
 
 
+/////////////////////////////////////////////////////////////////////////////
+// The settings menu, as a table rather than a copy of the whole list per
+// cursor position. Adding an entry is one line here and one case in
+// TASK_SettingsMenu, instead of a new copy in every branch of both.
+/////////////////////////////////////////////////////////////////////////////
+static const char * const menu_labels[MENU_NUM] = {
+	"SYSEX   Device   ID:",
+	"MIDI   Bank   Change",
+	"Format   BANKs",
+	"About"
+};
+
+static const char * const menu_bc_labels[MENU_BC_NUM] = {
+	"Control:",
+	"Channel:",
+	"OMNI   RX:"
+};
+
+static const char * const bc_ctrl_names[BC_CTRL_NUM] = { "NONE", "PC", "CC#0", "CC#32" };
+
+// The value column of one top-level row. Only the device ID carries one, but
+// the loop asks every row so a future entry only has to answer here.
+static void SettingsMenu_Value(u8 row)
+{
+	if(row == MENU_DEVICE_ID)
+		APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(row), 40, APP_LCD_STRING_ALIGN_LEFT, -32, "%d", curr_id);
+}
+
+// Draws the whole list. sel is the highlighted row, or MENU_SEL_NONE - which
+// is what editing the device ID wants: the list greys out and only the value
+// under edit stays white.
+static void SettingsMenu_List(u8 sel)
+{
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Settings   Menu");
+	// the cursor column, wiped over the whole list before one arrow goes back
+	APP_LCD_Rectangle(MENU_X_LABEL-11, MENU_Y_ROW(0), 7, 20*MENU_NUM-9, 0, 0, 1, 0);
+	for(u8 i=0; i<MENU_NUM; i++){
+		APP_LCD_FColourSet((i==sel) ? APP_LCD_WHITE : APP_LCD_LIGHTGREY);
+		if(i==sel)
+			APP_LCD_PrintString(MENU_X_LABEL-4, MENU_Y_ROW(i), 0, APP_LCD_STRING_ALIGN_RIGHT, -32, ">");
+		APP_LCD_PrintString(MENU_X_LABEL, MENU_Y_ROW(i), 0, APP_LCD_STRING_ALIGN_LEFT, -32, menu_labels[i]);
+		// the value stays grey until that line is actually being edited - the
+		// same cue the bank change page uses
+		APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
+		SettingsMenu_Value(i);
+	}
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// the MIDI bank change page
+//
+// Three lines, same shape and same columns as the list above it. Each value
+// is written to flash the moment it is confirmed, exactly as the device ID
+// is - so leaving the page never has anything left to save, and cancelling
+// one line never has to undo another.
+/////////////////////////////////////////////////////////////////////////////
+static void BankChange_Page(void)
+{
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "MIDI   Bank   Change");
+	APP_LCD_Rectangle(MENU_X_LABEL-11, MENU_Y_ROW(0), 7, 20*MENU_BC_NUM-9, 0, 0, 1, 0);
+	for(u8 i=0; i<MENU_BC_NUM; i++){
+		u8 on_row = (i==menu_sub);
+		// the row is white while the cursor picks it, the VALUE goes white
+		// instead once that line is being edited - so which of the two the
+		// buttons are moving is never in doubt
+		APP_LCD_FColourSet((on_row && !menu_sub_edit) ? APP_LCD_WHITE : APP_LCD_LIGHTGREY);
+		if(on_row && !menu_sub_edit)
+			APP_LCD_PrintString(MENU_X_LABEL-4, MENU_Y_ROW(i), 0, APP_LCD_STRING_ALIGN_RIGHT, -32, ">");
+		APP_LCD_PrintString(MENU_X_LABEL, MENU_Y_ROW(i), 0, APP_LCD_STRING_ALIGN_LEFT, -32, menu_bc_labels[i]);
+		APP_LCD_FColourSet((on_row && menu_sub_edit) ? APP_LCD_WHITE : APP_LCD_LIGHTGREY);
+		if(i==MENU_BC_CTRL)
+			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", bc_ctrl_names[bc_ctrl_cur]);
+		else if(i==MENU_BC_CHN)
+			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%d", bc_chn_cur);
+		else
+			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", bc_omni_cur ? "On" : "Off");
+	}
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+}
+
 void SettingsMenu_Draw(void){
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
 
 	if(menu_edit){
-		if(menu_pos==0){
+		if(menu_pos==MENU_DEVICE_ID){
+			SettingsMenu_List(MENU_SEL_NONE);
 			APP_LCD_FColourSet(APP_LCD_WHITE);
-			APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Settings   Menu");
-			APP_LCD_PrintFormattedString(250, y_offset+40, 40,  APP_LCD_STRING_ALIGN_LEFT, -32, "%d", curr_id);
-			APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
-			APP_LCD_PrintString(120, y_offset+40, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Device   ID:");
-			APP_LCD_PrintString(120, y_offset+60, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Format   BANKs");
-			APP_LCD_FColourSet(APP_LCD_WHITE);
-		}else if(menu_pos==1){
+			SettingsMenu_Value(MENU_DEVICE_ID);
+		}else if(menu_pos==MENU_BANK_CHANGE){
+			BankChange_Page();
+		}else if(menu_pos==MENU_FORMAT){
 			APP_LCD_Clear();	// clear the TFT
 			APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Format   BANKs");
 			APP_LCD_FColourSet(APP_LCD_RED);
@@ -1650,44 +1815,13 @@ void SettingsMenu_Draw(void){
 			APP_LCD_FColourSet(APP_LCD_WHITE);
 			APP_LCD_PrintString(240, y_offset+100, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "It  will  take  around  6  minutes.");
 			APP_LCD_PrintString(240, y_offset+120, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Are you sure?");
-		}else if(menu_pos==2){
+		}else if(menu_pos==MENU_ABOUT){
 			APP_LCD_Clear();	// clear the TFT
-			//APP_LCD_PrintString(bmp, 0, 240, y_offset+10, 0, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "About");
 			About_Page();
 		}
 
 	}else{
-		if(menu_pos==0){
-			APP_LCD_FColourSet(APP_LCD_WHITE);
-			APP_LCD_Rectangle(109, y_offset+40, 7, 51, 0, 0, 1, 0);
-			APP_LCD_PrintString(116, y_offset+40, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, ">");
-			APP_LCD_PrintString(120, y_offset+40, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Device   ID:");
-			APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
-			APP_LCD_PrintFormattedString(250, y_offset+40, 40,  APP_LCD_STRING_ALIGN_LEFT, -32, "%d", curr_id);
-			APP_LCD_PrintString(120, y_offset+60, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Format   BANKs");
-			APP_LCD_PrintString(120, y_offset+80, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "About");
-			APP_LCD_FColourSet(APP_LCD_WHITE);
-		}else if(menu_pos==1){
-			APP_LCD_FColourSet(APP_LCD_WHITE);
-			APP_LCD_Rectangle(109, y_offset+40, 7, 51, 0, 0, 1, 0);
-			APP_LCD_PrintString(116, y_offset+60, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, ">");
-			APP_LCD_PrintString(120, y_offset+60, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Format   BANKs");
-			APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
-			APP_LCD_PrintString(120, y_offset+40, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Device   ID:");
-			APP_LCD_PrintFormattedString(250, y_offset+40, 40,  APP_LCD_STRING_ALIGN_LEFT, -32, "%d", curr_id);
-			APP_LCD_PrintString(120, y_offset+80, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "About");
-			APP_LCD_FColourSet(APP_LCD_WHITE);
-		}else if(menu_pos==2){
-			APP_LCD_FColourSet(APP_LCD_WHITE);
-			APP_LCD_Rectangle(109, y_offset+40, 7, 51, 0, 0, 1, 0);
-			APP_LCD_PrintString(116, y_offset+80, 0, APP_LCD_STRING_ALIGN_RIGHT, -32, ">");
-			APP_LCD_PrintString(120, y_offset+80, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "About");
-			APP_LCD_FColourSet(APP_LCD_LIGHTGREY);
-			APP_LCD_PrintString(120, y_offset+60, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Format   BANKs");
-			APP_LCD_PrintString(120, y_offset+40, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Device   ID:");
-			APP_LCD_PrintFormattedString(250, y_offset+40, 40,  APP_LCD_STRING_ALIGN_LEFT, -32, "%d", curr_id);
-		}
-		APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Settings   Menu");
+		SettingsMenu_List(menu_pos);
 	}
 }
 
@@ -1711,29 +1845,29 @@ void SettingsMenu_Legend(void){
 		Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
 	}else{
 		if(menu_edit){
-			if(menu_pos==0){
+			if(menu_pos==MENU_DEVICE_ID || (menu_pos==MENU_BANK_CHANGE && menu_sub_edit)){
 				Legend_Draw(x_offset+420, y_offset+52, "INC", "UP");
 				Legend_Draw(x_offset+420, y_offset+72, "DEC", "DOWN");
 				Legend_Draw(x_offset+420, y_offset+32, "ENTER", "INST");
 				Legend_Draw(x_offset+420, y_offset+12, "CANCEL", "LAST");
-			}else if(menu_pos==1){
+			}else if(menu_pos==MENU_BANK_CHANGE){
+				Legend_Draw(x_offset+420, y_offset+52, "  UP", "UP");
+				Legend_Draw(x_offset+420, y_offset+72, "DOWN", "DOWN");
+				Legend_Draw(x_offset+420, y_offset+32, " EDIT", "INST");
+				Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
+			}else if(menu_pos==MENU_FORMAT){
 				Legend_Draw(x_offset+160, y_offset+150, "NO", "LAST");
 				Legend_Draw(x_offset+290, y_offset+150, "YES", "INST");
-			}else if(menu_pos==2){
+			}else if(menu_pos==MENU_ABOUT){
 				Legend_Draw(x_offset+420, y_offset+12, "ESC", "LAST");
 			}
 
 		}else{
 			Legend_Draw(x_offset+420, y_offset+52, "  UP", "UP");
 			Legend_Draw(x_offset+420, y_offset+72, "DOWN", "DOWN");
-			if(menu_pos==0){
-				Legend_Draw(x_offset+420, y_offset+32, " EDIT", "INST");
-
-			}else if(menu_pos==1){
-				Legend_Draw(x_offset+420, y_offset+32, "EXEC", "INST");
-			}else if(menu_pos==2){
-				Legend_Draw(x_offset+420, y_offset+32, "EXEC", "INST");
-			}
+			Legend_Draw(x_offset+420, y_offset+32,
+			            (menu_pos==MENU_DEVICE_ID)   ? " EDIT" :
+			            (menu_pos==MENU_BANK_CHANGE) ? "ENTER" : "EXEC", "INST");
 			Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
 		}
 	}
@@ -1868,14 +2002,14 @@ void TASK_SettingsMenu(void *pvParameters){
 				ADIOS_SYS_Reset();
 			}
 		}else if(menu_edit){
-			if(menu_pos==0){
+			if(menu_pos==MENU_DEVICE_ID){
 				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
-					curr_id = (curr_id+1) & 0x7f;
+					curr_id = (curr_id+1) & DEVICE_ID_MASK;
 					SettingsMenu_Draw();
 					SettingsMenu_Legend();
 					tr5x6_decod_buttons_flags.inc = 0;
 				}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
-					curr_id = (curr_id-1) & 0x7f;
+					curr_id = (curr_id-1) & DEVICE_ID_MASK;
 					SettingsMenu_Draw();
 					SettingsMenu_Legend();
 					tr5x6_decod_buttons_flags.dec = 0;
@@ -1898,7 +2032,73 @@ void TASK_SettingsMenu(void *pvParameters){
 					SettingsMenu_Legend();
 					tr5x6_decod_buttons_flags.last=0;
 				}
-			}else if(menu_pos==1){
+			}else if(menu_pos==MENU_BANK_CHANGE){
+				if(menu_sub_edit){
+					// the value on the line under the cursor
+					if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+						if(menu_sub==MENU_BC_CTRL)     bc_ctrl_cur = (bc_ctrl_cur+1) % BC_CTRL_NUM;
+						else if(menu_sub==MENU_BC_CHN) bc_chn_cur  = (bc_chn_cur % 16) + 1;
+						else                           bc_omni_cur ^= 1;
+						SettingsMenu_Draw();
+						SettingsMenu_Legend();
+						tr5x6_decod_buttons_flags.inc = 0;
+					}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+						if(menu_sub==MENU_BC_CTRL)     bc_ctrl_cur = (bc_ctrl_cur + BC_CTRL_NUM-1) % BC_CTRL_NUM;
+						else if(menu_sub==MENU_BC_CHN) bc_chn_cur  = ((bc_chn_cur + 14) % 16) + 1;
+						else                           bc_omni_cur ^= 1;
+						SettingsMenu_Draw();
+						SettingsMenu_Legend();
+						tr5x6_decod_buttons_flags.dec = 0;
+					}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+						// Confirmed: the live copies first, then the flash
+						// record. One page write per confirmed line, the same
+						// deal the device ID gets - so leaving the page never
+						// has anything left pending.
+						tr5x6_bc_ctrl = bc_ctrl_cur;
+						tr5x6_bc_chn  = bc_chn_cur;
+						tr5x6_bc_omni = bc_omni_cur;
+						TR5X6_ROM_BankChangeStore(tr5x6_bc_ctrl, tr5x6_bc_chn, tr5x6_bc_omni);
+						menu_sub_edit=0;
+						SettingsMenu_Draw();
+						SettingsMenu_Legend();
+						tr5x6_decod_buttons_flags.inst=0;
+					}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+						bc_ctrl_cur = tr5x6_bc_ctrl;	// back to what is stored
+						bc_chn_cur  = tr5x6_bc_chn;
+						bc_omni_cur = tr5x6_bc_omni;
+						menu_sub_edit=0;
+						SettingsMenu_Draw();
+						SettingsMenu_Legend();
+						tr5x6_decod_buttons_flags.last=0;
+					}
+				}else{
+					// the cursor, over the three lines
+					if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+						menu_sub -= 1;
+						if(menu_sub>MENU_BC_NUM-1) menu_sub= MENU_BC_NUM-1;
+						SettingsMenu_Draw();
+						SettingsMenu_Legend();
+						tr5x6_decod_buttons_flags.inc = 0;
+					}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+						menu_sub += 1;
+						if(menu_sub>MENU_BC_NUM-1) menu_sub= 0;
+						SettingsMenu_Draw();
+						SettingsMenu_Legend();
+						tr5x6_decod_buttons_flags.dec = 0;
+					}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+						menu_sub_edit=1;
+						SettingsMenu_Draw();
+						SettingsMenu_Legend();
+						tr5x6_decod_buttons_flags.inst=0;
+					}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+						APP_LCD_Clear();	// clear the TFT
+						menu_edit=0;
+						SettingsMenu_Draw();
+						SettingsMenu_Legend();
+						tr5x6_decod_buttons_flags.last=0;
+					}
+				}
+			}else if(menu_pos==MENU_FORMAT){
 				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
 					tr5x6_decod_buttons_flags.inc = 0;
 				}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
@@ -1940,7 +2140,7 @@ void TASK_SettingsMenu(void *pvParameters){
 					SettingsMenu_Legend();
 					tr5x6_decod_buttons_flags.last=0;
 				}
-			}else if(menu_pos==2){
+			}else if(menu_pos==MENU_ABOUT){
 				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
 					tr5x6_decod_buttons_flags.inc = 0;
 				}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
@@ -1959,19 +2159,28 @@ void TASK_SettingsMenu(void *pvParameters){
 		}else{
 			if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
 				menu_pos -= 1;
-				if(menu_pos>2) menu_pos= 2;
+				if(menu_pos>MENU_NUM-1) menu_pos= MENU_NUM-1;
 				SettingsMenu_Draw();
 				SettingsMenu_Legend();
 				tr5x6_decod_buttons_flags.inc = 0;
 			}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
 				menu_pos += 1;
-				if(menu_pos>2) menu_pos= 0;
+				if(menu_pos>MENU_NUM-1) menu_pos= 0;
 				SettingsMenu_Draw();
 				SettingsMenu_Legend();
 				tr5x6_decod_buttons_flags.dec = 0;
 			}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
 				menu_edit=1;
 				last_id = curr_id;
+				if(menu_pos==MENU_BANK_CHANGE){
+					// the page opens on what is stored, and on its first line
+					bc_ctrl_cur = tr5x6_bc_ctrl;
+					bc_chn_cur  = tr5x6_bc_chn;
+					bc_omni_cur = tr5x6_bc_omni;
+					menu_sub = 0;
+					menu_sub_edit = 0;
+					APP_LCD_Clear();	// its rows are not the list's rows
+				}
 				SettingsMenu_Draw();
 				SettingsMenu_Legend();
 				tr5x6_decod_buttons_flags.inst=0;

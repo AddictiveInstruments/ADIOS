@@ -101,8 +101,11 @@ s32 TR5X6_ROM_Data_Get(void);
 
 /* Variables ------------------------------------------------------------------*/
 static u8 datas[TR5X6_FLASH_PAGE_SIZE];
+
+u8 tr5x6_bc_ctrl = TR5X6_BC_CTRL_DEFAULT;
+u8 tr5x6_bc_chn  = TR5X6_BC_CHN_DEFAULT;
+u8 tr5x6_bc_omni = TR5X6_BC_OMNI_DEFAULT;
 static u8 rom_bank=0;
-static u8 bank_store_req=0;
 
 const char tr5x6_slot_name[4][4]={"4K\0 ", "8K\0 ", "16K\0", "32K\0"};
 const char tr5x6_slot_duration[4][6]={"163ms\0", "327ms\0", "655ms\0", "1.31s\0"};
@@ -218,10 +221,6 @@ void TR5X6_ROM_Init(void)
 //}
 /* HOST Mode */
 void TR5X6_ROM_HOST(void){
-	if(bank_store_req){
-		TR5X6_ROM_BankStore(rom_bank);
-		bank_store_req = 0;
-	}
 	TR5X6_ROM_CS(1);			// ROM Deselect
 	TR5X6_ROM_RD();				// ROM Read
 	TR5X6_ROM_OE();				// ROM Output enable
@@ -237,31 +236,23 @@ u8 TR5X6_ROM_BankGet(void){
 }
 
 /* ********* */
+// Sets the bank. Does NOT remember it across a power cycle: on APP_HARD_REV
+// 1 nothing does. Writing the number meant erasing and reprogramming a 2 Kb
+// page, which freezes the core for tens of milliseconds - the G0 executes
+// from the very flash it is erasing, so the UART interrupt does not run and
+// around a hundred MIDI bytes are lost. Measured 25/08/2026: a burst of bank
+// changes over CC#0 left the DIN parser mid-message and timed it out a
+// second later. It also spent one of the page's 10 000 erase cycles per
+// bank change, on the same page that carries the magic.
+// APP_HARD_REV 2 stores it in the EEPROM instead, where neither applies.
 s32 TR5X6_ROM_BankSet(u8 bank, u8 address_set){
 	if(address_set)
 		TR5X6_ROM_Addr_Set(TR5X6_ROM_HostAddr(bank));
 	if(bank==rom_bank)return 0;
 	rom_bank = bank;
-	//ADIOS_MIDI_SendProgramChange(DIN0, adios_midi_chn_t chn, u8 prg);
-	if(address_set)
-		TR5X6_ROM_BankStore(bank);
-	else
-		bank_store_req = 1;
-
 	return 0;
 }
 
-// Only the 626 calls this - its display task defers the bank write out of
-// the decoding window. Compiled on both, called on one.
-s32 TR5X6_ROM_BankStore_Req(){
-	if(bank_store_req){
-		ADIOS_IRQ_DeInstall(EXTI4_15_IRQn);
-		TR5X6_ROM_BankStore(rom_bank);
-		ADIOS_IRQ_Install(EXTI4_15_IRQn, 2);
-		bank_store_req = 0;
-	}
-	return 0;
-}
 
 /* ********* */
 u32 TR5X6_ROM_ProgAddr(u8 bank){
@@ -579,6 +570,9 @@ s32 TR5X6_MEM_Format(void){
 			datas[TR5X6_FLASH_SYS_BANK_OFS]      = 0; // stored bank num
 			datas[TR5X6_FLASH_SYS_ID_CONFIRM_OFS]= 0x42;
 			datas[TR5X6_FLASH_SYS_ID_OFS]        = ADIOS_MIDI_DeviceIDGet();
+			datas[TR5X6_FLASH_SYS_BC_CTRL_OFS]   = TR5X6_BC_CTRL_DEFAULT;
+			datas[TR5X6_FLASH_SYS_BC_CHN_OFS]    = TR5X6_BC_CHN_DEFAULT;
+			datas[TR5X6_FLASH_SYS_BC_OMNI_OFS]   = TR5X6_BC_OMNI_DEFAULT;
 		}
 		// Page erase
 		LL_FLASH_Unlock();
@@ -726,6 +720,27 @@ s32 TR5X6_ROM_DeviceIDStore(u8 device_id){
 	datas[TR5X6_FLASH_SYS_ID_CONFIRM_OFS]= 0x42;
 	datas[TR5X6_FLASH_SYS_ID_OFS]        = device_id & 0x7f;
 	return TR5X6_ROM_SysPageWrite();
+}
+
+s32 TR5X6_ROM_BankChangeStore(u8 ctrl, u8 chn, u8 omni){
+	TR5X6_ROM_SysPageRead();
+	datas[TR5X6_FLASH_SYS_BC_CTRL_OFS] = ctrl;
+	datas[TR5X6_FLASH_SYS_BC_CHN_OFS]  = chn;
+	datas[TR5X6_FLASH_SYS_BC_OMNI_OFS] = omni;
+	return TR5X6_ROM_SysPageWrite();
+}
+
+// Anything that is not a legal value reads back as the default - 0xFF above
+// all, which is what a board formatted before these three bytes existed has
+// in there. That is the whole migration.
+void TR5X6_ROM_BankChangeRecall(void){
+	u32 base = TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*3);
+	u8 ctrl = (*((volatile u8*)(base + TR5X6_FLASH_SYS_BC_CTRL_OFS)));
+	u8 chn  = (*((volatile u8*)(base + TR5X6_FLASH_SYS_BC_CHN_OFS)));
+	u8 omni = (*((volatile u8*)(base + TR5X6_FLASH_SYS_BC_OMNI_OFS)));
+	tr5x6_bc_ctrl = (ctrl < BC_CTRL_NUM) ? ctrl : TR5X6_BC_CTRL_DEFAULT;
+	tr5x6_bc_chn  = (chn && chn <= 16)   ? chn  : TR5X6_BC_CHN_DEFAULT;
+	tr5x6_bc_omni = (omni <= 1)          ? omni : TR5X6_BC_OMNI_DEFAULT;
 }
 
 s32 TR5X6_ROM_BankStore(u8 bank){

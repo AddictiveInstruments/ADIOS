@@ -18,6 +18,18 @@
 // over, in milliseconds. 0 = no hold.
 #define APP_SPLASH_MS 2000
 
+// Which board this firmware is built for. ONE difference, and it is where
+// the bank data lives:
+//   1 - no EEPROM. Records in the last 4 pages of internal flash, and the
+//       current bank number is NOT remembered at all: a page write freezes
+//       the core for tens of ms (the G0 executes from the flash it erases)
+//       and costs one of the part's 10 000 erase cycles.
+//   2 - an AT24C64 on I2C2, PB13/PB14. Records and bank number both live
+//       there: byte addressable, no erase, a million cycles.
+// The SysEx device ID never moves - last two bytes of internal flash in
+// BOTH revisions, because that is where the bootloader looks.
+#define APP_HARD_REV 1
+
 // ONE firmware, BOTH machines. Which one this board is bolted into comes
 // from the flash magic at boot - see APP_Init and tr5x6_unit_t. There is
 // no build-time unit switch any more.

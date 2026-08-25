@@ -57,6 +57,15 @@
 #define TR5X6_FLASH_SYS_ID_OFS			0x7FF	/* ADIOS's, the device ID   */
 #define TR5X6_FLASH_MAGIC_ADDR			(TR5X6_FLASH_END_ADDR - 2)
 
+/* MIDI bank change, sous les quatre champs systeme ci-dessus. Ces trois-la
+   sont a nous seuls, et ils profitent du meme ancrage par la fin.
+   La flash effacee lit 0xFF, qui n'est une valeur legale pour aucun des
+   trois : une carte formatee par un firmware anterieur retombe donc sur les
+   defauts d'elle-meme, sans migration. */
+#define TR5X6_FLASH_SYS_BC_CTRL_OFS		0x7F9	/* NONE / PC / CC#0 / CC#32 */
+#define TR5X6_FLASH_SYS_BC_CHN_OFS		0x7FA	/* 1..16                    */
+#define TR5X6_FLASH_SYS_BC_OMNI_OFS		0x7FB	/* 0 = off, 1 = on          */
+
 
 #define TR5X6_FLASH_INFO_SIZE 			28
 // (4 banks x 16 slots) on the 505, (2 x 32) on the 626: 1792 either way.
@@ -83,6 +92,23 @@ typedef enum {
 	SLOT_EVEN=0,
 	SLOT_ODD
 } tr5x6_slot_parity_t;
+
+// Which message carries a bank change on the external MIDI port. The hosts
+// know none of this - they neither send nor receive program change or bank
+// select - so the choice is ours, and it is a setting because senders do not
+// agree: some sequencers send Program Change, some controllers Bank Select
+// MSB (CC#0), some LSB (CC#32).
+typedef enum {
+	BC_CTRL_NONE = 0,
+	BC_CTRL_PC,
+	BC_CTRL_CC00,
+	BC_CTRL_CC32,
+	BC_CTRL_NUM
+} tr5x6_bc_ctrl_t;
+
+#define TR5X6_BC_CTRL_DEFAULT	BC_CTRL_PC
+#define TR5X6_BC_CHN_DEFAULT	10
+#define TR5X6_BC_OMNI_DEFAULT	1
 
 // ONE slot structure for both hosts - the 626 layout. The 505 never shows
 // the shortnames (it has no grid), they sleep in flash, ready for the day
@@ -194,7 +220,12 @@ extern s32 TR5X6_ROM_BankStore(u8 bank);
    ADIOS finds it at the next power-up - and so does the bootloader */
 extern s32 TR5X6_ROM_DeviceIDStore(u8 device_id);
 extern u8 TR5X6_ROM_BankRecall(void);
-extern s32 TR5X6_ROM_BankStore_Req();
+/* live copies of the MIDI bank change settings, recalled once at boot */
+extern u8 tr5x6_bc_ctrl;	/* tr5x6_bc_ctrl_t                          */
+extern u8 tr5x6_bc_chn;		/* 1..16 - TX always, RX when OMNI is off   */
+extern u8 tr5x6_bc_omni;	/* RX on every channel                      */
+extern s32  TR5X6_ROM_BankChangeStore(u8 ctrl, u8 chn, u8 omni);
+extern void TR5X6_ROM_BankChangeRecall(void);
 #if 0
 extern s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_mem);
 extern tr5x6_flash_mem_Bank_t TR5X6_FLASH_MemBank_Get(u8 group, u8 pattern);
