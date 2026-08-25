@@ -575,6 +575,12 @@ static s32 ADIOS_I2C_V1_TransferWait(adios_i2c_v1_rec_t *rec)
   if( rec->busy ) {
     LL_I2C_GenerateStopCondition(rec->base);
     ADIOS_I2C_V1_Finish(rec, ADIOS_I2C_ERROR_TIMEOUT);
+    // The STOP request itself can sit for ever on a wedged interface. PE low
+    // resets the state machine and releases the lines, the configuration
+    // registers are kept - same treatment as the v2 engine's timeout.
+    LL_I2C_Disable(rec->base);
+    (void)LL_I2C_IsEnabled(rec->base);   // PE must stay low a few APB cycles
+    LL_I2C_Enable(rec->base);
     return ADIOS_I2C_ERROR_TIMEOUT;
   }
 
@@ -752,6 +758,106 @@ s32 ADIOS_I2C_Init(u32 mode)
   return 0;
 }
 
+
+/////////////////////////////////////////////////////////////////////////////
+//! Clocks a wedged bus clear again.
+//!
+//! A slave abandoned mid-transfer keeps driving SDA (it is still shifting
+//! out the byte it was asked for) and the bus is dead until it sees enough
+//! clocks to finish - power cycling was the only cure. The standard remedy:
+//! up to nine SCL pulses by hand, then a STOP, then the peripheral's state
+//! machine reset through PE.
+//!
+//! HOW TO USE IT
+//!   1. call it when a transfer chain fails persistently (NACK or timeout
+//!      on every retry), with the port taken via ADIOS_I2C_TransferBegin()
+//!   2. retry the transfer ONCE afterwards - a second failure means the
+//!      problem is not a wedged slave
+//!
+//! \param[in] i2c_port the port (0..2, or ADIOS_I2C_PORT_FMPI2C0)
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 ADIOS_I2C_BusClear(u8 i2c_port)
+{
+  GPIO_TypeDef *scl_port, *sda_port;
+  u32 scl_pin, sda_pin;
+
+#ifdef ADIOS_USE_FMPI2C0
+  if( i2c_port == ADIOS_I2C_PORT_FMPI2C0 ) {
+    scl_port = ADIOS_FMPI2C0_SCL_PORT; scl_pin = ADIOS_FMPI2C0_SCL_PIN;
+    sda_port = ADIOS_FMPI2C0_SDA_PORT; sda_pin = ADIOS_FMPI2C0_SDA_PIN;
+  } else
+#endif
+  switch( i2c_port ) {
+#ifdef ADIOS_USE_I2C0
+    case 0:
+      scl_port = ADIOS_I2C0_SCL_PORT; scl_pin = ADIOS_I2C0_SCL_PIN;
+      sda_port = ADIOS_I2C0_SDA_PORT; sda_pin = ADIOS_I2C0_SDA_PIN;
+      break;
+#endif
+#ifdef ADIOS_USE_I2C1
+    case 1:
+      scl_port = ADIOS_I2C1_SCL_PORT; scl_pin = ADIOS_I2C1_SCL_PIN;
+      sda_port = ADIOS_I2C1_SDA_PORT; sda_pin = ADIOS_I2C1_SDA_PIN;
+      break;
+#endif
+#ifdef ADIOS_USE_I2C2
+    case 2:
+      scl_port = ADIOS_I2C2_SCL_PORT; scl_pin = ADIOS_I2C2_SCL_PIN;
+      sda_port = ADIOS_I2C2_SDA_PORT; sda_pin = ADIOS_I2C2_SDA_PIN;
+      break;
+#endif
+    default:
+      return ADIOS_I2C_ERROR_INVALID_PORT;
+  }
+
+  // take SCL over as a plain output - it keeps its open-drain and pull-up
+  // from the init, so this only changes WHO drives it. ODR high first, or
+  // the mode switch itself would glitch the line low.
+  LL_GPIO_SetOutputPin(scl_port, scl_pin);
+  LL_GPIO_SetPinMode(scl_port, scl_pin, LL_GPIO_MODE_OUTPUT);
+
+  // nine clocks at ~100 kHz, or fewer if SDA lets go before that
+  for(int i=0; i<9; ++i) {
+    LL_GPIO_ResetOutputPin(scl_port, scl_pin);
+    ADIOS_DELAY_Wait_uS(5);
+    LL_GPIO_SetOutputPin(scl_port, scl_pin);
+    ADIOS_DELAY_Wait_uS(5);
+    if( LL_GPIO_IsInputPinSet(sda_port, sda_pin) )
+      break;
+  }
+
+  // a STOP by hand: SDA low, then released while SCL is high
+  LL_GPIO_SetOutputPin(sda_port, sda_pin);
+  LL_GPIO_SetPinMode(sda_port, sda_pin, LL_GPIO_MODE_OUTPUT);
+  LL_GPIO_ResetOutputPin(sda_port, sda_pin);
+  ADIOS_DELAY_Wait_uS(5);
+  LL_GPIO_SetOutputPin(sda_port, sda_pin);
+  ADIOS_DELAY_Wait_uS(5);
+
+  // both lines back to the peripheral
+  LL_GPIO_SetPinMode(scl_port, scl_pin, LL_GPIO_MODE_ALTERNATE);
+  LL_GPIO_SetPinMode(sda_port, sda_pin, LL_GPIO_MODE_ALTERNATE);
+
+  // and ITS state machine reset too - PE low resets it and releases the
+  // lines, the configuration registers are kept
+#ifdef ADIOS_USE_FMPI2C0
+  if( i2c_port == ADIOS_I2C_PORT_FMPI2C0 ) {
+    LL_FMPI2C_Disable(ADIOS_FMPI2C0_PTR);
+    (void)LL_FMPI2C_IsEnabled(ADIOS_FMPI2C0_PTR);  // PE low a few APB cycles
+    LL_FMPI2C_Enable(ADIOS_FMPI2C0_PTR);
+    return 0;
+  }
+#endif
+  {
+    I2C_TypeDef *base = i2c_v1_rec[i2c_port]->base;
+    LL_I2C_Disable(base);
+    (void)LL_I2C_IsEnabled(base);                  // PE low a few APB cycles
+    LL_I2C_Enable(base);
+  }
+
+  return 0;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 //! Takes the port, so that two tasks cannot interleave transfers on the

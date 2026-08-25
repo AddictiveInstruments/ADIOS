@@ -147,9 +147,7 @@ extern s32 ADIOS_I2C_TransferWait(u8 i2c_port);
 extern s32 ADIOS_I2C_LastErrorGet(u8 i2c_port);
 
 /* clocks a wedged bus clear again (nine SCL pulses, STOP, PE reset) - call
-   on persistent failure with the port taken, then retry ONCE. Implemented
-   by the STM32G0xx driver; other families add theirs with their first
-   I2C hardware. */
+   on persistent failure with the port taken, then retry ONCE. */
 extern s32 ADIOS_I2C_BusClear(u8 i2c_port);
 
 
