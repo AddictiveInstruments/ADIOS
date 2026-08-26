@@ -20,7 +20,7 @@
 #include "glcd_font.h"
 #include "tr5x6_decod.h"
 #include "tr5x6_rom.h"
-#include "midio_sysex.h"
+#include "tr5x6_sysex.h"
 #include "tr5x6_pict.h"
 
 #include <FreeRTOS.h>
@@ -341,7 +341,7 @@ void APP_Init(void)
 		Version_Print(40, y_offset+167);
 		APP_LCD_Lite(1);
 		// initialize SysEx mgnt.
-		MIDIO_SYSEX_Init(0);
+		TR5X6_SYSEX_Init(0);
 		// install Direct MIDI RX callback
 		ADIOS_MIDI_DirectRxCallback_Init(&NOTIFY_MIDI_Rx);
 
@@ -394,7 +394,7 @@ void APP_Tick(void)
 	// Button interception
 	TR5X6_DECOD_BUTT_Handler();
 	// Sysex Time out tick	}
-	if(normal_start)MIDIO_SYSEX_TimeOut_Period();
+	if(normal_start)TR5X6_SYSEX_TimeOut_Period();
 	// check for decoding
 
 }
@@ -546,7 +546,7 @@ s32 APP_SYSEX_Parser(adios_midi_port_t port, u8 midi_in)
 		ADIOS_UART_TxBufferPut(2, midi_in);
 	}else{
 		// App sysex parser
-		MIDIO_SYSEX_Parser(port, midi_in);
+		TR5X6_SYSEX_Parser(port, midi_in);
 	}
 
 	return 1; // no error
@@ -691,8 +691,8 @@ static void TASK_ROM_Periodic(void *pvParameters)
 		// period is dead time added to every single block of an upload
 		vTaskDelayUntil(&xLastExecutionTime, 10 / portTICK_RATE_MS);
 		// check for requested write
-		MIDIO_SYSEX_Cmd_WriteInfoRequest();
-		MIDIO_SYSEX_Cmd_WriteBlockRequest();
+		TR5X6_SYSEX_Cmd_WriteInfoRequest();
+		TR5X6_SYSEX_Cmd_WriteBlockRequest();
 		// dbg scaffolding: reported OUT of the critical path, so the ROM
 		// sequences keep their timing. Non-zero means a transfer was refused
 		// and the latch kept a stale value - see TR5X6_ROM_Addr_Set.
@@ -713,7 +713,7 @@ static void TFT_XferSlotInfoReceived(void)
 	u8 xfer_bmp_array[xfer_bmp_size];
 	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
 
-	s8 bank_progress = MIDIO_SYSEX_Bank_Progression();
+	s8 bank_progress = TR5X6_SYSEX_Bank_Progression();
 	s16 height = xfer_bmp_height;
 	if(bank_progress>=0){
 		height = xfer_bmp_slot_height;
@@ -721,17 +721,17 @@ static void TFT_XferSlotInfoReceived(void)
 	adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, height, xfer_bmp_width, Is1BIT);
 
 	//memset(sysex_bmp.memory, 0x00, size);
-	u8 cmd = MIDIO_SYSEX_Cmd_Current();
+	u8 cmd = TR5X6_SYSEX_Cmd_Current();
 	u8 bank_slot = ((cmd==CMD_SLOT_WRITE_INFO) || (cmd==CMD_SLOT_READ_INFO))?1:0;
 	u8 read_write = ((cmd==CMD_SLOT_WRITE_INFO) || (cmd==CMD_BANK_WRITE_INFO))?1:0;
 	// prints messages in bitmap
 	if(bank_slot){
 		if(bank_progress>=0)
-			APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot# %u", MIDIO_SYSEX_Slot_Current()+1);
-		else APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 16, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u/Slot# %u", MIDIO_SYSEX_Bank_Current()+1, MIDIO_SYSEX_Slot_Current()+1);
+			APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot# %u", TR5X6_SYSEX_Slot_Current()+1);
+		else APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 16, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u/Slot# %u", TR5X6_SYSEX_Bank_Current()+1, TR5X6_SYSEX_Slot_Current()+1);
 
 	}else
-		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 16, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u", MIDIO_SYSEX_Bank_Current()+1);
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 16, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u", TR5X6_SYSEX_Bank_Current()+1);
 
 	if(read_write)
 		APP_LCD_BitmapPrintString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), (bank_progress>=0)?23:36, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Info write ok.");
@@ -751,7 +751,7 @@ static void TFT_XferSlotInfoReceived(void)
 	if(bank_progress>=0){
 		for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;	// adds top line separation
 		adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width, Is1BIT);
-		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8-1, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u - %u%s", MIDIO_SYSEX_Bank_Current()+1, bank_progress, "%");
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8-1, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u - %u%s", TR5X6_SYSEX_Bank_Current()+1, bank_progress, "%");
 		u8 r=0x7f-(40*bank_progress/100);u8 g=40*bank_progress/100;u8 b=40*bank_progress/100;
 		APP_LCD_PrintProgress(xfer_bmp, (u32)((r<<16)|(g<<8)|b), x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height+1, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width*bank_progress/100);
 		APP_LCD_DrawFastHLine(x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height, xfer_bmp_width, APP_LCD_DARKGREY);
@@ -772,7 +772,7 @@ static void TFT_XferSlotProgress(u8 _progress)
 	u8 xfer_bmp_array[xfer_bmp_size];
 	for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;
 
-	s8 bank_progress = MIDIO_SYSEX_Bank_Progression();
+	s8 bank_progress = TR5X6_SYSEX_Bank_Progression();
 	s16 height = xfer_bmp_height;
 	if(bank_progress>=0){
 		height = xfer_bmp_slot_height;
@@ -781,12 +781,12 @@ static void TFT_XferSlotProgress(u8 _progress)
 
 	// prints messages in bitmap
 	if(bank_progress>=0){
-		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot# %u", MIDIO_SYSEX_Slot_Current()+1);
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Slot# %u", TR5X6_SYSEX_Slot_Current()+1);
 	}else{
-		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 16, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u/Slot# %u", MIDIO_SYSEX_Bank_Current()+1, MIDIO_SYSEX_Slot_Current()+1);
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 16, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u/Slot# %u", TR5X6_SYSEX_Bank_Current()+1, TR5X6_SYSEX_Slot_Current()+1);
 	}
 
-	if(MIDIO_SYSEX_Cmd_Current()==CMD_READ_BLOCK){
+	if(TR5X6_SYSEX_Cmd_Current()==CMD_READ_BLOCK){
 		if(_progress==100)
 			APP_LCD_BitmapPrintString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), (bank_progress>=0)?23:36, 0, APP_LCD_STRING_ALIGN_CENTER, -32,  "ROM read.");
 		else APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), (bank_progress>=0)?23:36, 0, APP_LCD_STRING_ALIGN_CENTER, -32,  "%u%s", _progress, "% ...");
@@ -816,7 +816,7 @@ static void TFT_XferSlotProgress(u8 _progress)
 	if(bank_progress>=0){
 		for(int i =0; i<xfer_bmp_size; i++)xfer_bmp_array[i] = 0x00;	// adds top line separation
 		adios_lcd_bitmap_t xfer_bmp = APP_LCD_BitmapInit((u8*)xfer_bmp_array, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width, Is1BIT);
-		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8-1, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u - %u%s", MIDIO_SYSEX_Bank_Current()+1, bank_progress, "%");
+		APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8-1, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank# %u - %u%s", TR5X6_SYSEX_Bank_Current()+1, bank_progress, "%");
 		u8 r=0x7f-(40*bank_progress/100);u8 g=40*bank_progress/100;u8 b=40*bank_progress/100;
 		APP_LCD_PrintProgress(xfer_bmp, (u32)((r<<16)|(g<<8)|b), x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height+1, xfer_bmp_width, xfer_bmp_bank_height-1, xfer_bmp_width*bank_progress/100);
 		APP_LCD_DrawFastHLine(x_offset+w_max-2-xfer_bmp_width, y_offset+95+xfer_bmp_slot_height, xfer_bmp_width, APP_LCD_DARKGREY);
@@ -922,7 +922,7 @@ static void TFT_XferError(u8 _error)
 	//memset(sysex_bmp.memory, 0x00, size);
 
 	// prints messages in bitmap
-	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank%u/Slot%u", MIDIO_SYSEX_Bank_Current()+1, MIDIO_SYSEX_Slot_Current()+1);
+	APP_LCD_BitmapPrintFormattedString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 8, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Bank%u/Slot%u", TR5X6_SYSEX_Bank_Current()+1, TR5X6_SYSEX_Slot_Current()+1);
 	APP_LCD_BitmapPrintString(xfer_bmp, 1.0, (s16)(xfer_bmp_width/2), 23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Transfer Error!");
 	APP_LCD_FColourSet(APP_LCD_RED);
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
@@ -1192,9 +1192,9 @@ static void TFT_XferRefresh(void)
 		}else if(tr5x6_xfer_state.FLAG_CONT){
 			tr5x6_xfer_state.FLAG_CONT=0;
 			xfer_flag=0;
-			TFT_XferSlotProgress(MIDIO_SYSEX_Slot_Progression());
+			TFT_XferSlotProgress(TR5X6_SYSEX_Slot_Progression());
 			xfer_delay=0;
-			//ADIOS_MIDI_SendDebugMessage("get progress %u \n",MIDIO_SYSEX_BlockProgression() );
+			//ADIOS_MIDI_SendDebugMessage("get progress %u \n",TR5X6_SYSEX_BlockProgression() );
 			//xfer_time_out=1000;
 		}else if(tr5x6_xfer_state.FLAG_END){
 			tr5x6_xfer_state.FLAG_END=0;
@@ -1207,7 +1207,7 @@ static void TFT_XferRefresh(void)
 			}
 			else if(tr5x6_xfer_state.STAT==XFER_CONT){
 				xfer_delay=16;
-				TFT_XferSlotProgress(MIDIO_SYSEX_Slot_Progression());
+				TFT_XferSlotProgress(TR5X6_SYSEX_Slot_Progression());
 			}
 			else xfer_delay=0;
 			TFT_XferInstFlagsLatch();
@@ -1575,7 +1575,7 @@ static void TFT_Group(void)
 // UART renumbering:
 //   DIN2 (USART3) = the instrument's MIDI IN
 //   DIN0 (USART1) = the host link
-//   MIDIO_SYSEX_Act() = application-level SysEx transfers
+//   TR5X6_SYSEX_Act() = application-level SysEx transfers
 // Same ports, same logic on both hosts - the y positions are even identical,
 // only two x anchors move.
 /////////////////////////////////////////////////////////////////////////////
@@ -1586,7 +1586,7 @@ static void TFT_MidiActivity(void)
 
 	u8 act_midi_in = ADIOS_MIDI_ActGet(DIN2) & ADIOS_MIDI_ACT_RX;
 	u8 act_host    = ADIOS_MIDI_ActGet(DIN0) & ADIOS_MIDI_ACT_RX;
-	u8 act_sysex   = MIDIO_SYSEX_Act() & 0x2;
+	u8 act_sysex   = TR5X6_SYSEX_Act() & 0x2;
 	if(act_midi_in)APP_LCD_Rectangle(x_offset+in_x, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
 	else APP_LCD_Rectangle(x_offset+in_x, y_offset+262, 11, 11, 1, APP_LCD_DARKGREY, 1, 0);
 	if(act_host)APP_LCD_Rectangle(x_offset+hs_x, y_offset+249, 11, 11, 1, APP_LCD_DARKGREY, 2, APP_LCD_RED);
@@ -1610,17 +1610,6 @@ static void TASK_TFT_Periodic(void *pvParameters)
 		if(!APP_LCD_IsReady())return;
 		if(first_start)APP_TFT_Background();	// prints the background
 		if(normal_start){
-#if APP_HARD_REV == 2
-			{ // TEMPORARY flight recorder - see tr5x6_ee_dbg in tr5x6_rom.c
-				extern volatile u32 tr5x6_ee_dbg[12];
-				// [11] counts display passes that saw CNT NOT move - a frozen
-				// timer shows here as a big number in a single snapshot
-				if( (u32)TIM14->CNT == tr5x6_ee_dbg[8] ) tr5x6_ee_dbg[11]++;
-				tr5x6_ee_dbg[8] = TIM14->CNT;
-				tr5x6_ee_dbg[9] = RCC->APBENR2;
-				tr5x6_ee_dbg[10]++;
-			}
-#endif
 			// Digits
 			TFT_Digits();
 			// Heart Beat

@@ -21,7 +21,7 @@ include $(ADIOS_PATH)/include/makefile/app_config.mk
 THUMB_SOURCE    = app.c \
 				tr5x6_decod.c \
 				tr5x6_rom.c \
-				midio_sysex.c\
+				tr5x6_sysex.c\
 				tr5x6_pict.c
 
 # (following source stubs not relevant for Cortex M3 derivatives)

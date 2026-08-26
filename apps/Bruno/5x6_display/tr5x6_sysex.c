@@ -1,5 +1,5 @@
 /*
- * BSL SysEx Parser
+ * SysEx parser for the 5x6 display/ROM board
  *
  * ==========================================================================
  *
@@ -15,121 +15,143 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #include <adios.h>
-#include <string.h>
-#include "app.h"		// APP_SPI_MutexTake/Give
 
-/* Includes ------------------------------------------------------------------*/
-#include "tr5x6_rom.h"
+#include "app.h"
 #include "tr5x6_sysex.h"
+#include "tr5x6_rom.h"
+#include <stdio.h>
+#include <stdarg.h>
+#include <string.h>
 
 /////////////////////////////////////////////////////////////////////////////
-// Local types
+// local definitions
+/////////////////////////////////////////////////////////////////////////////
+
+
+// help constant - don't change!
+#define TR5X6_SYSEX_BLOCK_SIZE  (u16)512
+#define TR5X6_SYSEX_INFO_SIZE  (u16)(44+8+4)
+
+// command states
+#define TR5X6_SYSEX_CMD_STATE_BEGIN 0
+#define TR5X6_SYSEX_CMD_STATE_CONT  1
+#define TR5X6_SYSEX_CMD_STATE_END   2
+
+// ack/disack code
+#define TR5X6_SYSEX_DISACK   0x0e
+#define TR5X6_SYSEX_ACK      0x0f
+
+// disacknowledge arguments
+#define TR5X6_SYSEX_DISACK_LESS_BYTES_THAN_EXP  0x01
+#define TR5X6_SYSEX_DISACK_MORE_BYTES_THAN_EXP  0x02
+#define TR5X6_SYSEX_DISACK_WRONG_CHECKSUM       0x03
+#define TR5X6_SYSEX_DISACK_BS_NOT_AVAILABLE     0x0a
+#define TR5X6_SYSEX_DISACK_INVALID_COMMAND      0x0c
+
+#define TR5X6_SYSEX_ACK_INFO_DONE		      	0x01
+#define TR5X6_SYSEX_ACK_CONTINUE		      	0x02
+#define TR5X6_SYSEX_ACK_BANK_RDY		      	0x03
+#define TR5X6_SYSEX_ACK_BANK_END		      	0x04
+#define TR5X6_SYSEX_ACK_CMD_END			      	0x05
+
+
+#define TR5X6_SYSEX_XFER_TIMEOUT      			1000
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Type definitions
 /////////////////////////////////////////////////////////////////////////////
 
 typedef union {
 	struct {
-		unsigned ALL:8;
+		u8 ALL;
 	};
 
 	struct {
-		unsigned CTR:3;
-		unsigned :1;
-		unsigned :1;
-		unsigned :1;
-		unsigned CMD:1;
-		unsigned MY_SYSEX:1;
+		u8 CTR:3;
+		u8 :1;
+		u8 :1;
+		u8 DEV_ID:1;
+		u8 CMD:1;
+		u8 MY_SYSEX:1;
 	};
 
 	struct {
-		unsigned :1;
-		unsigned :1;
-		unsigned :1;
-		unsigned :1;
-		unsigned BLOCK_RECEIVED:1;
-		unsigned :1;
-		unsigned :1;
-		unsigned :1;
+		u8 BANK_RECEIVED:1;
+		u8 SLOT_RECEIVED:1;
+		u8 BLOCK_RECEIVED:1;
+		u8 :1;
+		u8 :1;
+		u8 :1;
+		u8 :1;
+		u8 :1;
 	};
-} sysex_cmd_state_t;
-
-// receive state
-typedef enum {
-	TR5X6_SYSEX_REC_A3,
-	TR5X6_SYSEX_REC_A2,
-	TR5X6_SYSEX_REC_A1,
-	TR5X6_SYSEX_REC_A0,
-	TR5X6_SYSEX_REC_L3,
-	TR5X6_SYSEX_REC_L2,
-	TR5X6_SYSEX_REC_L1,
-	TR5X6_SYSEX_REC_L0,
-	TR5X6_SYSEX_REC_PAYLOAD,
-	TR5X6_SYSEX_REC_CHECKSUM,
-	TR5X6_SYSEX_REC_ID,
-	TR5X6_SYSEX_REC_ID_OK,
-	TR5X6_SYSEX_REC_INVALID
-} sysex_rec_state_t;
-
-/////////////////////////////////////////////////////////////////////////////
-// Local Macros
-/////////////////////////////////////////////////////////////////////////////
-
-#define MEM32(addr) (*((volatile u32 *)(addr)))
-#define MEM16(addr) (*((volatile u16 *)(addr)))
-#define MEM8(addr)  (*((volatile u8  *)(addr)))
-
-// SST39xx040: nor flash memory range (512K)
-# define ROM_START_ADDR  (0x00000000)
-# define ROM_END_ADDR    (0x00080000 - 1)
+} sysex_state_t;
 
 
-// command states
-#define SYSEX_CMD_STATE_BEGIN 0
-#define SYSEX_CMD_STATE_CONT  1
-#define SYSEX_CMD_STATE_END   2
+
+
 /////////////////////////////////////////////////////////////////////////////
 // Internal Prototypes
 /////////////////////////////////////////////////////////////////////////////
+
 static s32 TR5X6_SYSEX_Cmd(u8 cmd_state, u8 midi_in);
-static s32 TR5X6_SYSEX_CmdFinished(void);
-static s32 TR5X6_SYSEX_Cmd_ReadMem(u8 cmd_state, u8 midi_in);
-static s32 TR5X6_SYSEX_Cmd_WriteMem(u8 cmd_state, u8 midi_in);
-static s32 TR5X6_SYSEX_RecAddrAndLen(u8 midi_in);
-static s32 TR5X6_SYSEX_SendAck(adios_midi_port_t port, u8 ack_code, u8 ack_arg);
-static s32 TR5X6_SYSEX_SendMem(adios_midi_port_t port, u32 addr, u32 len);
-static s32 TR5X6_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer);
+static s32 TR5X6_SYSEX_Cmd_Finished(void);
+static s32 TR5X6_SYSEX_Cmd_BankDataStart(u8 cmd_state, u8 midi_in);
+static s32 TR5X6_SYSEX_Cmd_BankDataEnd(u8 cmd_state, u8 midi_in);
+static s32 TR5X6_SYSEX_Send_Footer(u8 force);
 
+static s32 TR5X6_SYSEX_Cmd_ReadInfo(u8 cmd_state, u8 midi_in);
+static s32 TR5X6_SYSEX_Cmd_WriteInfo(u8 cmd_state, u8 midi_in);
+static s32 TR5X6_SYSEX_Cmd_ReadBlock(u8 cmd_state, u8 midi_in);
+static s32 TR5X6_SYSEX_Cmd_WriteBlock(u8 cmd_state, u8 midi_in);
+static s32 TR5X6_SYSEX_Cmd_Ping(u8 cmd_state, u8 midi_in);
 
-/////////////////////////////////////////////////////////////////////////////
-// Local Variables
-/////////////////////////////////////////////////////////////////////////////
-
-static sysex_rec_state_t sysex_rec_state;
-static sysex_cmd_state_t sysex_cmd_state;
-static u8 sysex_cmd;
-
-static adios_midi_port_t sysex_port = DEFAULT;
-static u32 sysex_addr;
-static u32 sysex_len;
-static u8 sysex_checksum;
-static u8 sysex_received_checksum;
-static u32 sysex_receive_ctr;
 
 /////////////////////////////////////////////////////////////////////////////
 // constant definitions
 /////////////////////////////////////////////////////////////////////////////
 
-// SysEx header of MIDIO128
-static const u8 sysex_header[4] = { 0xf0, 0x41, 0x00, 0x1c};	// 505
-//static const u8 sysex_header[5] = { 0xf0, 0x41, 0x00, 0x1d};	// 626
+// What every message of this protocol opens with, and it does NOT change:
+// 00 22 15 is the Addictive Instruments manufacturer ID, and the fifth byte
+// says WHO is answering - 0x32 the OS (bootloader queries and the like),
+// 0x44 this application. The host side matches these five bytes to know
+// which of the two it is talking to.
+static const u8 sysex_header[5] = { 0xf0, 0x00, 0x22, 0x15, 0x44 };
+
+
 /////////////////////////////////////////////////////////////////////////////
 // local variables
 /////////////////////////////////////////////////////////////////////////////
 
-// ensure that the buffer is located at a word boundary (required for LPC17 flash programming routines)
-static u8 sysex_buffer[TR5X6_SYSEX_BUFFER_SIZE] __attribute__ ((aligned (8)));
+static sysex_state_t sysex_state;
+static u8 sysex_cmd;
+static u8 sysex_last_cmd;
 
-static u8 halt_state;
+static adios_midi_port_t sysex_port = DEFAULT;
+static u8 sysex_checksum;
+static u8 sysex_bank;
+static u8 sysex_slot;
+static u16 sysex_block;
+static u16 sysex_total_block;
+static u8 sysex_byte;
+static u8 sysex_received_checksum;
+static u16 sysex_receive_ctr;
+static u8 write_info_req;
+static u8 write_block_req;
+static u8 sysex_act = 0;
+static s16 xfer_time_out=-1;
+static u16 sysex_bank_block;
+static u16 sysex_bank_block_amount;
+static u8 sysex_bank_progress=0;
 
+u8 tr5x6_sysex_block_flag=0;
+tr5x6_xfer_state_t tr5x6_xfer_state;
+u8 tr5x6_sysex_bank_info_refresh = 0;
+
+// TODO: use malloc function instead of a global array to save RAM
+static u8 sysex_buffer[(TR5X6_SYSEX_BLOCK_SIZE>>1)+12];
+static u8 datas[TR5X6_ROM_SECTOR_SIZE];
 
 /////////////////////////////////////////////////////////////////////////////
 // This function initializes the SysEx handler
@@ -139,40 +161,258 @@ s32 TR5X6_SYSEX_Init(u32 mode)
 	if( mode != 0 )
 		return -1; // only mode 0 supported
 
-	// set to one when writing flash to prevent the execution of application code
-	// so long flash hasn't been programmed completely
-	halt_state = 0;
 	sysex_port = DEFAULT;
-	sysex_rec_state= 0;
-	sysex_cmd_state.ALL = 0;
-	sysex_cmd = 0;
+	sysex_state.ALL = 0;
+	//temp
+	//sysex_total_block=33;
+	write_block_req=0;
+
+	tr5x6_xfer_state.ALL=0;
+	// install SysEx parser
+	//ADIOS_MIDI_SysExCallback_Init(TR5X6_SYSEX_Parser);
+	// parser called from APP_SYSEX_Parser
+
 	return 0; // no error
 }
 
-
 /////////////////////////////////////////////////////////////////////////////
-// Returns 1 if BSL is in halt state (e.g. code is uploaded)
+// This function sends a SysEx dump of the slot info
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_HaltStateGet(void)
+s32 TR5X6_SYSEX_Send_Info(adios_midi_port_t port)
 {
-	return halt_state;
+	int i;
+	int sysex_buffer_ix = 0;
+	u8 checksum;
+	u8 c;
+
+	// send header
+	for(i=0; i<sizeof(sysex_header); ++i)
+		sysex_buffer[sysex_buffer_ix++] = sysex_header[i];
+
+	// send device id
+	sysex_buffer[sysex_buffer_ix++] = ADIOS_MIDI_DeviceIDGet();
+
+	// "write block" command (so that dump could be sent back to overwrite EEPROM w/o modifications)
+	sysex_buffer[sysex_buffer_ix++] = sysex_cmd;
+
+	// write block number
+	sysex_buffer[sysex_buffer_ix++] = sysex_bank;
+	checksum = sysex_bank;
+
+	// write block number
+	sysex_buffer[sysex_buffer_ix++] = sysex_slot;
+	checksum += sysex_slot;
+
+	// write block number
+	sysex_buffer[sysex_buffer_ix++] = 0;		// doesn't matter here
+	//checksum += 0;
+
+	tr5x6_flash_info_t slot;
+	slot.bank=sysex_bank;
+	slot.slot=sysex_slot;
+
+	if(sysex_cmd==CMD_SLOT_READ_INFO)
+		TR5X6_FLASH_SlotRead(&slot);
+	else TR5X6_FLASH_BankRead(&slot);
+
+	// add slot name
+	for(i=0; i<22; i++) {
+		c=(u8)slot.name[i];
+		// 7bit format - 8th bit discarded
+		u8 c_msb = (u8)(c >>4);
+		u8 c_lsb = (u8)(c & 0xf);
+		sysex_buffer[sysex_buffer_ix++] = c_msb;
+		checksum += c_msb;
+		sysex_buffer[sysex_buffer_ix++] = c_lsb;
+		checksum += c_lsb;
+	}
+	// add slot color
+	c = (u8)(slot.color >>28);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)((slot.color >> 24) & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)((slot.color >> 20) & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)((slot.color >> 16) & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)((slot.color >> 12) & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)((slot.color >> 8) & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)((slot.color >> 4) & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)(slot.color & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+
+	// add slot magic
+	c = (u8)(slot.magic >>12);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)((slot.magic >> 8) & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)((slot.magic >> 4) & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+	c = (u8)(slot.magic & 0xf);
+	sysex_buffer[sysex_buffer_ix++] = c;
+	checksum += c;
+
+	// send checksum
+	sysex_buffer[sysex_buffer_ix++] = -checksum & 0x7f;
+
+	// send footer
+	sysex_buffer[sysex_buffer_ix++] = 0xf7;
+
+	// finally send SysEx stream and return error status
+	sysex_act = 2;
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, sysex_buffer_ix);
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Used by ADIOS_MIDI to release halt state instead of triggering a reset
+// This function sends a SysEx dump of a patch block
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_ReleaseHaltState(void)
+s32 TR5X6_SYSEX_Send_Block(adios_midi_port_t port)
 {
-	// always send upload request (like if we would come out of reset)
-	// DIN2 = the instrument's physical MIDI OUT, where ADIOS Studio listens
-	TR5X6_SYSEX_SendUploadReq(DIN2);
-	TR5X6_SYSEX_SendUploadReq(USB0);
+	int i;
+	int sysex_buffer_ix = 0;
+	u8 checksum;
+	// the host's slot table, resolved once for this function
+	const tr5x6_slot_t *slots = tr5x6_unit->slots;
 
-	// clear halt state
-	halt_state = 0;
+	// send header
+	for(i=0; i<sizeof(sysex_header); ++i)
+		sysex_buffer[sysex_buffer_ix++] = sysex_header[i];
 
-	return 0;
+	// send device id
+	sysex_buffer[sysex_buffer_ix++] = ADIOS_MIDI_DeviceIDGet();
+
+	// "write block" command (so that dump could be sent back to overwrite EEPROM w/o modifications)
+	sysex_buffer[sysex_buffer_ix++] = sysex_cmd;
+
+	// write block number
+	sysex_buffer[sysex_buffer_ix++] = sysex_bank;
+	checksum = sysex_bank;
+
+	// write block number
+	sysex_buffer[sysex_buffer_ix++] = sysex_slot;
+	checksum += sysex_slot;
+
+	// write block number
+	sysex_buffer[sysex_buffer_ix++] = sysex_block;
+	checksum += sysex_block;
+
+	u32 addr;
+	switch(slots[sysex_slot].size){
+	case SIZE_4K:
+		tr5x6_slot_parity_t even_odd = (tr5x6_slot_parity_t)slots[sysex_slot].parity;
+		u8 sector= (sysex_block/8);
+		u8 block=sysex_block%8;
+
+		addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sector*TR5X6_ROM_SECTOR_SIZE) | (block<<9) | (even_odd^1);
+		for(int i=0;i<(TR5X6_SYSEX_BLOCK_SIZE>>1);i++){
+			u8 data = TR5X6_ROM_Read(addr);
+			u8 data_msb = (u8)(data >>4);
+			u8 data_lsb = (u8)(data & 0xf);
+			sysex_buffer[sysex_buffer_ix++] = data_msb;
+			checksum += data_msb;
+			sysex_buffer[sysex_buffer_ix++] = data_lsb;
+			checksum += data_lsb;
+			addr +=2;
+
+		}
+
+		break;
+
+
+	case SIZE_8K:
+	case SIZE_16K:
+	case SIZE_32K:
+
+		addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sysex_block<<8);
+		for(int i=0; i<(TR5X6_SYSEX_BLOCK_SIZE>>1); addr++, i++) {
+			u8 data = TR5X6_ROM_Read(addr);
+			u8 data_msb = (u8)(data >>4);
+			u8 data_lsb = (u8)(data & 0xf);
+			sysex_buffer[sysex_buffer_ix++] = data_msb;
+			checksum += data_msb;
+			sysex_buffer[sysex_buffer_ix++] = data_lsb;
+			checksum += data_lsb;
+		}
+
+		break;
+
+	}
+
+	// send checksum
+	sysex_buffer[sysex_buffer_ix++] = -checksum & 0x7f;
+
+	// send footer
+	sysex_buffer[sysex_buffer_ix++] = 0xf7;
+
+	// The bus is deliberately NOT handed back here. The ROM data bus also
+	// feeds the host's DAC and follows the HOST line, so every PROG/HOST swing
+	// drags it from Hi-Z to a forced level - and that is AUDIBLE. A multi-block
+	// dump therefore stays in PROG throughout and hands the bus back once, on
+	// the last block (TR5X6_SYSEX_Cmd_ReadBlock). Do not "restore" a call here.
+	// finally send SysEx stream and return error status
+	sysex_act = 2;
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, sysex_buffer_ix);
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This function sends a SysEx acknowledge to notify the user about the received command
+// expects acknowledge code (e.g. 0x0f for good, 0x0e for error) and additional argument
+/////////////////////////////////////////////////////////////////////////////
+s32 TR5X6_SYSEX_Send_Ack(adios_midi_port_t port, u8 ack_code, u8 ack_arg)
+{
+	int i;
+	u8 buffer[10]; // should be enough?
+	int buffer_ix = 0;
+
+	// send header
+	for(i=0; i<sizeof(sysex_header); ++i)
+		buffer[buffer_ix++] = sysex_header[i];
+
+	// send device id
+	buffer[buffer_ix++] = ADIOS_MIDI_DeviceIDGet();
+	// send ack code and argument
+	buffer[buffer_ix++] = ack_code;
+	buffer[buffer_ix++] = ack_arg;
+
+	// send footer
+	buffer[buffer_ix++] = 0xf7;
+
+	// finally send SysEx stream and return error status
+	sysex_act = 2;
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)buffer, buffer_ix);
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// This function is called from NOTIFY_MIDI_TimeOut() in app.c if the 
+// MIDI parser runs into timeout
+/////////////////////////////////////////////////////////////////////////////
+s32 TR5X6_SYSEX_TimeOut(adios_midi_port_t port)
+{
+	// if we receive a SysEx command (MY_SYSEX flag set), abort parser if port matches
+	if( sysex_state.MY_SYSEX && port == sysex_port )
+		TR5X6_SYSEX_Cmd_Finished();
+	// the transfer died mid-flight, so give the machine its ROM back or it
+	// stays deaf until the next command. Swinging the bus is safe here:
+	// nothing is streaming any more.
+	TR5X6_ROM_HOST();
+	return 0; // no error
 }
 
 
@@ -182,21 +422,20 @@ s32 TR5X6_SYSEX_ReleaseHaltState(void)
 s32 TR5X6_SYSEX_Parser(adios_midi_port_t port, u8 midi_in)
 {
 	// TODO: here we could send an error notification, that multiple devices are trying to access the device
-	if( sysex_cmd_state.MY_SYSEX && port != sysex_port )
+	if( sysex_state.MY_SYSEX && port != sysex_port )
 		return 1; // don't forward package to APP_MIDI_NotifyPackage()
 
 	sysex_port = port;
-
 	// branch depending on state
-	if( !sysex_cmd_state.MY_SYSEX ) {
-		if( midi_in != sysex_header[sysex_cmd_state.CTR] ) {
+	if( !sysex_state.MY_SYSEX ) {
+		if( midi_in != sysex_header[sysex_state.CTR] ) {
 			// incoming byte doesn't match
-			TR5X6_SYSEX_CmdFinished();
+			TR5X6_SYSEX_Cmd_Finished();
 		} else {
-			if( ++sysex_cmd_state.CTR == sizeof(sysex_header) ) {
+			if( ++sysex_state.CTR == sizeof(sysex_header) ) {
 				// complete header received, waiting for data
-				sysex_cmd_state.MY_SYSEX = 1;
-
+				sysex_state.MY_SYSEX = 1;
+				sysex_state.CTR=0;
 				// disable merger forwarding until end of sysex message
 				// TODO
 				//	MIOS_MPROC_MergerDisable();
@@ -205,47 +444,38 @@ s32 TR5X6_SYSEX_Parser(adios_midi_port_t port, u8 midi_in)
 	} else {
 		// check for end of SysEx message or invalid status byte
 		if( midi_in >= 0x80 ) {
-			if( midi_in == 0xf7 && sysex_cmd_state.CMD ) {
-				TR5X6_SYSEX_Cmd(SYSEX_CMD_STATE_END, midi_in);
+			if( midi_in == 0xf7 && sysex_state.CMD ) {
+				TR5X6_SYSEX_Cmd(TR5X6_SYSEX_CMD_STATE_END, midi_in);
 			}
-			TR5X6_SYSEX_CmdFinished();
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-			ADIOS_MIDI_SendDebugMessage("parser end\n");
-#endif
+			TR5X6_SYSEX_Cmd_Finished();
 		} else {
+			if( !sysex_state.DEV_ID ) {
+				if(midi_in==ADIOS_MIDI_DeviceIDGet())sysex_state.DEV_ID = 1;
+				else TR5X6_SYSEX_Cmd_Finished();
+			}
 			// check if command byte has been received
-			if( !sysex_cmd_state.CMD ) {
-				sysex_cmd_state.CMD = 1;
+			else if( !sysex_state.CMD ) {
+				sysex_state.CMD = 1;
 				sysex_cmd = midi_in;
-				TR5X6_SYSEX_Cmd(SYSEX_CMD_STATE_BEGIN, midi_in);
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-			ADIOS_MIDI_SendDebugMessage("parser start cmd=x%02x\n", sysex_cmd);
-#endif
+				TR5X6_SYSEX_Cmd(TR5X6_SYSEX_CMD_STATE_BEGIN, midi_in);
 			}
 			else
-				TR5X6_SYSEX_Cmd(SYSEX_CMD_STATE_CONT, midi_in);
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-			ADIOS_MIDI_SendDebugMessage("[TR5X6_SYSEX] data 0x%02x, cnt %d\n", midi_in, sysex_receive_ctr);
-#endif
+				TR5X6_SYSEX_Cmd(TR5X6_SYSEX_CMD_STATE_CONT, midi_in);
 		}
 	}
 
 	return 1; // don't forward package to APP_MIDI_NotifyPackage()
 }
 
-
 /////////////////////////////////////////////////////////////////////////////
-// This function is called at the end of a sysex command or on
+// This function is called at the end of a sysex command or on 
 // an invalid message
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_CmdFinished(void)
+s32 TR5X6_SYSEX_Cmd_Finished(void)
 {
 	// clear all status variables
-	halt_state = 0;
-	sysex_port = DEFAULT;
-	sysex_rec_state= 0;
-	sysex_cmd_state.ALL = 0;
-	sysex_cmd = 0;
+	sysex_state.ALL = 0;
+	sysex_cmd = CMD_IDLE;
 
 	// enable MIDI forwarding again
 	// TODO
@@ -255,34 +485,62 @@ s32 TR5X6_SYSEX_CmdFinished(void)
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// This function enhances ADIOS SysEx commands
-// it's called from ADIOS_MIDI_SYSEX_Cmd if the "ADIOS_MIDI_TR5X6_ENHANCEMENTS"
-// switch is set (see code there for details)
+// This function sends the SysEx footer if merger enabled
+// if force == 1, send the footer regardless of merger state
+/////////////////////////////////////////////////////////////////////////////
+s32 TR5X6_SYSEX_Send_Footer(u8 force)
+{
+#if 0
+	// TODO ("force" not used yet, merger not available yet)
+	if( force || (MIOS_MIDI_MergerGet() & 0x01) )
+		MIOS_MIDI_TxBufferPut(0xf7);
+#endif
+
+	return 0; // no error
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// This function handles the sysex commands
 /////////////////////////////////////////////////////////////////////////////
 s32 TR5X6_SYSEX_Cmd(u8 cmd_state, u8 midi_in)
 {
-	//	// change debug port
-	//	ADIOS_MIDI_DebugPortSet(port);
-	//
-	//	// wait 2 additional seconds whenever a SysEx message has been received
-	//	ADIOS_STOPWATCH_Reset();
-
 	// enter the commands here
 	switch( sysex_cmd ) {
-	// case 0x00: // query command is implemented in ADIOS
-	// case 0x0f: // ping command is implemented in ADIOS
-
-	case 0x01:
-		TR5X6_SYSEX_Cmd_ReadMem(cmd_state, midi_in);
+	case CMD_SLOT_READ_INFO:
+	case CMD_BANK_READ_INFO:
+		TR5X6_SYSEX_Cmd_ReadInfo(cmd_state, midi_in);		// cmd differs
+		sysex_last_cmd = sysex_cmd;
 		break;
-	case 0x02:
-		TR5X6_SYSEX_Cmd_WriteMem(cmd_state, midi_in);
+	case CMD_SLOT_WRITE_INFO:
+	case CMD_BANK_WRITE_INFO:
+		TR5X6_SYSEX_Cmd_WriteInfo(cmd_state, midi_in);		// cmd differs
+		sysex_last_cmd = sysex_cmd;
+		break;
+	case CMD_READ_BLOCK:
+		TR5X6_SYSEX_Cmd_ReadBlock(cmd_state, midi_in);
+		sysex_last_cmd = sysex_cmd;
+		break;
+	case CMD_WRITE_BLOCK:
+		TR5X6_SYSEX_Cmd_WriteBlock(cmd_state, midi_in);
+		sysex_last_cmd = sysex_cmd;
 		break;
 
+	case CMD_BANK_DATA_START:
+		TR5X6_SYSEX_Cmd_BankDataStart(cmd_state, midi_in);
+		sysex_last_cmd = sysex_cmd;
+		break;
+	case CMD_BANK_DATA_END:
+		TR5X6_SYSEX_Cmd_BankDataEnd(cmd_state, midi_in);
+		sysex_last_cmd = sysex_cmd;
+		break;
+	case CMD_ACK:
+		TR5X6_SYSEX_Cmd_Ping(cmd_state, midi_in);
+		break;
 	default:
 		// unknown command
-		TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_INVALID_COMMAND);
-		break;
+		TR5X6_SYSEX_Send_Footer(0);
+		TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, TR5X6_SYSEX_DISACK_INVALID_COMMAND);
+		TR5X6_SYSEX_Cmd_Finished();
 	}
 
 	return 0; // no error
@@ -290,38 +548,44 @@ s32 TR5X6_SYSEX_Cmd(u8 cmd_state, u8 midi_in)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Command 01: Read Memory handler
-// TODO: we could provide this command also during runtime, as it isn't destructive
-// or it could be available as debug command 0D like known from MIOS8
+// Command 01: Read Patch handler
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_Cmd_ReadMem(u8 cmd_state, u8 midi_in)
+s32 TR5X6_SYSEX_Cmd_ReadInfo(u8 cmd_state, u8 midi_in)
 {
 	switch( cmd_state ) {
 
-	case ADIOS_MIDI_SYSEX_CMD_STATE_BEGIN:
-		// set initial receive state and address/len
-		sysex_rec_state = TR5X6_SYSEX_REC_A3;
-		sysex_addr = 0;
-		sysex_len = 0;
+	case TR5X6_SYSEX_CMD_STATE_BEGIN:
+		// nothing to do
 		break;
 
-	case ADIOS_MIDI_SYSEX_CMD_STATE_CONT:
-		if( sysex_rec_state < TR5X6_SYSEX_REC_PAYLOAD )
-			TR5X6_SYSEX_RecAddrAndLen(midi_in);
+	case TR5X6_SYSEX_CMD_STATE_CONT:
+		if( !sysex_state.BANK_RECEIVED ) {
+			sysex_bank = midi_in; // store block number
+			sysex_state.BANK_RECEIVED = 1;
+
+		} else if( !sysex_state.SLOT_RECEIVED ) {
+			sysex_slot = midi_in; // store block number
+			sysex_state.SLOT_RECEIVED = 1;
+
+		} else if( !sysex_state.BLOCK_RECEIVED ) {
+			sysex_block = 0; // doesn't matter here
+			sysex_state.BLOCK_RECEIVED = 1;
+
+		} else{
+			// wait for F7
+		}
+
 		break;
 
 	default: // TR5X6_SYSEX_CMD_STATE_END
-		// TODO: send 0xf7 if merger enabled
-
-		// did we reach payload state?
-		if( sysex_rec_state != TR5X6_SYSEX_REC_PAYLOAD ) {
-			// not enough bytes received
-			TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
-		} else {
-			// send dump
-			TR5X6_SYSEX_SendMem(sysex_port, sysex_addr, sysex_len);
+		TR5X6_SYSEX_Send_Info(sysex_port);
+		tr5x6_xfer_state.STAT=XFER_INFO;
+		xfer_time_out=-1;
+		tr5x6_xfer_state.FLAG_INFO=1;
+		tr5x6_xfer_state.FLAG_END=1;
+		if(sysex_bank_block_amount){
+			sysex_bank_block++;
 		}
-
 		break;
 	}
 
@@ -330,93 +594,97 @@ s32 TR5X6_SYSEX_Cmd_ReadMem(u8 cmd_state, u8 midi_in)
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Command 02: Write Memory handler
+// Command 02: Write Patch handler
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_Cmd_WriteMem(u8 cmd_state, u8 midi_in)
+s32 TR5X6_SYSEX_Cmd_WriteInfo(u8 cmd_state, u8 midi_in)
 {
-	static u32 bit_ctr8 = 0;
-	static u32 value8 = 0;
-
 	switch( cmd_state ) {
 
-	case SYSEX_CMD_STATE_BEGIN:
-		// set initial receive state and address/len
-		sysex_rec_state = TR5X6_SYSEX_REC_A3;
-		sysex_addr = 0;
-		sysex_len = 0;
-		// clear checksum and receive counters
-		sysex_checksum = 0;
+	case TR5X6_SYSEX_CMD_STATE_BEGIN:
+		sysex_checksum = 0; // clear checksum
+		sysex_receive_ctr = 0; // clear byte counter
 		sysex_received_checksum = 0;
-
-		sysex_receive_ctr = 0;
-		bit_ctr8 = 0;
-		value8 = 0;
 		break;
 
-	case SYSEX_CMD_STATE_CONT:
-		if( sysex_rec_state < TR5X6_SYSEX_REC_PAYLOAD ) {
-			sysex_checksum += midi_in;
-			TR5X6_SYSEX_RecAddrAndLen(midi_in);
-		} else if( sysex_rec_state == TR5X6_SYSEX_REC_PAYLOAD ) {
-			sysex_checksum += midi_in;
-			// new byte has been received - descramble and buffer it
-			if( sysex_receive_ctr < TR5X6_SYSEX_MAX_BYTES ) {
-				u8 value7 = midi_in;
-				int bit_ctr7;
-				for(bit_ctr7=0; bit_ctr7<7; ++bit_ctr7) {
-					value8 = (value8 << 1) | ((value7 & 0x40) ? 1 : 0);
-					value7 <<= 1;
+	case TR5X6_SYSEX_CMD_STATE_CONT:
+		if( !sysex_state.BANK_RECEIVED ) {
+			sysex_bank = midi_in; // store block number
+			sysex_state.BANK_RECEIVED = 1;
 
-					if( ++bit_ctr8 >= 8 ) {
-						sysex_buffer[sysex_receive_ctr] = value8;
-						bit_ctr8 = 0;
-						if( ++sysex_receive_ctr >= sysex_len )
-							sysex_rec_state = TR5X6_SYSEX_REC_CHECKSUM;
-					}
+			// add to checksum
+			sysex_checksum += midi_in;
+		} else if( !sysex_state.SLOT_RECEIVED ) {
+			sysex_slot = midi_in; // store block number
+			sysex_state.SLOT_RECEIVED = 1;
+
+			// add to checksum
+			sysex_checksum += midi_in;
+		} else if( !sysex_state.BLOCK_RECEIVED ) {
+			sysex_block = midi_in; // store block number
+			sysex_state.BLOCK_RECEIVED = 1;
+
+			// add to checksum
+			sysex_checksum += midi_in;
+		} else{
+			if( sysex_receive_ctr < TR5X6_SYSEX_INFO_SIZE ) {	// 16 char name + 256 databytes
+				// 7bit format - 8th bit discarded
+				if(sysex_receive_ctr & 1){
+					sysex_buffer[sysex_receive_ctr>>1] = sysex_byte | midi_in;
+				}else{
+					sysex_byte = midi_in<<4;
 				}
+				// add to checksum
+				sysex_checksum += midi_in;
+
+			} else if( sysex_receive_ctr == TR5X6_SYSEX_INFO_SIZE ) {
+				// store received checksum
+				sysex_received_checksum = midi_in;
+
+			}else {
+				// wait for F7
 			}
-		} else if( sysex_rec_state == TR5X6_SYSEX_REC_CHECKSUM ) {
-			// store received checksum
-			sysex_received_checksum = midi_in;
-		} else {
-			// too many bytes... wait for F7
-			sysex_rec_state = TR5X6_SYSEX_REC_INVALID;
+
+			// increment counter
+			++sysex_receive_ctr;
 		}
+
 		break;
 
-	default: // ADIOS_MIDI_SYSEX_CMD_STATE_END
-		// TODO: send 0xf7 if merger enabled
-
-		if( sysex_receive_ctr < sysex_len ) {
-			// for remote analysis...
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-			ADIOS_MIDI_SendDebugMessage("[TR5X6_SYSEX] expected %d, got %d bytes (retry)\n", sysex_len, sysex_receive_ctr);
-#endif
+	default: // TR5X6_SYSEX_CMD_STATE_END
+		//TR5X6_SYSEX_Send_Footer(0);
+		if( sysex_receive_ctr < (TR5X6_SYSEX_INFO_SIZE+1) ) {
 			// not enough bytes received
-			TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
-		} else if( sysex_rec_state == TR5X6_SYSEX_REC_INVALID ) {
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, TR5X6_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
+			tr5x6_xfer_state.STAT=XFER_ERROR;
+			xfer_time_out=-1;
+			tr5x6_xfer_state.FLAG_ERROR=1;
+		} else if( sysex_receive_ctr > (TR5X6_SYSEX_INFO_SIZE+1) ) {
 			// too many bytes received
-			TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_MORE_BYTES_THAN_EXP);
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, TR5X6_SYSEX_DISACK_MORE_BYTES_THAN_EXP);
+			tr5x6_xfer_state.STAT=XFER_ERROR;
+			xfer_time_out=-1;
+			tr5x6_xfer_state.FLAG_ERROR=1;
 		} else if( sysex_received_checksum != (-sysex_checksum & 0x7f) ) {
 			// notify that wrong checksum has been received
-			TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRONG_CHECKSUM);
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, TR5X6_SYSEX_DISACK_WRONG_CHECKSUM);
+			tr5x6_xfer_state.STAT=XFER_ERROR;
+			xfer_time_out=-1;
+			tr5x6_xfer_state.FLAG_ERROR=1;
 		} else {
-			// enter halt state (can only be released via BSL reset)
-			halt_state = 1;
-
-			// write received data into memory
-			s32 error;
-			if( (error = TR5X6_SYSEX_WriteMem(sysex_addr, sysex_len, sysex_buffer)) ) {
-				// write failed - return negated error status
-				TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_DISACK, -error);
-			} else {
-				// notify that bytes have been received by returning checksum
-				TR5X6_SYSEX_SendAck(sysex_port, ADIOS_MIDI_SYSEX_ACK, -sysex_checksum & 0x7f);
+			// notify that bytes have been received
+			//TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, 0x00);
+			// start writing the block data, erase the ROM if necessary
+			// check for flash memory range
+			//while(ADIOS_UART_TxBufferUsed(0)>0){};
+			write_info_req=sysex_cmd;
+			tr5x6_xfer_state.STAT=XFER_INFO;
+			xfer_time_out=TR5X6_SYSEX_XFER_TIMEOUT;
+			tr5x6_xfer_state.FLAG_INFO=1;
+			if(sysex_bank_block_amount){
+				if(sysex_cmd==CMD_SLOT_WRITE_INFO){
+					sysex_bank_block++;
+				}
 			}
-
-			// enfore immediate MIDI queue flush
-			// (important for retry handling: send ack before next message is processed)
-			//ADIOS_MIDI_Periodic_mS();
 		}
 		break;
 	}
@@ -424,207 +692,615 @@ s32 TR5X6_SYSEX_Cmd_WriteMem(u8 cmd_state, u8 midi_in)
 	return 0; // no error
 }
 
-
 /////////////////////////////////////////////////////////////////////////////
-// Help function to receive address and length
+// Command 03: Read Patch block handler
 /////////////////////////////////////////////////////////////////////////////
-static s32 TR5X6_SYSEX_RecAddrAndLen(u8 midi_in)
+s32 TR5X6_SYSEX_Cmd_ReadBlock(u8 cmd_state, u8 midi_in)
 {
-	if( sysex_rec_state <= TR5X6_SYSEX_REC_A0 ) {
-		sysex_addr = (sysex_addr << 7) | ((midi_in & 0x7f) << 4);
-		if( sysex_rec_state == TR5X6_SYSEX_REC_A0 )
-			sysex_rec_state = TR5X6_SYSEX_REC_L3;
-		else
-			++sysex_rec_state;
-	} else if( sysex_rec_state <= TR5X6_SYSEX_REC_L0 ) {
-		sysex_len = (sysex_len << 7) | ((midi_in & 0x7f) << 4);
-		if( sysex_rec_state == TR5X6_SYSEX_REC_L0 ) {
-			sysex_rec_state = TR5X6_SYSEX_REC_PAYLOAD;
-		} else {
-			++sysex_rec_state;
+	switch( cmd_state ) {
+
+	case TR5X6_SYSEX_CMD_STATE_BEGIN:
+		// nothing to do
+		break;
+
+	case TR5X6_SYSEX_CMD_STATE_CONT:
+		if( !sysex_state.BANK_RECEIVED ) {
+			sysex_bank = midi_in; // store bank number
+			sysex_state.BANK_RECEIVED = 1;
+
+		} else if( !sysex_state.SLOT_RECEIVED ) {
+			sysex_slot = midi_in; // store slot number
+			sysex_state.SLOT_RECEIVED = 1;
+
+		} else if( !sysex_state.BLOCK_RECEIVED ) {
+			sysex_block = midi_in; // store block number
+			sysex_state.BLOCK_RECEIVED = 1;
+
+		} else{
+			// wait for F7
 		}
-	} else {
-		return -1; // function shouldn't be called in this state
+
+		break;
+
+	default: // TR5X6_SYSEX_CMD_STATE_END
+			TR5X6_SYSEX_Send_Block(sysex_port);
+			//ADIOS_IRQ_Enable();
+			switch(tr5x6_unit->slots[sysex_slot].size){
+			case SIZE_4K:sysex_total_block=16;break;
+			case SIZE_8K:sysex_total_block=32;break;
+			case SIZE_16K:sysex_total_block=64;break;
+			case SIZE_32K:sysex_total_block=128;break;
+			}
+			if(sysex_block==0){
+				tr5x6_xfer_state.STAT=XFER_BEGIN;
+				xfer_time_out=TR5X6_SYSEX_XFER_TIMEOUT;
+				tr5x6_xfer_state.FLAG_BEGIN=1;
+			}else if( sysex_block < (sysex_total_block-1)){
+				tr5x6_xfer_state.STAT=XFER_CONT;
+				xfer_time_out=TR5X6_SYSEX_XFER_TIMEOUT;
+				tr5x6_xfer_state.FLAG_CONT=1;
+			}else{
+				// last block: hand the ROM back to the machine now, and only
+				// now - one swing per dump instead of one per block (see
+				// TR5X6_SYSEX_Send_Block for why that matters)
+				TR5X6_ROM_HOST();
+				xfer_time_out=-1;
+				tr5x6_xfer_state.FLAG_END=1;
+			}
+			if(sysex_bank_block_amount){
+				sysex_bank_block++;
+			}
+		break;
+	}
+
+
+	return 0; // no error
+}
+/////////////////////////////////////////////////////////////////////////////
+// Command 04: Write Patch Block handler
+/////////////////////////////////////////////////////////////////////////////
+s32 TR5X6_SYSEX_Cmd_WriteBlock(u8 cmd_state, u8 midi_in)
+{
+	switch( cmd_state ) {
+
+	case TR5X6_SYSEX_CMD_STATE_BEGIN:
+		sysex_checksum = 0; // clear checksum
+		sysex_receive_ctr = 0; // clear byte counter
+		sysex_received_checksum = 0;
+		break;
+
+	case TR5X6_SYSEX_CMD_STATE_CONT:
+		if( !sysex_state.BANK_RECEIVED ) {
+			sysex_bank = midi_in; // store block number
+			sysex_state.BANK_RECEIVED = 1;
+
+			// add to checksum
+			sysex_checksum += midi_in;
+		} else if( !sysex_state.SLOT_RECEIVED ) {
+			sysex_slot = midi_in; // store block number
+			switch(tr5x6_unit->slots[sysex_slot].size){
+			case SIZE_4K:sysex_total_block=16;break;
+			case SIZE_8K:sysex_total_block=32;break;
+			case SIZE_16K:sysex_total_block=64;break;
+			case SIZE_32K:sysex_total_block=128;break;
+			}
+			sysex_state.SLOT_RECEIVED = 1;
+
+			// add to checksum
+			sysex_checksum += midi_in;
+		} else if( !sysex_state.BLOCK_RECEIVED ) {
+			sysex_block = midi_in; // store block number
+			sysex_state.BLOCK_RECEIVED = 1;
+
+			// add to checksum
+			sysex_checksum += midi_in;
+		} else{
+			if( sysex_receive_ctr < TR5X6_SYSEX_BLOCK_SIZE ) {	// 16 char name + 256 databytes
+				// 7bit format - 8th bit discarded
+				if(sysex_receive_ctr & 1){
+					sysex_buffer[sysex_receive_ctr>>1] = sysex_byte | midi_in;
+				}else{
+					sysex_byte = midi_in<<4;
+				}
+				// add to checksum
+				sysex_checksum += midi_in;
+
+			} else if( sysex_receive_ctr == TR5X6_SYSEX_BLOCK_SIZE ) {
+				// store received checksum
+				sysex_received_checksum = midi_in;
+
+			}else {
+				// wait for F7
+			}
+
+			// increment counter
+			++sysex_receive_ctr;
+		}
+
+		break;
+
+	default: // TR5X6_SYSEX_CMD_STATE_END
+		//TR5X6_SYSEX_Send_Footer(0);
+		if( sysex_receive_ctr < (TR5X6_SYSEX_BLOCK_SIZE+1) ) {
+			// not enough bytes received
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, TR5X6_SYSEX_DISACK_LESS_BYTES_THAN_EXP);
+			tr5x6_xfer_state.STAT=XFER_ERROR;
+			xfer_time_out=-1;
+			tr5x6_xfer_state.FLAG_ERROR=1;
+		} else if( sysex_receive_ctr > (TR5X6_SYSEX_BLOCK_SIZE+1) ) {
+			// too many bytes received
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, TR5X6_SYSEX_DISACK_MORE_BYTES_THAN_EXP);
+			tr5x6_xfer_state.STAT=XFER_ERROR;
+			xfer_time_out=-1;
+			tr5x6_xfer_state.FLAG_ERROR=1;
+		} else if( sysex_received_checksum != (-sysex_checksum & 0x7f) ) {
+			// notify that wrong checksum has been received
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, TR5X6_SYSEX_DISACK_WRONG_CHECKSUM);
+			tr5x6_xfer_state.STAT=XFER_ERROR;
+			xfer_time_out=-1;
+			tr5x6_xfer_state.FLAG_ERROR=1;
+		} else {
+			// notify that bytes have been received
+			//TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, 0x00);
+
+      
+	 
+			write_block_req=1;
+			if(sysex_block==0){
+				tr5x6_xfer_state.STAT=XFER_BEGIN;
+				xfer_time_out=TR5X6_SYSEX_XFER_TIMEOUT;
+				tr5x6_xfer_state.FLAG_BEGIN=1;
+			}
+
+
+		}
+		break;
 	}
 
 	return 0; // no error
 }
 
-
-
 /////////////////////////////////////////////////////////////////////////////
-// This function sends a SysEx acknowledge to notify the user about the received command
-// expects acknowledge code (e.g. 0x0f for good, 0x0e for error) and additional argument
+// Command 04: Write Patch Block handler
 /////////////////////////////////////////////////////////////////////////////
-static s32 TR5X6_SYSEX_SendAck(adios_midi_port_t port, u8 ack_code, u8 ack_arg)
+s32 TR5X6_SYSEX_Cmd_WriteInfoRequest(void)
 {
-	u8 sysex_buffer[32]; // should be enough?
-	u8 *sysex_buffer_ptr = &sysex_buffer[0];
-	int i;
+	if(!write_info_req)return 0;
+		u8 cmd= write_info_req;
+	write_info_req=0;
 
-	for(i=0; i<sizeof(sysex_header); ++i)
-		*sysex_buffer_ptr++ = sysex_header[i];
+		int len=1;
+		u8 *buffer_ptr = &sysex_buffer[0];
+		while( (*buffer_ptr != '\0') && (len<=22)  ){
+			len++;
+			buffer_ptr++;
+		}
+      
+   
+		sysex_buffer[21]='\0';
+   
+		tr5x6_flash_info_t slot;
+		memcpy(slot.name, sysex_buffer, len);
+		slot.color= (sysex_buffer[23]<<16) |  (sysex_buffer[24]<<8) | sysex_buffer[25];
+		slot.magic= sysex_buffer[26]<<8 | sysex_buffer[27];
+		slot.bank = sysex_bank;
+		slot.slot = sysex_slot;
+		if(cmd==CMD_BANK_WRITE_INFO){			// bank info
+			if( TR5X6_FLASH_Bank_Write(slot)<0){
+				TR5X6_ROM_HOST();
+				tr5x6_xfer_state.STAT=XFER_ERROR;
+				xfer_time_out=-1;
+				tr5x6_xfer_state.FLAG_ERROR=1;
+	#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+				ADIOS_MIDI_SendDebugMessage("write failed for bank#%d data\n", slot.bank);
+	#endif
+				TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+				while(ADIOS_UART_TxBufferUsed(0)>0){};
+				return -1; // no error
 
-	// device ID
-	//*sysex_buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
+			}
+			tr5x6_sysex_bank_info_refresh = 1;
+		}else if(cmd==CMD_SLOT_WRITE_INFO){		// slot info
+			if( TR5X6_FLASH_Slot_Write(slot)<0){
+				TR5X6_ROM_HOST();
+				tr5x6_xfer_state.STAT=XFER_ERROR;
+				xfer_time_out=-1;
+				tr5x6_xfer_state.FLAG_ERROR=1;
+	#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+				ADIOS_MIDI_SendDebugMessage("write failed for bank#%d slot#%d data\n", slot.bank, slot.slot);
+	#endif
+				TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+				while(ADIOS_UART_TxBufferUsed(0)>0){};
+				return -1; // no error
 
-	// send ack code and argument
-	*sysex_buffer_ptr++ = ack_code;
-	*sysex_buffer_ptr++ = ack_arg;
+			}
+		}
+		TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, TR5X6_SYSEX_ACK_INFO_DONE);
+//		TR5X6_SYSEX_Send_UploadReq(sysex_port);
+		//tr5x6_xfer_state.STAT=XFER_END;
+		xfer_time_out=-1;
+		tr5x6_xfer_state.FLAG_END=1;
 
-	// send footer
-	*sysex_buffer_ptr++ = 0xf7;
 
-	// finally send SysEx stream
-	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
+
+
+
+	return 1; // no error
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// Command 04: Write Patch Block handler
+/////////////////////////////////////////////////////////////////////////////
+s32 TR5X6_SYSEX_Cmd_WriteBlockRequest(void)
+{
+	if(!write_block_req)return 0;
+
+	write_block_req=0;
+		// the host's slot table, resolved once for this function
+		const tr5x6_slot_t *slots = tr5x6_unit->slots;
+		u32 addr;
+		switch(slots[sysex_slot].size){
+		case SIZE_4K:
+			tr5x6_slot_parity_t even_odd = (tr5x6_slot_parity_t)slots[sysex_slot].parity;
+			u8 sector= (sysex_block/8);
+			u8 block=sysex_block%8;
+			u8* data_ptr;
+
+			switch(block){
+			case 0: //
+				// store the existing sector in RAM
+				data_ptr = &datas[0];
+				addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sector*TR5X6_ROM_SECTOR_SIZE);
+				for(int i=0;i<TR5X6_ROM_SECTOR_SIZE;i++){
+					u8 data = TR5X6_ROM_Read(addr++);
+					*(data_ptr++) = data;
+				}
+
+
+			case 1 ... 6: //
+			// new block to RAM
+			data_ptr = &datas[0] + (block<<9) + (even_odd^1);
+			for(int i=0; i<(TR5X6_SYSEX_BLOCK_SIZE>>1); i++) {
+				*data_ptr = sysex_buffer[i];
+				data_ptr +=2;
+			}
+			break;
+			case 7: //
+				// new block to RAM
+				data_ptr = &datas[0] + (block<<9) + (even_odd^1);
+				for(int i=0; i<(TR5X6_SYSEX_BLOCK_SIZE>>1); i++) {
+					*data_ptr = sysex_buffer[i];
+					data_ptr +=2;
+				}
+
+				addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sector*TR5X6_ROM_SECTOR_SIZE);
+				if( ((addr&0x007FFFFF) >= TR5X6_ROM_START_ADDR) && ((addr&0x007FFFFF) <= TR5X6_ROM_END_ADDR) ) {
+					tr5x6_rom_status status;
+					// sector erase
+					if((status=TR5X6_ROM_Sector_Erase(addr, 1000))!=TR5X6_ROM_OK) {
+						//ADIOS_IRQ_Enable();
+						TR5X6_ROM_HOST();
+						tr5x6_xfer_state.STAT=XFER_ERROR;
+						xfer_time_out=-1;
+						tr5x6_xfer_state.FLAG_ERROR=1;
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+						ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
+#endif
+						TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+						while(ADIOS_UART_TxBufferUsed(0)>0){};
+						return -1; // no error
+					}
+					// write ROM from RAM
+					for(int i=0; i<(TR5X6_ROM_SECTOR_SIZE); addr++, i++) {
+
+						if( (status=TR5X6_ROM_Write(addr, datas[i], 1000)) != TR5X6_ROM_OK ) {
+
+							//ADIOS_IRQ_Enable();
+							TR5X6_ROM_HOST();
+							tr5x6_xfer_state.STAT=XFER_ERROR;
+							xfer_time_out=-1;
+							tr5x6_xfer_state.FLAG_ERROR=1;
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+							ADIOS_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", sysex_buffer[i], addr, status);
+#endif
+							TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+							while(ADIOS_UART_TxBufferUsed(0)>0){};
+							return -1; // no error
+						}
+
+					}
+
+				}else{
+					// invalid address
+					TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE);
+					tr5x6_xfer_state.STAT=XFER_ERROR;
+					xfer_time_out=-1;
+					tr5x6_xfer_state.FLAG_ERROR=1;
+					return -1; // no error
+				}
+
+
+				break;
+			}
+			break;
+
+
+			case SIZE_8K:
+			case SIZE_16K:
+			case SIZE_32K:
+
+				addr = TR5X6_ROM_ProgAddr(sysex_bank) | slots[sysex_slot].addr_offset | (sysex_block<<8);
+				if( ((addr&0x007FFFFF) >= TR5X6_ROM_START_ADDR) && ((addr&0x007FFFFF) <= TR5X6_ROM_END_ADDR) ) {
+					tr5x6_rom_status status;
+					//TR5X6_SPI_TransferModeInit();
+					//ADIOS_IRQ_Disable();
+					for(int i=0; i<(TR5X6_SYSEX_BLOCK_SIZE>>1); addr++, i++) {
+
+
+						if( (addr % TR5X6_ROM_SECTOR_SIZE) == 0 ) {
+							if((status=TR5X6_ROM_Sector_Erase(addr, 1000))!=TR5X6_ROM_OK) {
+								//ADIOS_IRQ_Enable();
+								TR5X6_ROM_HOST();
+								tr5x6_xfer_state.STAT=XFER_ERROR;
+								xfer_time_out=-1;
+								tr5x6_xfer_state.FLAG_ERROR=1;
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+								ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
+#endif
+								TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+								while(ADIOS_UART_TxBufferUsed(0)>0){};
+								return -1; // no error
+							}
+
+						}
+
+						if( (status=TR5X6_ROM_Write(addr, sysex_buffer[i], 1000)) != TR5X6_ROM_OK ) {
+
+							//ADIOS_IRQ_Enable();
+							TR5X6_ROM_HOST();
+							tr5x6_xfer_state.STAT=XFER_ERROR;
+							xfer_time_out=-1;
+							tr5x6_xfer_state.FLAG_ERROR=1;
+#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+							ADIOS_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", sysex_buffer[i], addr, status);
+#endif
+							TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
+							while(ADIOS_UART_TxBufferUsed(0)>0){};
+							return -1; // no error
+						}
+
+					}
+
+				}else{
+					// invalid address
+					TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE);
+					tr5x6_xfer_state.STAT=XFER_ERROR;
+					xfer_time_out=-1;
+					tr5x6_xfer_state.FLAG_ERROR=1;
+					return -1; // no error
+				}
+				break;
+
+		}
+
+		//ADIOS_IRQ_Enable();
+		if( sysex_block < (sysex_total_block-1)){
+			//TR5X6_ROM_HOST();
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, TR5X6_SYSEX_ACK_CONTINUE);
+			tr5x6_xfer_state.STAT=XFER_CONT;
+			xfer_time_out=TR5X6_SYSEX_XFER_TIMEOUT;
+			tr5x6_xfer_state.FLAG_CONT=1;
+			if(sysex_bank_block_amount){
+				sysex_bank_block++;
+			}
+
+		}else{
+			TR5X6_ROM_HOST();
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, TR5X6_SYSEX_ACK_CMD_END);
+			//tr5x6_xfer_state.STAT=XFER_END;
+			xfer_time_out=-1;
+			tr5x6_xfer_state.FLAG_END=1;
+			if(sysex_bank_block_amount){
+				sysex_bank_block++;
+			}
+		}
+
+
+	return 1; // no error
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // This function sends an upload request
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_SendUploadReq(adios_midi_port_t port)
+s32 TR5X6_SYSEX_Send_UploadReq(adios_midi_port_t port)
 {
-	u8 sysex_buffer[32]; // should be enough?
-	u8 *sysex_buffer_ptr = &sysex_buffer[0];
+	u8 buffer[12]; // should be enough?
+	u8 *buffer_ptr = &buffer[0];
 	int i;
 
 	for(i=0; i<sizeof(sysex_header); ++i)
-		*sysex_buffer_ptr++ = sysex_header[i];
+		*buffer_ptr++ = sysex_header[i];
 
 	// device ID
-	*sysex_buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
+	*buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
 
 	// send 0x01 to request code upload
-	*sysex_buffer_ptr++ = 0x01;
+	*buffer_ptr++ = 0x01;
+	// send 0x01 to request code upload
+	*buffer_ptr++ = sysex_block+1;
 
 	// send footer
-	*sysex_buffer_ptr++ = 0xf7;
+	*buffer_ptr++ = 0xf7;
 
 	// finally send SysEx stream
-	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
+	sysex_act = 2;
+	return ADIOS_MIDI_SendSysEx(port, (u8 *)buffer, (u32)buffer_ptr - ((u32)&buffer[0]));
 }
-
-
 /////////////////////////////////////////////////////////////////////////////
-// This function sends a SysEx dump of the requested memory address range
-// We expect that address and length are aligned to 16
+// Command 0F: Ping (just send back acknowledge)
 /////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_SYSEX_SendMem(adios_midi_port_t port, u32 addr, u32 len)
+s32 TR5X6_SYSEX_Cmd_Ping(u8 cmd_state, u8 midi_in)
 {
-	int i;
-	u8 checksum = 0;
+	switch( cmd_state ) {
 
-	// send header
-	u8 *sysex_buffer_ptr = &sysex_buffer[0];
-	for(i=0; i<sizeof(sysex_header); ++i)
-		*sysex_buffer_ptr++ = sysex_header[i];
+	case TR5X6_SYSEX_CMD_STATE_BEGIN:
+		// nothing to do
+		break;
 
-	// device ID
-	*sysex_buffer_ptr++ = ADIOS_MIDI_DeviceIDGet();
+	case TR5X6_SYSEX_CMD_STATE_CONT:
+		// nothing to do
+		break;
 
-	// "write mem" command (so that dump could be sent back to overwrite the memory w/o modifications)
-	*sysex_buffer_ptr++ = 0x02;
-
-	// send 32bit address (divided by 16) in 7bit format
-	checksum += *sysex_buffer_ptr++ = (addr >> 25) & 0x7f;
-	checksum += *sysex_buffer_ptr++ = (addr >> 18) & 0x7f;
-	checksum += *sysex_buffer_ptr++ = (addr >> 11) & 0x7f;
-	checksum += *sysex_buffer_ptr++ = (addr >>  4) & 0x7f;
-
-	// send 32bit range (divided by 16) in 7bit format
-	checksum += *sysex_buffer_ptr++ = (len >> 25) & 0x7f;
-	checksum += *sysex_buffer_ptr++ = (len >> 18) & 0x7f;
-	checksum += *sysex_buffer_ptr++ = (len >> 11) & 0x7f;
-	checksum += *sysex_buffer_ptr++ = (len >>  4) & 0x7f;
-
-	// send memory content in scrambled format (8bit values -> 7bit values)
-	// ROM reads from the MIDI task - serialized (see APP_SPI_MutexTake, app.h)
-	APP_SPI_MutexTake();
-	u8 value7 = 0;
-	u8 bit_ctr7 = 0;
-	i=0;
-	for(i=0; i<len; ++i) {
-		u8 value8 = TR5X6_ROM_Read(addr+i);
-		u8 bit_ctr8;
-		for(bit_ctr8=0; bit_ctr8<8; ++bit_ctr8) {
-			value7 = (value7 << 1) | ((value8 & 0x80) ? 1 : 0);
-			value8 <<= 1;
-
-			if( ++bit_ctr7 >= 7 ) {
-				checksum += *sysex_buffer_ptr++ = (value7 << (7-bit_ctr7));
-				value7 = 0;
-				bit_ctr7 = 0;
-			}
-		}
-	}
-	APP_SPI_MutexGive();
-
-	if( bit_ctr7 )
-		checksum += *sysex_buffer_ptr++ = value7;
-
-	// send checksum
-	*sysex_buffer_ptr++ = -checksum & 0x7f;
-
-	// send footer
-	*sysex_buffer_ptr++ = 0xf7;
-
-	// finally send SysEx stream
-	return ADIOS_MIDI_SendSysEx(port, (u8 *)sysex_buffer, (u32)sysex_buffer_ptr - ((u32)&sysex_buffer[0]));
-}
-
-
-/////////////////////////////////////////////////////////////////////////////
-// This function writes into a memory
-// We expect that address and length are aligned to 4
-/////////////////////////////////////////////////////////////////////////////
-static s32 TR5X6_SYSEX_WriteMem(u32 addr, u32 len, u8 *buffer)
-{
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-	ADIOS_MIDI_SendDebugMessage("Write begin @0x%08x for %d bytes\n", addr, len);
-#endif
-	// check for flash memory range
-	if( addr >= ROM_START_ADDR && addr <= ROM_END_ADDR ) {
-
-		// check for alignment
-		if( (addr % 8) || (len % 8) )
-			return -ADIOS_MIDI_SYSEX_DISACK_ADDR_NOT_ALIGNED;
-		tr5x6_rom_status status;
-		int i;
-		// ROM erase/write from the MIDI task - serialized (see app.h)
-		APP_SPI_MutexTake();
-		for(i=0; i<len; addr++, i++) {
-
-			if( (addr % TR5X6_ROM_SECTOR_SIZE) == 0 ) {
-				if((status=TR5X6_ROM_Sector_Erase(addr, 1000))!=TR5X6_ROM_OK) {
-					APP_SPI_MutexGive();
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-					ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
-#endif
-					return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
-				}
-			}
-
-			if( (status=TR5X6_ROM_Write(addr, buffer[i], 1000)) != TR5X6_ROM_OK ) {
-				APP_SPI_MutexGive();
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
-				ADIOS_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", buffer[i], addr, status);
-#endif
-				return -ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED;
-			}
-			// TODO: verify programmed code
-		}
-		APP_SPI_MutexGive();
-
-		return 0; // no error
-	}else{
-
-	// invalid address
-	return -ADIOS_MIDI_SYSEX_DISACK_WRONG_ADDR_RANGE;
+	default: // TR5X6_SYSEX_CMD_STATE_END
+	  
+		TR5X6_SYSEX_Send_Footer(0);
+		// send acknowledge with unit type			  
+		TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, tr5x6_unit->sysex_ack_type);
+      
+		break;
 	}
 
+	return 0; // no error
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// Command 0F: Ping (just send back acknowledge)
+/////////////////////////////////////////////////////////////////////////////
+s32 TR5X6_SYSEX_Cmd_BankDataStart(u8 cmd_state, u8 midi_in)
+{
 
+	switch( cmd_state ) {
 
+	case TR5X6_SYSEX_CMD_STATE_BEGIN:
+		// nothing to do
+		break;
 
+	case TR5X6_SYSEX_CMD_STATE_CONT:
+		if( !sysex_state.BANK_RECEIVED ) {
+			sysex_bank = midi_in; // store bank number
+			sysex_state.BANK_RECEIVED = 1;
+
+		} else if( !sysex_state.SLOT_RECEIVED ) {
+			sysex_slot = midi_in; // used for block amount MSB
+			sysex_state.SLOT_RECEIVED = 1;
+
+		} else if( !sysex_state.BLOCK_RECEIVED ) {
+			sysex_block = midi_in; 	// used for block amount MSB
+			sysex_state.BLOCK_RECEIVED = 1;
+
+		} else{
+			// wait for F7
+		}
+
+		break;
+
+	default: // TR5X6_SYSEX_CMD_STATE_END
+		sysex_bank_block_amount = (sysex_slot<<7) | sysex_block;
+		if(sysex_bank_block_amount)sysex_bank_progress=1;
+		else sysex_bank_progress=0;
+		sysex_bank_block=0;
+
+		TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, TR5X6_SYSEX_ACK_BANK_RDY);
+
+		break;
+	}
+	return 0; // no error
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Command 0F: Ping (just send back acknowledge)
+/////////////////////////////////////////////////////////////////////////////
+s32 TR5X6_SYSEX_Cmd_BankDataEnd(u8 cmd_state, u8 midi_in)
+{
+
+	switch( cmd_state ) {
+
+	case TR5X6_SYSEX_CMD_STATE_BEGIN:
+		// nothing to do
+		break;
+
+	case TR5X6_SYSEX_CMD_STATE_CONT:
+		if( !sysex_state.BANK_RECEIVED ) {
+			sysex_bank = midi_in; // store bank number
+			sysex_state.BANK_RECEIVED = 1;
+
+		} else if( !sysex_state.SLOT_RECEIVED ) {
+			sysex_slot = 0; // not used
+			sysex_state.SLOT_RECEIVED = 1;
+
+		} else if( !sysex_state.BLOCK_RECEIVED ) {
+			sysex_block = 0; 	// not used
+			sysex_state.BLOCK_RECEIVED = 1;
+
+		} else{
+			// wait for F7
+		}
+
+		break;
+
+	default: // TR5X6_SYSEX_CMD_STATE_END
+		sysex_bank_progress = 0;
+		sysex_bank_block_amount = 0;
+		sysex_bank_block = 0;
+
+		TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, TR5X6_SYSEX_ACK_BANK_END);
+
+		break;
+	}
+	return 0; // no error
+}
+
+s32 TR5X6_SYSEX_TimeOut_Period(void){
+	if(xfer_time_out!=-1){
+		//if(xfer_time_out==2000)ADIOS_MIDI_SendDebugMessage("time out start\n");
+		--xfer_time_out;
+		//ADIOS_MIDI_SendDebugMessage("%d\n", xfer_time_out);
+		if(xfer_time_out<=0){
+			//ADIOS_MIDI_SendDebugMessage("xfer time out!\n");
+			tr5x6_xfer_state.STAT=XFER_ERROR;
+			tr5x6_xfer_state.FLAG_ERROR=1;
+			sysex_bank_block=0;
+			sysex_bank_progress=0;
+			xfer_time_out=-1;
+		}
+
+	}
+	return 0; // no error
+}
+
+u8 TR5X6_SYSEX_Act(void){
+	u8 act = sysex_act;
+	sysex_act = 0;
+	return act;
+}
+
+	  
+
+s8 TR5X6_SYSEX_Bank_Progression(void){
+	u8 progress;
+	if(sysex_bank_progress==1){
+		progress= (u8)((sysex_bank_block+1)*100 / sysex_bank_block_amount);
+		if(sysex_bank_block>=sysex_bank_block_amount)sysex_bank_progress=0;
+	}else progress=-1;
+	return progress;
+}
+
+u8 TR5X6_SYSEX_Slot_Progression(void){
+
+	return (u8)((sysex_block+1)*100 / sysex_total_block);
+}
+
+u8 TR5X6_SYSEX_Cmd_Current(void){
+
+	return sysex_last_cmd;
+}
+
+u8 TR5X6_SYSEX_Bank_Current(void){
+
+	return sysex_bank;
+}
+
+u8 TR5X6_SYSEX_Slot_Current(void){
+
+	return sysex_slot;
+}
