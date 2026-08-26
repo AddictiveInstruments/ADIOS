@@ -128,6 +128,10 @@ static sysex_state_t sysex_state;
 static u8 sysex_cmd;
 static u8 sysex_last_cmd;
 
+static u16 BankProgress_SlotBlocks(u8 slot);
+static u16 BankProgress_Prefix(u8 slot);
+static void BankProgress_Count(void);
+
 static adios_midi_port_t sysex_port = DEFAULT;
 static u8 sysex_checksum;
 static u8 sysex_bank;
@@ -144,6 +148,14 @@ static s16 xfer_time_out=-1;
 static u16 sysex_bank_block;
 static u16 sysex_bank_block_amount;
 static u8 sysex_bank_progress=0;
+// Bank progress realignment. The editor SKIPS the slots it has already sent,
+// so a resumed bank transfer starts in the middle and jumps over what is
+// already on the board. Nothing on the wire announces those slots - but the
+// slot number of every message does, and the geometry is fixed, so what they
+// would have carried can be added back at the moment we pass them.
+static u8 sysex_bank_last_slot;		// 0xff = nothing counted yet
+static u8 sysex_bank_unit_info;		// a slot record counts as one unit
+static u8 sysex_bank_unit_rom;		// a slot ROM counts as its blocks
 
 u8 tr5x6_sysex_block_flag=0;
 tr5x6_xfer_state_t tr5x6_xfer_state;
@@ -584,7 +596,7 @@ s32 TR5X6_SYSEX_Cmd_ReadInfo(u8 cmd_state, u8 midi_in)
 		tr5x6_xfer_state.FLAG_INFO=1;
 		tr5x6_xfer_state.FLAG_END=1;
 		if(sysex_bank_block_amount){
-			sysex_bank_block++;
+			BankProgress_Count();
 		}
 		break;
 	}
@@ -682,7 +694,7 @@ s32 TR5X6_SYSEX_Cmd_WriteInfo(u8 cmd_state, u8 midi_in)
 			tr5x6_xfer_state.FLAG_INFO=1;
 			if(sysex_bank_block_amount){
 				if(sysex_cmd==CMD_SLOT_WRITE_INFO){
-					sysex_bank_block++;
+					BankProgress_Count();
 				}
 			}
 		}
@@ -748,7 +760,7 @@ s32 TR5X6_SYSEX_Cmd_ReadBlock(u8 cmd_state, u8 midi_in)
 				tr5x6_xfer_state.FLAG_END=1;
 			}
 			if(sysex_bank_block_amount){
-				sysex_bank_block++;
+				BankProgress_Count();
 			}
 		break;
 	}
@@ -1091,7 +1103,7 @@ s32 TR5X6_SYSEX_Cmd_WriteBlockRequest(void)
 			xfer_time_out=TR5X6_SYSEX_XFER_TIMEOUT;
 			tr5x6_xfer_state.FLAG_CONT=1;
 			if(sysex_bank_block_amount){
-				sysex_bank_block++;
+				BankProgress_Count();
 			}
 
 		}else{
@@ -1101,7 +1113,7 @@ s32 TR5X6_SYSEX_Cmd_WriteBlockRequest(void)
 			xfer_time_out=-1;
 			tr5x6_xfer_state.FLAG_END=1;
 			if(sysex_bank_block_amount){
-				sysex_bank_block++;
+				BankProgress_Count();
 			}
 		}
 
@@ -1199,6 +1211,31 @@ s32 TR5X6_SYSEX_Cmd_BankDataStart(u8 cmd_state, u8 midi_in)
 		if(sysex_bank_block_amount)sysex_bank_progress=1;
 		else sysex_bank_progress=0;
 		sysex_bank_block=0;
+		// NOTE: sysex_slot and sysex_block carry the block count here, they
+		// are NOT a slot number - hence the invalid marker below rather than
+		// a realignment on them.
+		sysex_bank_last_slot = 0xff;
+		// What the announced total is made of. A bank transfer may carry the
+		// slot records, the slot ROMs, or both, and the prefix has to count
+		// the same units as the total or it drifts. Deduced instead of asked:
+		// the three sums are far apart (16 against >=256 on a 505), and both
+		// come from the same fixed geometry. Anything else leaves both flags
+		// at 0 - no realignment at all, rather than a wrong one.
+		{
+			u16 rec_total = tr5x6_unit->slot_num;
+			u16 rom_total = 0;
+			for(u8 s=0; s<tr5x6_unit->slot_num; s++) rom_total += BankProgress_SlotBlocks(s);
+			sysex_bank_unit_info = 0;
+			sysex_bank_unit_rom  = 0;
+			if( sysex_bank_block_amount == rec_total ){
+				sysex_bank_unit_info = 1;
+			}else if( sysex_bank_block_amount == rom_total ){
+				sysex_bank_unit_rom = 1;
+			}else if( sysex_bank_block_amount == (u16)(rec_total + rom_total) ){
+				sysex_bank_unit_info = 1;
+				sysex_bank_unit_rom  = 1;
+			}
+		}
 
 		TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, TR5X6_SYSEX_ACK_BANK_RDY);
 
@@ -1239,9 +1276,17 @@ s32 TR5X6_SYSEX_Cmd_BankDataEnd(u8 cmd_state, u8 midi_in)
 		break;
 
 	default: // TR5X6_SYSEX_CMD_STATE_END
-		sysex_bank_progress = 0;
-		sysex_bank_block_amount = 0;
-		sysex_bank_block = 0;
+		// A bank whose LAST slots were already on the board ends before the
+		// count reaches the total - the reading would freeze short and vanish.
+		// Land it on the total instead and let TR5X6_SYSEX_Bank_Progression
+		// close the bar itself on its next refresh, which is also what clears
+		// the amount. Zeroing the amount here would divide by zero there.
+		if(sysex_bank_block_amount) sysex_bank_block = sysex_bank_block_amount;
+		else{
+			sysex_bank_progress = 0;
+			sysex_bank_block = 0;
+		}
+		sysex_bank_last_slot = 0xff;
 
 		TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, TR5X6_SYSEX_ACK_BANK_END);
 
@@ -1268,6 +1313,52 @@ s32 TR5X6_SYSEX_TimeOut_Period(void){
 	return 0; // no error
 }
 
+// how many ROM blocks one slot carries. The size is a property of the
+// MACHINE, not of what is stored: it comes from the fixed slot table the two
+// hosts are wired around - which is also the table the editor reads on its
+// own side, so both count the same thing.
+static u16 BankProgress_SlotBlocks(u8 slot)
+{
+	if( slot >= tr5x6_unit->slot_num ) return 0;
+	switch( tr5x6_unit->slots[slot].size ){
+	case SIZE_4K:	return 16;
+	case SIZE_8K:	return 32;
+	case SIZE_16K:	return 64;
+	case SIZE_32K:	return 128;
+	}
+	return 0;
+}
+
+
+// everything the slots BEFORE this one would have contributed. Called when
+// the transfer lands on a new slot - whether it started there or jumped over
+// the ones between.
+static u16 BankProgress_Prefix(u8 slot)
+{
+	u16 sum = 0;
+	if( slot > tr5x6_unit->slot_num ) slot = tr5x6_unit->slot_num;
+	for(u8 s=0; s<slot; s++){
+		if( sysex_bank_unit_rom )  sum += BankProgress_SlotBlocks(s);
+		if( sysex_bank_unit_info ) sum += 1;
+	}
+	return sum;
+}
+
+
+// one unit of bank progress has just passed on the wire. Realign first, count
+// after: within a slot only the first message realigns, the rest just add up.
+// With an unrecognised transfer composition both unit flags are 0, the prefix
+// is always 0, and this degrades exactly to the plain counter it replaced.
+static void BankProgress_Count(void)
+{
+	if( sysex_slot != sysex_bank_last_slot ){
+		sysex_bank_last_slot = sysex_slot;
+		sysex_bank_block = BankProgress_Prefix(sysex_slot);
+	}
+	sysex_bank_block++;
+}
+
+
 u8 TR5X6_SYSEX_Act(void){
 	u8 act = sysex_act;
 	sysex_act = 0;
@@ -1280,7 +1371,12 @@ s8 TR5X6_SYSEX_Bank_Progression(void){
 	u8 progress;
 	if(sysex_bank_progress==1){
 		progress= (u8)((sysex_bank_block+1)*100 / sysex_bank_block_amount);
-		if(sysex_bank_block>=sysex_bank_block_amount)sysex_bank_progress=0;
+		if(progress>100)progress=100;	// the +1 above overshoots on the last unit
+		if(sysex_bank_block>=sysex_bank_block_amount){
+			sysex_bank_progress=0;
+			sysex_bank_block_amount=0;	// the bar owns its own end, including
+			sysex_bank_block=0;			// the guard the counters sit behind
+		}
 	}else progress=-1;
 	return progress;
 }
