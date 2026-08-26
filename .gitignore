@@ -116,8 +116,10 @@ project_build/
 # regenerated on every single make invocation by design, never meant to be
 # stable/committed. Fixed names since 2026-08-04 (was per-chip
 # "${CHIP}_generated.ld", accumulating stale copies if the target chip
-# changed mid-project) - cpu_bsl.ld lives in bootloader/src/, cpu_app.ld in
-# each project's own directory.
+# changed mid-project). Since 2026-08-26 they all live inside project_build/,
+# with the rest of the build output: nothing at a project root was ever
+# cleaned, since clean is `rm -rf project_build`. The C side finds the
+# headers through the -I$(PROJECT_OUT) that common.mk puts on CFLAGS.
 cpu_bsl.ld
 cpu_app.ld
 adios_bsl_boundary.h
@@ -139,9 +141,9 @@ gen_bsl_boundary_build.log
 *.bin
 *.hex
 
-# Embedded bootloader image, written beside the project's own
-# adios_bsl_boundary.h by the same pass of etc/gen_bsl_boundary.sh and
-# rewritten at every build of that project
+# Embedded bootloader image, written inside project_build/ beside the
+# project's own adios_bsl_boundary.h by the same pass of
+# etc/gen_bsl_boundary.sh, and rewritten at every build of that project
 adios_bsl_image.inc
 
 # Reference-only MIDIbox heritage, kept on disk but out of the repository

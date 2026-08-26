@@ -51,7 +51,13 @@ LDFLAGS += --specs=nano.specs
 AFLAGS += $(A_DEFINES) $(A_INCLUDE) -Wa,-adhlns=$(<:.s=.lst)
 
 # define C flags
-CFLAGS += $(C_DEFINES) $(C_INCLUDE) -Wall -Wno-format -Wno-switch -Wno-strict-aliasing
+# -I$(PROJECT_OUT): the files etc/gen_bsl_boundary.sh generates for this build
+# live in the build directory, beside the linker scripts it writes there -
+# adios_bsl_boundary.h and the embedded bootloader image it names. They are
+# regenerated at every build, so they belong with the output, not next to the
+# sources. Every consumer reaches them by quoted include, which searches this
+# path.
+CFLAGS += $(C_DEFINES) $(C_INCLUDE) -I$(PROJECT_OUT) -Wall -Wno-format -Wno-switch -Wno-strict-aliasing
 
 # add family specific arguments
 ifeq ($(FAMILY),STM32F4xx)

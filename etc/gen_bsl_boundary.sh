@@ -228,6 +228,14 @@ BSL_LOG="$BSL_DIR/project_build/gen_bsl_boundary_build.log"
 mkdir -p "$BSL_DIR/project_build" "$PROJECT_DIR/project_build"
 BSL_LD_FILE="$BSL_DIR/project_build/cpu_bsl.ld"
 APP_LD_FILE="$PROJECT_DIR/project_build/cpu_app.ld"
+# the two GENERATED-AND-INCLUDED files join the .ld scripts inside
+# project_build/: they are rewritten at every build and belong to the build
+# output, not next to real source files. Nothing at a project root ever got
+# cleaned - clean is `rm -rf project_build`, so it could not see them.
+# The C side finds them because common.mk puts -I$(PROJECT_OUT) on CFLAGS.
+BSL_HDR_FILE="$BSL_DIR/project_build/adios_bsl_boundary.h"
+APP_HDR_FILE="$PROJECT_DIR/project_build/adios_bsl_boundary.h"
+APP_INC_FILE="$PROJECT_DIR/project_build/adios_bsl_image.inc"
 
 # --- serialize concurrent invocations (2026-08-09). bootloader/src (and its
 #     project_build/) is SHARED by every project build - two overlapping
@@ -513,7 +521,7 @@ write_ld "$BSL_LD_FILE" "bsl"
 # measure a bootloader missing its whole UART transport and derive a boundary
 # too small for the real pass-2 build. The boundary written here is the
 # placeholder; the real one overwrites this file after the measurement.
-write_header "$BSL_DIR/adios_bsl_boundary.h" "yes"
+write_header "$BSL_HDR_FILE" "yes"
 
 echo "=== Pass 1: building bootloader for $CHIP to measure its real size ==="
 build_bootloader
@@ -552,8 +560,6 @@ fi
 
 # --- generated header for the BOOTLOADER's own build (so bsl_sysex.c's
 #     protection check and main.c's jump-to-app address use the same value) ---
-write_header "$BSL_DIR/adios_bsl_boundary.h" "yes"
-echo "Wrote $BSL_DIR/adios_bsl_boundary.h"
 if [ -n "$HOLD_PIN_OVERRIDES" ]; then
     echo "Relayed BSL_HOLD pin override into bootloader build:"
     echo "$HOLD_PIN_OVERRIDES"
@@ -585,8 +591,16 @@ clean_out=$( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_M
     echo "Bootloader clean before pass 2 failed, see $BSL_LOG"
     exit 1
 }
-# clean removed project_build/ entirely, and write_ld below writes into it
+# clean removed project_build/ entirely, and BOTH the linker script written
+# below and the generated boundary header live in it
 mkdir -p "$BSL_DIR/project_build"
+
+# Written HERE, after the clean, for exactly the reason the linker script is:
+# it lives in project_build/, which the clean above just removed. Pass 2 has
+# to see it - it carries the final boundary and the relayed board wiring, and
+# a bootloader compiled without it does not know where the application starts.
+write_header "$BSL_HDR_FILE" "yes"
+echo "Wrote $BSL_HDR_FILE"
 
 # --- regenerate cpu_bsl.ld with the final boundary BEFORE pass 2, so the
 #     bootloader links against its real, final flash window ---
@@ -609,7 +623,7 @@ fi
 # measured from the result - so this image belongs to the project, not to the
 # chip, and it is rewritten at every build of that project. A name keyed on
 # the chip preserved nothing and scattered copies through the OS sources.
-INC_FILE="$PROJECT_DIR/adios_bsl_image.inc"
+INC_FILE="$APP_INC_FILE"
 perl "$PERL_DIR/gen_inc_file.pl" "$BIN_FILE" "$INC_FILE" adios_bsl_image adios_bsl -size="$BOUNDARY"
 echo "Regenerated $INC_FILE ($BOUNDARY bytes, matches final boundary)"
 
@@ -664,14 +678,14 @@ if [ "$BSL_BOUNDARY_MODE" = "updater" ]; then
             echo "$BSL_RELAY_BLOCK"
         fi
         echo "#endif"
-    } > "$PROJECT_DIR/adios_bsl_boundary.h"
-    echo "Wrote $PROJECT_DIR/adios_bsl_boundary.h (updater origin $UPDATER_ORIGIN_HEX)"
+    } > "$APP_HDR_FILE"
+    echo "Wrote $APP_HDR_FILE (updater origin $UPDATER_ORIGIN_HEX)"
 else
     # --- generated header consumed by the project's own adios_config.h ---
     # (no pin override relayed here: the project already defines it itself,
     # relaying it back would be a duplicate #define in the same file)
-    write_header "$PROJECT_DIR/adios_bsl_boundary.h" "no"
-    echo "Wrote $PROJECT_DIR/adios_bsl_boundary.h"
+    write_header "$APP_HDR_FILE" "no"
+    echo "Wrote $APP_HDR_FILE"
 
     # --- generated linker script for the project's own app build ---
     write_ld "$APP_LD_FILE" "app"
