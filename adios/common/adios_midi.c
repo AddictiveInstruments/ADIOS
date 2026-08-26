@@ -92,7 +92,12 @@ const u8 adios_midi_expected_bytes_system[16] = {
 		0, // Reset
 };
 
-//! should only be used by ADIOS internally and by the Bootloader!
+//! The five bytes every message of this protocol opens with. 00 22 15 is
+//! the Addictive Instruments manufacturer ID; the fifth byte says WHO is
+//! answering, and 0x32 is the OS - the bootloader and the ADIOS queries.
+//! An APPLICATION speaking its own protocol takes its own fifth byte, so a
+//! host tool knows which of the two it reached.
+//! Should only be used by ADIOS internally and by the Bootloader!
 const u8 adios_midi_sysex_header[5] = { 0xf0, 0x00, 0x22, 0x15, 0x32 };
 
 
