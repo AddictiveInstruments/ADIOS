@@ -18,6 +18,20 @@
 // over, in milliseconds. 0 = no hold.
 #define APP_SPLASH_MS 2000
 
+// ---- what the BUILD reads from here (include/makefile/app_config.mk) ----
+// The Makefile declares nothing about the target: it asks this file. The
+// family, the startup file and the linker script all follow the processor;
+// the board defaults per family.
+#define ADIOS_PROCESSOR			STM32G070CB
+#define ADIOS_LCD_DRIVER		ili9488_5x6
+// The SysEx device ID survives a power cycle: ADIOS keeps it in the last
+// two bytes of flash, this application writes it there from its settings
+// menu (TR5X6_ROM_DeviceIDStore) and the bootloader reads the same bytes.
+#define ADIOS_DEVICE_ID_PERSIST		1
+// the real dynamic bootloader/app flash boundary mechanism - see core.mk
+// and etc/gen_bsl_boundary.sh for the full explanation
+#define ADIOS_USE_DYNAMIC_BSL_BOUNDARY	1
+
 // Which board this firmware is built for. ONE difference, and it is where
 // the bank data lives:
 //   1 - no EEPROM. Records in the last 4 pages of internal flash, and the
@@ -28,9 +42,15 @@
 //       there: byte addressable, no erase, a million cycles.
 // The SysEx device ID never moves - last two bytes of internal flash in
 // BOTH revisions, because that is where the bootloader looks.
-#define APP_HARD_REV 2	// the Makefile reads this line too: it sizes
-				// ADIOS_USERDATA_PAGES (4 pages of records, or 1
-				// system page) and with it the linker reservation
+#define APP_HARD_REV 1
+
+// The linker reservation follows the revision, HERE and not in the
+// Makefile - the build evaluates this file and reads the result. Rev 2
+// deliberately says nothing: ADIOS_DEVICE_ID_PERSIST alone makes the OS
+// reserve the one system page it needs (adios_config_defaults.h).
+#if APP_HARD_REV == 1
+#define ADIOS_USERDATA_PAGES 4	// the 4 pages of bank records
+#endif
 
 #if APP_HARD_REV == 2
 // The AT24C64's bus - the one I2C pair this board has left: I2C1's three pin
