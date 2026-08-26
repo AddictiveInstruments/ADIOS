@@ -193,7 +193,7 @@ $(DYNAMIC_BSL_APP_NAME)_app_only.hex: project_build/$(PROJECT).elf
 #    may be linked over.
 $(DYNAMIC_BSL_APP_NAME)_bsl_updater.hex: project_build/$(PROJECT).elf
 	+$(MAKE) -C $(ADIOS_PATH)/bootloader/updater ADIOS_PATH=../.. PROCESSOR=$(PROCESSOR) BSL_RELAY_SRC=$(CURDIR) ADIOS_DEVICE_ID_PERSIST=$(ADIOS_DEVICE_ID_PERSIST) ADIOS_USERDATA_PAGES=$(ADIOS_USERDATA_PAGES) ADIOS_BSL_PADDING=$(ADIOS_BSL_PADDING)
-	cp $(ADIOS_PATH)/bootloader/updater/updater_$(PROCESSOR).hex $@
+	cp $(ADIOS_PATH)/bootloader/updater/project_build/updater_cpu.hex $@
 endif
 
 # create the output directories

@@ -16,7 +16,7 @@
 # itself (its own window above the app origin) and the new bootloader image
 # (0x08000000..boundary). ADIOS Studio runs the whole sequence from it.
 #
-#   make [PROCESSOR=STM32G070CB]     -> updater_<PROCESSOR>.hex
+#   make [PROCESSOR=STM32G070CB]     -> project_build/updater_cpu.hex
 #
 # Default PROCESSOR = the deployed 5x6_505 fleet chip.
 
@@ -144,9 +144,15 @@ include $(ADIOS_PATH)/include/makefile/common.mk
 # which the updater writes into the BSL region directly, then triggers the
 # finalize. One file, one click.
 ################################################################################
-all: updater_$(PROCESSOR).hex
+# A GENERIC name, inside project_build/ - not updater_<CHIP>.hex at the top
+# of this directory. This file is rewritten at every build and immediately
+# copied out under the application own name (see common.mk), so it is an
+# intermediate, never a deliverable. Keying it on the chip only accumulated
+# one stale copy per chip ever built, which nothing ever read again - the
+# same mistake the generated linker scripts made before 2026-08-04.
+all: project_build/updater_cpu.hex
 
-updater_$(PROCESSOR).hex: project_build/$(PROJECT).elf
+project_build/updater_cpu.hex: project_build/$(PROJECT).elf
 	$(OBJCOPY) -O ihex $< $@.tool
 	$(OBJCOPY) -O ihex $(ADIOS_PATH)/bootloader/src/project_build/$(PROJECT).elf $@.payload
 	grep -v '^:00000001FF' $@.tool > $@
