@@ -669,22 +669,11 @@ ADIOS_I2C0_IRQHANDLER_FUNC
 }
 #endif
 
-// TEMPORARY interrupt-storm probe (freeze hunt, 2026-08-25). A storm shows
-// in a RAM dump as a huge [0] with ONE flag stuck in [1] - the ISR register
-// is photographed at every entry, which the debug probe cannot do itself
-// (its connection resets the chip). Remove when the hunt closes.
-// [0] entries  [1] last I2C ISR reg  [2] last CR1  [3] rec busy at entry
-volatile u32 adios_i2c_dbg[4];
-
 // On G0B0/G0B1/G0C1 this one vector serves I2C2 AND I2C3: both records get
 // stepped, and each ignores the call when it has nothing running.
 #if (defined(ADIOS_USE_I2C1) && !ADIOS_I2C1_POLLED) || (defined(ADIOS_USE_I2C2) && !ADIOS_I2C2_POLLED)
 ADIOS_I2C1_IRQHANDLER_FUNC
 {
-  adios_i2c_dbg[0]++;
-  adios_i2c_dbg[1] = ADIOS_I2C1_PTR->ISR;
-  adios_i2c_dbg[2] = ADIOS_I2C1_PTR->CR1;
-  adios_i2c_dbg[3] = i2c1_rec.busy;
 #if defined(ADIOS_USE_I2C1) && !ADIOS_I2C1_POLLED
   ADIOS_I2C_V2_Step(&i2c1_rec);
 #endif

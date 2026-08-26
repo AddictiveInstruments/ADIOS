@@ -179,6 +179,12 @@ typedef struct {
   volatile u8  busy;        // 1: transfer in progress
   volatile s32 error;       // 0 or a ADIOS_I2C_ERROR_* code
   volatile u8  semaphore;   // TransferBegin()/TransferFinished()
+
+  // Storm telemetry - written by the two defensive branches of Step(), read
+  // over SWD in RAM. Every time the fuse blows, it leaves its name here
+  // instead of protecting in silence.
+  volatile u32 spurious_ctr;        // how many times a defense fired
+  volatile u32 last_spurious_isr;   // the ISR register that fired it
 } adios_i2c_v2_rec_t;
 
 
@@ -267,6 +273,8 @@ static void ADIOS_I2C_V2_Step(adios_i2c_v2_rec_t *rec)
   I2CV2_TypeDef *base = rec->base;
 
   if( !rec->busy ) {
+    rec->spurious_ctr++;
+    rec->last_spurious_isr = base->ISR;
     // A flag with no transfer running is a flag NOBODY will ever clear - and
     // this interrupt is level-triggered: returning without disarming means
     // re-entering for ever, at hardware priority, with every task dead
@@ -283,15 +291,49 @@ static void ADIOS_I2C_V2_Step(adios_i2c_v2_rec_t *rec)
     return;
   }
 
+  // An interrupt with NONE of the events this engine arms being active means
+  // an UNKNOWN source holds the line - the v2 peripheral routes its SMBus
+  // flags (TIMOUTF, PECERR, ALERT) through ERRIE too. "Cannot happen" with
+  // SMBus off, but the 2026-08-25 storm was made of cannot-happen: same
+  // treatment as the old F4 driver applied for fifteen years - end the
+  // transfer, disarm everything, and leave a name behind.
+  // Skipped in polled mode, where Step is pumped in a loop and an empty
+  // ISR register is the NORMAL state between events.
+  if( !rec->polled ) {
+    u32 pending = base->ISR;
+    // TXIS RXNE NACKF STOPF TC TCR BERR ARLO OVR - bits 1,2 and 4..10
+    if( !(pending & 0x07F6) ) {
+      rec->spurious_ctr++;
+      rec->last_spurious_isr = pending;
+      ADIOS_I2C_V2_Finish(rec, ADIOS_I2C_ERROR_UNEXPECTED_EVENT);
+      return;
+    }
+  }
+
   // errors first - any of them ends the transfer
 
   if( I2CV2(IsActiveFlag_NACK)(base) ) {
     I2CV2(ClearFlag_NACK)(base);
+    // The STOP that follows a NACK (automatic in AUTOEND, generated below
+    // otherwise) is STILL COMPLETING on the wire while this branch runs.
+    // Left alone, its STOPF lands after Finish() has silenced everything
+    // and comes back as a spurious pended interrupt - one per NACKed
+    // acknowledge-poll, 525 of them over eight bank uploads, per the storm
+    // witnesses (2026-08-26). Handled at the source instead: STOPIE goes
+    // quiet BEFORE the flag can land, then the flag is awaited (a few
+    // microseconds, bounded) and acknowledged right here - so the
+    // witnesses only ever count the unknown.
+    I2CV2(DisableIT_STOP)(base);
     // a NACK on the address byte means nobody answered; a NACK in mid
     // transfer means the slave gave up. Both leave the bus to be released:
     // the peripheral emits the STOP itself in AUTOEND, otherwise do it here.
     if( rec->transfer_type == ADIOS_I2C_WRITE_WITHOUT_STOP )
       I2CV2(GenerateStopCondition)(base);
+    {
+      u32 guard = 2000;   // ~10 us of STOP at 100 kHz, order-of-magnitude margin
+      while( !I2CV2(IsActiveFlag_STOP)(base) && --guard );
+    }
+    I2CV2(ClearFlag_STOP)(base);
     ADIOS_I2C_V2_Finish(rec, ADIOS_I2C_ERROR_SLAVE_NOT_CONNECTED);
     return;
   }

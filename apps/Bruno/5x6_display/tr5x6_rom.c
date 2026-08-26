@@ -580,14 +580,21 @@ static s32 EE_Poll(void)
 {
 	tr5x6_ee_dbg[0]++;
 	// Two rounds: a hundred refusals is not a write cycle any more, it is a
-	// wedged bus (a slave abandoned mid-transfer holds SDA until it sees
-	// enough clocks - measured 2026-08-25, NACK for ever until power cycle).
-	// Clock it clear and give it ONE more round.
+	// wedged bus. Clock it clear and give it ONE more round.
+	//
+	// The port is taken PER PROBE and released in between - the old OS's
+	// BankStick layer worked that way, and it is what lets the display and
+	// the SysEx interleave their own transfers instead of queueing behind a
+	// write cycle for milliseconds.
 	for(int round=0; round<2; round++){
 		for(int i=0; i<100; i++){
-			u8 probe[2] = {0,0};
-			s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, TR5X6_EE_IIC_ADDR, probe, 2);
+			// A ZERO-length write: control byte alone, ACK or NACK, STOP.
+			// The canonical acknowledge poll - and unlike an address write
+			// it does not move the part's internal address pointer.
+			ADIOS_I2C_TransferBegin(TR5X6_EE_PORT, ADIOS_I2C_BLOCKING);
+			s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, TR5X6_EE_IIC_ADDR, NULL, 0);
 			if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
+			ADIOS_I2C_TransferFinished(TR5X6_EE_PORT);
 			tr5x6_ee_dbg[5] = (u32)status;
 			if( status == 0 ){ tr5x6_ee_dbg[1]++; return 0; }
 			tr5x6_ee_dbg[3]++;
@@ -605,12 +612,13 @@ static s32 EE_Poll(void)
 	// diagnostic for the 2026-08-25 wedge hunt, remove with TR5X6_EE_Test.
 	{
 		char map[9];
+		ADIOS_I2C_TransferBegin(TR5X6_EE_PORT, ADIOS_I2C_BLOCKING);
 		for(int a=0; a<8; a++){
-			u8 probe[2] = {0,0};
-			s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, 0xA0 | (a<<1), probe, 2);
+			s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, 0xA0 | (a<<1), NULL, 0);
 			if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
 			map[a] = (status == 0) ? 'A' : ((status == ADIOS_I2C_ERROR_SLAVE_NOT_CONNECTED) ? '.' : 'e');
 		}
+		ADIOS_I2C_TransferFinished(TR5X6_EE_PORT);
 		map[8] = 0;
 		ADIOS_MIDI_SendDebugMessage("[EE] wedge: scan A0..AE = %s (A=ack .=nack e=err)\n", map);
 	}
@@ -620,13 +628,14 @@ static s32 EE_Poll(void)
 static s32 EE_Read(u16 addr, u8 *buf, u16 len)
 {
 	tr5x6_ee_dbg[7]++;
+	// wait any running write cycle out, with the port free in between
+	if( EE_Poll() < 0 ) return -1;
+	// address phase and data phase under ONE hold - the repeated START in
+	// the middle must not be interleaved with anybody else's transfer
 	ADIOS_I2C_TransferBegin(TR5X6_EE_PORT, ADIOS_I2C_BLOCKING);
-	s32 status = EE_Poll();
-	if( status == 0 ){
-		u8 a[2] = { (u8)(addr>>8), (u8)addr };
-		status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE_WITHOUT_STOP, TR5X6_EE_IIC_ADDR, a, 2);
-		if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
-	}
+	u8 a[2] = { (u8)(addr>>8), (u8)addr };
+	s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE_WITHOUT_STOP, TR5X6_EE_IIC_ADDR, a, 2);
+	if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
 	if( status == 0 ){
 		status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_READ, TR5X6_EE_IIC_ADDR, buf, len);
 		if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
@@ -643,16 +652,15 @@ static s32 EE_Write(u16 addr, u8 *buf, u16 len)
 	while( len ){
 		u16 n = TR5X6_EE_PAGE_SIZE - (addr % TR5X6_EE_PAGE_SIZE);
 		if( n > len ) n = len;
+		// previous chunk's write cycle first - port free while it cooks
+		if( EE_Poll() < 0 ) return -1;
 		u8 out[2+TR5X6_EE_PAGE_SIZE];
 		out[0] = (u8)(addr>>8);
 		out[1] = (u8)addr;
 		memcpy(&out[2], buf, n);
 		ADIOS_I2C_TransferBegin(TR5X6_EE_PORT, ADIOS_I2C_BLOCKING);
-		s32 status = EE_Poll();
-		if( status == 0 ){
-			status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, TR5X6_EE_IIC_ADDR, out, 2+n);
-			if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
-		}
+		s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, TR5X6_EE_IIC_ADDR, out, 2+n);
+		if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
 		ADIOS_I2C_TransferFinished(TR5X6_EE_PORT);
 		if( status != 0 ) return -1;
 		addr += n; buf += n; len -= n;
