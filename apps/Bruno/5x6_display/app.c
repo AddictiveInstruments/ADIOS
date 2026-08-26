@@ -124,7 +124,6 @@ static u8 menu_pos = 0;
 static u8 menu_edit = 0;
 static u8 last_id = 0;
 static u8 curr_id = 0;
-static u8 formatting=0;
 
 // ---- the settings menu, its rows and its columns -------------------------
 #define MENU_NUM	4
@@ -160,100 +159,6 @@ static tr5x6_bc_t bc_cur;	// the settings under the cursor: loaded from
 				// tr5x6_bc on entering the page, written back
 				// whole on ENTER - one struct, not five copies
 
-//// define a Mutex for LCD access
-//xSemaphoreHandle xSPISemaphore;
-//#define MUTEX_SPI_TAKE { while( xSemaphoreTakeRecursive(xSPISemaphore, (portTickType)1) != pdTRUE ); }
-//#define MUTEX_SPI_GIVE { xSemaphoreGiveRecursive(xSPISemaphore); }
-
-//temp
-//static int address=0;
-//static int count=0;
-//static s32 upload_progress=0;
-//static s32 upload_progress_old=0;
-
-
-
-/////////////////////////////////////////////////////////////////////////////
-// warns that the unit type is about to change, and asks again
-//
-// Only ever seen from the settings menu, and only when the choice differs
-// from what this board currently says it is. Changing it re-lays the whole
-// flash in the other machine's geometry, so it deserves its own confirmation
-// - same page shape as the format one, same buttons.
-/////////////////////////////////////////////////////////////////////////////
-static void UnitChange_Page(u8 new_unit)
-{
-	APP_LCD_Clear();
-	APP_LCD_BColourSet(APP_LCD_BLACK);
-	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
-	APP_LCD_FColourSet(APP_LCD_WHITE);
-	APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Unit   Type");
-	APP_LCD_FColourSet(APP_LCD_RED);
-	APP_LCD_PrintString(240, y_offset+40, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "You're  about  to  change");
-	APP_LCD_PrintFormattedString(240, y_offset+60, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "the  Unit  Type  to  %d", (new_unit==5) ? 505 : 626);
-	APP_LCD_FColourSet(APP_LCD_WHITE);
-	APP_LCD_PrintString(240, y_offset+120, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Are you sure?");
-	Legend_Draw(x_offset+160, y_offset+150, "NO", "LAST");
-	Legend_Draw(x_offset+290, y_offset+150, "YES", "INST");
-}
-
-static u8 UnitChange_Confirm(u8 new_unit)
-{
-	UnitChange_Page(new_unit);
-	for(;;){
-		for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);
-		TR5X6_DECOD_BUTT_Handler();
-		if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
-			tr5x6_decod_buttons_flags.inst = 0;
-			return 1;
-		}
-		if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
-			tr5x6_decod_buttons_flags.last = 0;
-			return 0;		// back to the choice page
-		}
-	}
-}
-
-/////////////////////////////////////////////////////////////////////////////
-// asks which machine this board is bolted into, and does not return until
-// answered
-//
-// Called from two places: the very first boot of an unformatted board, and a
-// re-format from the settings menu - one firmware serves both machines, so a
-// board can be moved and has to be able to say so.
-//
-// Runs OUTSIDE the scheduler in the first case, so the button edge detector
-// (normally pumped by APP_Tick) is called by hand here.
-/////////////////////////////////////////////////////////////////////////////
-static u8 UnitSelect_Ask(u8 unit_sel, u8 allow_exit)
-{
-	// Clears here, not at the call sites: this page can come up over the
-	// format confirmation of the settings menu as well as over a blank
-	// first boot, and neither caller should have to remember.
-	APP_LCD_Clear();
-	UnitSelect_Page(unit_sel, allow_exit);
-	u8 chosen = 0;
-	while(!chosen){
-		for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);	// the tasks' 40 ms pace
-		TR5X6_DECOD_BUTT_Handler();
-		if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
-			unit_sel = (unit_sel==5) ? 6 : 5;
-			UnitSelect_Page(unit_sel, allow_exit);
-			tr5x6_decod_buttons_flags.inc = 0;
-		}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
-			unit_sel = (unit_sel==5) ? 6 : 5;
-			UnitSelect_Page(unit_sel, allow_exit);
-			tr5x6_decod_buttons_flags.dec = 0;
-		}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
-			chosen = 1;
-			tr5x6_decod_buttons_flags.inst = 0;
-		}else if(allow_exit && tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
-			tr5x6_decod_buttons_flags.last = 0;
-			return UNIT_SEL_EXIT;	// back to the settings menu, nothing written
-		}
-	}
-	return unit_sel;
-}
 
 /////////////////////////////////////////////////////////////////////////////
 // This hook is called after startup to initialize the application
@@ -314,7 +219,6 @@ void APP_Init(void)
 	if( rom_empty ){
 		menu_pos = MENU_FORMAT;
 		menu_edit = 1;
-		formatting = 1;
 		APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Format   BANKs");
 		Formatting_Page();
 		for(u16 d=0; d<2000; d++)ADIOS_DELAY_Wait_uS(1000);		// wait 2s
@@ -1330,10 +1234,10 @@ static void TFT_Scale(void)
 		}
 		switch(tr5x6_decod_scale){
 		case 0x00:
-			APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "  1/32  ");
+			APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "   1/32   ");
 			break;
 		case 0x02:
-			APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "  1/16  ");
+			APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "   1/16   ");
 			break;
 		case 0x07:
 			APP_LCD_PrintString(x_offset+47, y_offset+23, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "1/32T");
@@ -1853,36 +1757,31 @@ void Legend_Draw(int x, int y, const char *func, const char *butt){
 
 void SettingsMenu_Legend(void){
 
-	if(formatting){
-		Legend_Draw(x_offset+420, y_offset+32, "EXEC", "INST");
-		Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
-	}else{
-		if(menu_edit){
-			if(menu_pos==MENU_DEVICE_ID || (menu_pos==MENU_BANK_CHANGE && menu_sub_edit)){
-				Legend_Draw(x_offset+420, y_offset+52, "INC", "UP");
-				Legend_Draw(x_offset+420, y_offset+72, "DEC", "DOWN");
-				Legend_Draw(x_offset+420, y_offset+32, "ENTER", "INST");
-				Legend_Draw(x_offset+420, y_offset+12, "CANCEL", "LAST");
-			}else if(menu_pos==MENU_BANK_CHANGE){
-				Legend_Draw(x_offset+420, y_offset+52, "  UP", "UP");
-				Legend_Draw(x_offset+420, y_offset+72, "DOWN", "DOWN");
-				Legend_Draw(x_offset+420, y_offset+32, " EDIT", "INST");
-				Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
-			}else if(menu_pos==MENU_FORMAT){
-				Legend_Draw(x_offset+160, y_offset+150, "NO", "LAST");
-				Legend_Draw(x_offset+290, y_offset+150, "YES", "INST");
-			}else if(menu_pos==MENU_ABOUT){
-				Legend_Draw(x_offset+420, y_offset+12, "ESC", "LAST");
-			}
-
-		}else{
+	if(menu_edit){
+		if(menu_pos==MENU_DEVICE_ID || (menu_pos==MENU_BANK_CHANGE && menu_sub_edit)){
+			Legend_Draw(x_offset+420, y_offset+52, "INC", "UP");
+			Legend_Draw(x_offset+420, y_offset+72, "DEC", "DOWN");
+			Legend_Draw(x_offset+420, y_offset+32, "ENTER", "INST");
+			Legend_Draw(x_offset+420, y_offset+12, "CANCEL", "LAST");
+		}else if(menu_pos==MENU_BANK_CHANGE){
 			Legend_Draw(x_offset+420, y_offset+52, "  UP", "UP");
 			Legend_Draw(x_offset+420, y_offset+72, "DOWN", "DOWN");
-			Legend_Draw(x_offset+420, y_offset+32,
-			            (menu_pos==MENU_DEVICE_ID)   ? " EDIT" :
-			            (menu_pos==MENU_BANK_CHANGE) ? "ENTER" : "EXEC", "INST");
+			Legend_Draw(x_offset+420, y_offset+32, " EDIT", "INST");
 			Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
+		}else if(menu_pos==MENU_FORMAT){
+			Legend_Draw(x_offset+160, y_offset+150, "NO", "LAST");
+			Legend_Draw(x_offset+290, y_offset+150, "YES", "INST");
+		}else if(menu_pos==MENU_ABOUT){
+			Legend_Draw(x_offset+420, y_offset+12, "ESC", "LAST");
 		}
+
+	}else{
+		Legend_Draw(x_offset+420, y_offset+52, "  UP", "UP");
+		Legend_Draw(x_offset+420, y_offset+72, "DOWN", "DOWN");
+		Legend_Draw(x_offset+420, y_offset+32,
+		            (menu_pos==MENU_DEVICE_ID)   ? " EDIT" :
+		            (menu_pos==MENU_BANK_CHANGE) ? "ENTER" : "EXEC", "INST");
+		Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
 	}
 
 }
@@ -1921,12 +1820,94 @@ void Formatting_Page(void){
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
 	APP_LCD_Rectangle(0, 40, 480, 200, 0, 0, 2, APP_LCD_BLACK);
-	APP_LCD_PrintString(92, y_offset+50, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Formatting   ROM...");
+	APP_LCD_PrintString(92, y_offset+50, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Formatting   Sounds Datas...");
 
 	TR5X6_MEM_Format();
 
 }
 
+
+/////////////////////////////////////////////////////////////////////////////
+// warns that the unit type is about to change, and asks again
+//
+// Only ever seen from the settings menu, and only when the choice differs
+// from what this board currently says it is. Changing it re-lays the whole
+// flash in the other machine's geometry, so it deserves its own confirmation
+// - same page shape as the format one, same buttons.
+/////////////////////////////////////////////////////////////////////////////
+static void UnitChange_Page(u8 new_unit)
+{
+	APP_LCD_Clear();
+	APP_LCD_BColourSet(APP_LCD_BLACK);
+	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_PrintString(240, y_offset+10, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Unit   Type");
+	APP_LCD_FColourSet(APP_LCD_RED);
+	APP_LCD_PrintString(240, y_offset+40, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "You're  about  to  change");
+	APP_LCD_PrintFormattedString(240, y_offset+60, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "the  Unit  Type  to  %d", (new_unit==5) ? 505 : 626);
+	APP_LCD_FColourSet(APP_LCD_WHITE);
+	APP_LCD_PrintString(240, y_offset+120, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "Are you sure?");
+	Legend_Draw(x_offset+160, y_offset+150, "NO", "LAST");
+	Legend_Draw(x_offset+290, y_offset+150, "YES", "INST");
+}
+
+static u8 UnitChange_Confirm(u8 new_unit)
+{
+	UnitChange_Page(new_unit);
+	for(;;){
+		for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);
+		TR5X6_DECOD_BUTT_Handler();
+		if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+			tr5x6_decod_buttons_flags.inst = 0;
+			return 1;
+		}
+		if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+			tr5x6_decod_buttons_flags.last = 0;
+			return 0;		// back to the choice page
+		}
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// asks which machine this board is bolted into, and does not return until
+// answered
+//
+// Called from two places: the very first boot of an unformatted board, and a
+// re-format from the settings menu - one firmware serves both machines, so a
+// board can be moved and has to be able to say so.
+//
+// Runs OUTSIDE the scheduler in the first case, so the button edge detector
+// (normally pumped by APP_Tick) is called by hand here.
+/////////////////////////////////////////////////////////////////////////////
+static u8 UnitSelect_Ask(u8 unit_sel, u8 allow_exit)
+{
+	// Clears here, not at the call sites: this page can come up over the
+	// format confirmation of the settings menu as well as over a blank
+	// first boot, and neither caller should have to remember.
+	APP_LCD_Clear();
+	UnitSelect_Page(unit_sel, allow_exit);
+	u8 chosen = 0;
+	while(!chosen){
+		for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);	// the tasks' 40 ms pace
+		TR5X6_DECOD_BUTT_Handler();
+		if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
+			unit_sel = (unit_sel==5) ? 6 : 5;
+			UnitSelect_Page(unit_sel, allow_exit);
+			tr5x6_decod_buttons_flags.inc = 0;
+		}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
+			unit_sel = (unit_sel==5) ? 6 : 5;
+			UnitSelect_Page(unit_sel, allow_exit);
+			tr5x6_decod_buttons_flags.dec = 0;
+		}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
+			chosen = 1;
+			tr5x6_decod_buttons_flags.inst = 0;
+		}else if(allow_exit && tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
+			tr5x6_decod_buttons_flags.last = 0;
+			return UNIT_SEL_EXIT;	// back to the settings menu, nothing written
+		}
+	}
+	return unit_sel;
+}
 /////////////////////////////////////////////////////////////////////////////
 // prints the application version, spaced out for this screen
 //
@@ -1999,22 +1980,7 @@ void TASK_SettingsMenu(void *pvParameters){
 	while( 1 ) {
 		// wait for 40 mS
 		vTaskDelayUntil(&xLastExecutionTime, 40 / portTICK_RATE_MS);
-		if(formatting){
-			if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
-				tr5x6_decod_buttons_flags.inc = 0;
-			}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
-				tr5x6_decod_buttons_flags.dec = 0;
-			}else if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
-				formatting=0;
-				menu_edit=0;
-				APP_LCD_Clear();	// clear the TFT
-				SettingsMenu_Draw();
-				SettingsMenu_Legend();
-				tr5x6_decod_buttons_flags.inst=0;
-			}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
-				ADIOS_SYS_Reset();
-			}
-		}else if(menu_edit){
+		if(menu_edit){
 			if(menu_pos==MENU_DEVICE_ID){
 				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
 					curr_id = (curr_id+1) & DEVICE_ID_MASK;
@@ -2141,11 +2107,14 @@ void TASK_SettingsMenu(void *pvParameters){
 					}
 					tr5x6_unit = (unit_sel==6) ? &tr5x6_unit_626 : &tr5x6_unit_505;
 					APP_LCD_Clear();
-					formatting = 1;
 					Formatting_Page();
-					SettingsMenu_Legend();
-					//vTaskResume(xSettings);
-					tr5x6_decod_buttons_flags.inst=0;
+					// Same ending as the first-boot road, and for the same
+					// reason: the format may have re-declared which machine
+					// this board is, and only a clean boot lays the new
+					// geometry out. The page takes no buttons - it shows its
+					// report, then the board restarts on its own.
+					for(u16 d=0; d<2000; d++)ADIOS_DELAY_Wait_uS(1000);		// wait 2s
+					ADIOS_SYS_Reset();
 				}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
 					APP_LCD_Clear();	// clear the TFT
 					menu_edit=0;

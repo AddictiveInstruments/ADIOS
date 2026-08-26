@@ -644,6 +644,17 @@ static void Format_Report(const char *msg)
 }
 
 
+// one progress-bar redraw: the percentage inside the bitmap, then the bar
+// itself. Factored out of the four places that drew it by hand - the fifth
+// copy is what this fix would have added.
+static void Format_Progress(adios_lcd_bitmap_t bmp, u8 *arr, u16 arr_size, u16 y, u16 percent)
+{
+	memset(arr, 0x00, arr_size);
+	APP_LCD_BitmapPrintFormattedString(bmp, 1.0, 150, 2, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%u%s", percent, "%");
+	APP_LCD_PrintProgress(bmp, 0x00ff0000, 90, y, 300, 16, 300*percent/100);
+}
+
+
 s32 TR5X6_MEM_Format(void){
 
 	tr5x6_rom_format_stat=(s32)TR5X6_ROM_OK;
@@ -690,11 +701,11 @@ s32 TR5X6_MEM_Format(void){
 		ADIOS_MIDI_SendDebugMessage(message);
 		APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 		APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
-		u16 progress= 100*(sector+1)/512;
-		memset(&prog_bmp_array, 0x00, sizeof(prog_bmp_array));
-
-		APP_LCD_BitmapPrintFormattedString(prog_bmp, 1.0, 150, 2, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%u%s", progress, "%");
-		APP_LCD_PrintProgress(prog_bmp, 0x00ff0000, 90, 15+80, 300, 16, 300*progress/100);
+		// sector count DERIVED, not the hand-written 512 it used to be: the
+		// ROM size define has already changed once (see the commented-out
+		// line beside it), and this bar would have lied silently.
+		Format_Progress(prog_bmp, prog_bmp_array, sizeof(prog_bmp_array), 15+80,
+		                100*(sector+1)/((TR5X6_ROM_END_ADDR+1)/TR5X6_ROM_SECTOR_SIZE));
 
 	}
 
@@ -714,7 +725,7 @@ s32 TR5X6_MEM_Format(void){
 	APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 	APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 
-	APP_LCD_PrintString(92, 15+120, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Formatting   FLASH...");
+	APP_LCD_PrintString(92, 15+120, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Formatting   Names and Colors Datas...");
 	APP_LCD_Rectangle(89, 14+150, 302, 18, 1, APP_LCD_WHITE, 0, 0);
 	// Flash formatting
 	tr5x6_flash_info_t slot;
@@ -759,10 +770,7 @@ s32 TR5X6_MEM_Format(void){
 			Format_Report(message);
 			return -2;
 		}
-		u16 progress= 100*(p+1)/4;
-		memset(&prog_bmp_array, 0x00, sizeof(prog_bmp_array));
-		APP_LCD_BitmapPrintFormattedString(prog_bmp, 1.0, 150, 2, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%u%s", progress, "%");
-		APP_LCD_PrintProgress(prog_bmp, 0x00ff0000, 90, 15+150, 300, 16, 300*progress/100);
+		Format_Progress(prog_bmp, prog_bmp_array, sizeof(prog_bmp_array), 15+150, 100*(p+1)/4);
 	}
 	// datas[] now holds exactly what page 3 contains
 	datas_page = 3;
@@ -785,12 +793,8 @@ s32 TR5X6_MEM_Format(void){
 				return -2;
 			}
 			rec++;
-			if( (rec & 0x0f) == 0 ){
-				u16 progress= 100*rec/total;
-				memset(&prog_bmp_array, 0x00, sizeof(prog_bmp_array));
-				APP_LCD_BitmapPrintFormattedString(prog_bmp, 1.0, 150, 2, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%u%s", progress, "%");
-				APP_LCD_PrintProgress(prog_bmp, 0x00ff0000, 90, 15+150, 300, 16, 300*progress/100);
-			}
+			if( (rec & 0x0f) == 0 )
+				Format_Progress(prog_bmp, prog_bmp_array, sizeof(prog_bmp_array), 15+150, 100*rec/total);
 		}
 	}
 	memset(slot.ToWrite, 0, TR5X6_FLASH_INFO_SIZE);
@@ -801,6 +805,11 @@ s32 TR5X6_MEM_Format(void){
 			Format_Report("EEPROM write failed!");
 			return -2;
 		}
+		// counted like the slots: total is bank_num*(slot_num+1), so the bank
+		// records ARE part of the reckoning - without this the bar stopped at
+		// 100*256/272 = 94% on a 505, 96% on a 626. No throttle: 16 at most.
+		rec++;
+		Format_Progress(prog_bmp, prog_bmp_array, sizeof(prog_bmp_array), 15+150, 100*rec/total);
 	}
 	u8 bank0 = 0;
 	if( EE_Write(TR5X6_EE_BANKNUM_ADDR, &bank0, 1) < 0 ){
@@ -827,6 +836,9 @@ s32 TR5X6_MEM_Format(void){
 		Format_Report("system page write failed!");
 		return -2;
 	}
+	// the trailing writes - bank num, bank-change settings, magic, system
+	// page - are not worth a share of the bar, but the bar must end full
+	Format_Progress(prog_bmp, prog_bmp_array, sizeof(prog_bmp_array), 15+150, 100);
 	Format_Report("Format done.");
 #endif
 
