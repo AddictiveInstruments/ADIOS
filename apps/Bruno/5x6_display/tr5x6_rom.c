@@ -106,9 +106,7 @@ static u8 datas_page  = 0xff;	// which page datas[] holds; 0xff = none
 static u8 datas_dirty = 0;	// ...and whether it still owes a burn
 #endif
 
-u8 tr5x6_bc_ctrl = TR5X6_BC_CTRL_DEFAULT;
-u8 tr5x6_bc_chn  = TR5X6_BC_CHN_DEFAULT;
-u8 tr5x6_bc_omni = TR5X6_BC_OMNI_DEFAULT;
+tr5x6_bc_t tr5x6_bc = { .ALL = TR5X6_BC_DEFAULT_ALL };
 static u8 rom_bank=0;
 
 const char tr5x6_slot_name[4][4]={"4K\0 ", "8K\0 ", "16K\0", "32K\0"};
@@ -668,81 +666,6 @@ static s32 EE_Write(u16 addr, u8 *buf, u16 len)
 	return 0;
 }
 
-/////////////////////////////////////////////////////////////////////////////
-// TEMPORARY bring-up test - 2026-08-25, first EEPROM soldered on a 505.
-// Writes patterns to the FREE area of the EEPROM map (0x1E00.., no record
-// lives there), reads them back and reports every step on the debug port.
-// Remove together with its call in APP_Init once the part is proven.
-/////////////////////////////////////////////////////////////////////////////
-s32 TR5X6_EE_Test(void)
-{
-	u8 wr[64], rd[64];
-	s32 st;
-
-	// BUSY (bit 15) stuck high here = the bus never went idle: pull-ups
-	// missing or SDA held low. Everything after would only time out.
-	ADIOS_MIDI_SendDebugMessage("[EE] test start, I2C2 ISR=0x%08x\n", (u32)I2C2->ISR);
-
-	// what the area holds before anything is written - a virgin part reads
-	// 0xFF everywhere, a dead bus reads as an error
-	memset(rd, 0, sizeof(rd));
-	st = EE_Read(0x1E00, rd, 8);
-	ADIOS_MIDI_SendDebugMessage("[EE] pre-read st=%d: %02x %02x %02x %02x %02x %02x %02x %02x\n",
-		st, rd[0],rd[1],rd[2],rd[3],rd[4],rd[5],rd[6],rd[7]);
-	if( st < 0 ){
-		ADIOS_MIDI_SendDebugMessage("[EE] read failed, last I2C error %d - stopping here\n",
-			ADIOS_I2C_LastErrorGet(TR5X6_EE_PORT));
-		return -1;
-	}
-
-	// two passes with inverted patterns, so a pass cannot succeed by reading
-	// what the previous one left behind
-	for(int pass=0; pass<2; pass++){
-		u8 base = pass ? 0xA5 : 0x5A;
-
-		// 1. a single byte
-		wr[0] = base;
-		rd[0] = ~base;
-		st = EE_Write(0x1E00, wr, 1);
-		if( st == 0 ) st = EE_Read(0x1E00, rd, 1);
-		ADIOS_MIDI_SendDebugMessage("[EE] pass %d, 1 byte: st=%d wrote %02x read %02x %s\n",
-			pass, st, wr[0], rd[0], (st==0 && rd[0]==wr[0]) ? "OK" : "FAIL");
-		if( st != 0 )
-			ADIOS_MIDI_SendDebugMessage("[EE]   after fail: ISR=0x%08x CR1=0x%08x last err %d\n",
-				(u32)I2C2->ISR, (u32)I2C2->CR1, ADIOS_I2C_LastErrorGet(TR5X6_EE_PORT));
-
-		// 2. a record-sized run ACROSS a 32-byte page boundary (0x1E10+28
-		//    crosses 0x1E20) - the exact shape of every slot write, and the
-		//    case that catches a missing page split (the part would wrap to
-		//    the page start and eat its own tail)
-		for(int i=0;i<28;i++) wr[i] = base ^ i;
-		st = EE_Write(0x1E10, wr, 28);
-		memset(rd, 0, sizeof(rd));
-		if( st == 0 ) st = EE_Read(0x1E10, rd, 28);
-		int bad = -1;
-		for(int i=0;i<28;i++) if( rd[i]!=wr[i] ){ bad=i; break; }
-		if( st == 0 && bad < 0 )
-			ADIOS_MIDI_SendDebugMessage("[EE] pass %d, 28 bytes across a page: OK\n", pass);
-		else
-			ADIOS_MIDI_SendDebugMessage("[EE] pass %d, 28 bytes: st=%d first bad ofs %d wrote %02x read %02x\n",
-				pass, st, bad, (bad>=0)?wr[bad]:0, (bad>=0)?rd[bad]:0);
-
-		// 3. 64 bytes, two whole pages
-		for(int i=0;i<64;i++) wr[i] = (u8)(base + i*7);
-		st = EE_Write(0x1E40, wr, 64);
-		memset(rd, 0, sizeof(rd));
-		if( st == 0 ) st = EE_Read(0x1E40, rd, 64);
-		bad = -1;
-		for(int i=0;i<64;i++) if( rd[i]!=wr[i] ){ bad=i; break; }
-		if( st == 0 && bad < 0 )
-			ADIOS_MIDI_SendDebugMessage("[EE] pass %d, 64 bytes: OK\n", pass);
-		else
-			ADIOS_MIDI_SendDebugMessage("[EE] pass %d, 64 bytes: st=%d first bad ofs %d wrote %02x read %02x\n",
-				pass, st, bad, (bad>=0)?wr[bad]:0, (bad>=0)?rd[bad]:0);
-	}
-	ADIOS_MIDI_SendDebugMessage("[EE] test done\n");
-	return 0;
-}
 #endif
 
 // format-time report line, on screen and on the debug port
@@ -861,9 +784,8 @@ s32 TR5X6_MEM_Format(void){
 			datas[TR5X6_FLASH_SYS_BANK_OFS]      = 0; // stored bank num
 			datas[TR5X6_FLASH_SYS_ID_CONFIRM_OFS]= 0x42;
 			datas[TR5X6_FLASH_SYS_ID_OFS]        = ADIOS_MIDI_DeviceIDGet();
-			datas[TR5X6_FLASH_SYS_BC_CTRL_OFS]   = TR5X6_BC_CTRL_DEFAULT;
-			datas[TR5X6_FLASH_SYS_BC_CHN_OFS]    = TR5X6_BC_CHN_DEFAULT;
-			datas[TR5X6_FLASH_SYS_BC_OMNI_OFS]   = TR5X6_BC_OMNI_DEFAULT;
+			datas[TR5X6_FLASH_SYS_BC_OFS]        = (u8)TR5X6_BC_DEFAULT_ALL;
+			datas[TR5X6_FLASH_SYS_BC_OFS+1]      = (u8)(TR5X6_BC_DEFAULT_ALL >> 8);
 		}
 		if( FlashPage_Burn(p) < 0 ){
 			sprintf(message, "format failed on page#%d", p);
@@ -918,14 +840,22 @@ s32 TR5X6_MEM_Format(void){
 		Format_Report("EEPROM write failed!");
 		return -2;
 	}
+	u8 bc0[2] = { (u8)TR5X6_BC_DEFAULT_ALL, (u8)(TR5X6_BC_DEFAULT_ALL >> 8) };
+	if( EE_Write(TR5X6_EE_BC_ADDR, bc0, 2) < 0 ){
+		Format_Report("EEPROM write failed!");
+		return -2;
+	}
+	// the magic LAST, once every record it vouches for is written - an
+	// interrupted format then leaves the board unformatted, not lying
+	u8 magic0 = tr5x6_unit->magic;
+	if( EE_Write(TR5X6_EE_MAGIC_ADDR, &magic0, 1) < 0 ){
+		Format_Report("EEPROM write failed!");
+		return -2;
+	}
 	// ...and the system fields, on the one flash page they never leave
 	memset(datas, 0, TR5X6_FLASH_PAGE_SIZE);
-	datas[TR5X6_FLASH_SYS_MAGIC_OFS]     = tr5x6_unit->magic;
 	datas[TR5X6_FLASH_SYS_ID_CONFIRM_OFS]= 0x42;
 	datas[TR5X6_FLASH_SYS_ID_OFS]        = ADIOS_MIDI_DeviceIDGet();
-	datas[TR5X6_FLASH_SYS_BC_CTRL_OFS]   = TR5X6_BC_CTRL_DEFAULT;
-	datas[TR5X6_FLASH_SYS_BC_CHN_OFS]    = TR5X6_BC_CHN_DEFAULT;
-	datas[TR5X6_FLASH_SYS_BC_OMNI_OFS]   = TR5X6_BC_OMNI_DEFAULT;
 	if( FlashPage_Burn(3) < 0 ){
 		Format_Report("system page write failed!");
 		return -2;
@@ -1005,25 +935,58 @@ s32 TR5X6_ROM_DeviceIDStore(u8 device_id){
 	return TR5X6_ROM_SysPageWrite();
 }
 
-s32 TR5X6_ROM_BankChangeStore(u8 ctrl, u8 chn, u8 omni){
+s32 TR5X6_ROM_BankChangeStore(void){
+#if APP_HARD_REV == 1
 	TR5X6_ROM_SysPageRead();
-	datas[TR5X6_FLASH_SYS_BC_CTRL_OFS] = ctrl;
-	datas[TR5X6_FLASH_SYS_BC_CHN_OFS]  = chn;
-	datas[TR5X6_FLASH_SYS_BC_OMNI_OFS] = omni;
+	datas[TR5X6_FLASH_SYS_BC_OFS]   = (u8)(tr5x6_bc.ALL);
+	datas[TR5X6_FLASH_SYS_BC_OFS+1] = (u8)(tr5x6_bc.ALL >> 8);
 	return TR5X6_ROM_SysPageWrite();
+#else
+	// the EEPROM revision does not burn a flash page for two bytes
+	u8 b[2] = { (u8)(tr5x6_bc.ALL), (u8)(tr5x6_bc.ALL >> 8) };
+	return EE_Write(TR5X6_EE_BC_ADDR, b, 2);
+#endif
 }
 
 // Anything that is not a legal value reads back as the default - 0xFF above
 // all, which is what a board formatted before these three bytes existed has
 // in there. That is the whole migration.
 void TR5X6_ROM_BankChangeRecall(void){
+#if APP_HARD_REV == 1
 	u32 base = TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*3);
-	u8 ctrl = (*((volatile u8*)(base + TR5X6_FLASH_SYS_BC_CTRL_OFS)));
-	u8 chn  = (*((volatile u8*)(base + TR5X6_FLASH_SYS_BC_CHN_OFS)));
-	u8 omni = (*((volatile u8*)(base + TR5X6_FLASH_SYS_BC_OMNI_OFS)));
-	tr5x6_bc_ctrl = (ctrl < BC_CTRL_NUM) ? ctrl : TR5X6_BC_CTRL_DEFAULT;
-	tr5x6_bc_chn  = (chn && chn <= 16)   ? chn  : TR5X6_BC_CHN_DEFAULT;
-	tr5x6_bc_omni = (omni <= 1)          ? omni : TR5X6_BC_OMNI_DEFAULT;
+	u16 all = (u16)(*((volatile u8*)(base + TR5X6_FLASH_SYS_BC_OFS)))
+	        | ((u16)(*((volatile u8*)(base + TR5X6_FLASH_SYS_BC_OFS+1))) << 8);
+#else
+	u16 all = 0xFFFF;
+	u8 b[2];
+	if( EE_Read(TR5X6_EE_BC_ADDR, b, 2) == 0 )
+		all = (u16)b[0] | ((u16)b[1] << 8);
+#endif
+	tr5x6_bc.ALL = all;
+	// 0xFFFF is erased flash - every fielded board reads that at this fresh
+	// offset - and ctrl==3 is the illegal fourth value of the 2-bit field:
+	// both recall the defaults whole.
+	if( all == 0xFFFF || tr5x6_bc.ctrl == BC_CTRL_NUM )
+		tr5x6_bc.ALL = TR5X6_BC_DEFAULT_ALL;
+}
+
+// The magic says "this data area is formatted, for THIS machine, in THIS
+// format version" - so it lives WITH the data it describes, and moves with
+// it. Keeping it in flash while the records went to the EEPROM would lie in
+// both directions: a blank or swapped EEPROM would look formatted, and a
+// mass-erased flash would condemn perfectly good records.
+// The SysEx device ID does NOT move - the bootloader reads it in flash and
+// knows nothing of any EEPROM.
+// Called before tr5x6_unit is aimed, and depends on nothing but the bus,
+// which core/main.c has already brought up.
+u8 TR5X6_ROM_MagicGet(void){
+#if APP_HARD_REV == 1
+	return (*((volatile u8*)(TR5X6_FLASH_MAGIC_ADDR)));
+#else
+	u8 magic;
+	if( EE_Read(TR5X6_EE_MAGIC_ADDR, &magic, 1) < 0 ) magic = 0xFF;
+	return magic;
+#endif
 }
 
 s32 TR5X6_ROM_BankStore(u8 bank){
@@ -1050,15 +1013,18 @@ static s32 TR5X6_ROM_SysPageWrite(void){
 /* ********* */
 u8 TR5X6_ROM_BankRecall(void){
 #if APP_HARD_REV == 1
-	u32 addr=TR5X6_FLASH_START_ADDR + (TR5X6_FLASH_PAGE_SIZE*3) + TR5X6_FLASH_SYS_BANK_OFS;
-	u8 bank = (*((volatile u8*)(addr)));
+	// Nothing WRITES the number on this revision any more (a flash page per
+	// press was the wear, and the MIDI timeout) - so nothing reads it either:
+	// the machine starts on bank 1, not on whatever an older firmware left
+	// in the field. The EEPROM revision below is the one that remembers.
+	return 0;
 #else
 	u8 bank;
 	if( EE_Read(TR5X6_EE_BANKNUM_ADDR, &bank, 1) < 0 ) bank = 0;
-#endif
-	// erased flash and a virgin EEPROM both read 0xFF
+	// a virgin EEPROM reads 0xFF
 	if( bank > tr5x6_unit->bank_num-1 ) bank = 0;
 	return bank;
+#endif
 }
 
 

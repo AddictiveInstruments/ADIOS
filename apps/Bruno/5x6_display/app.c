@@ -140,11 +140,13 @@ enum {
 	MENU_ABOUT
 };
 // its MIDI bank change page
-#define MENU_BC_NUM	3
+#define MENU_BC_NUM	5
 enum {
 	MENU_BC_CTRL = 0,
 	MENU_BC_CHN,
-	MENU_BC_OMNI
+	MENU_BC_OMNI,
+	MENU_BC_RXEN,
+	MENU_BC_TXEN
 };
 // The list moved left: "SYSEX Device ID:" is eight characters longer than the
 // label it replaces and used to run into its own value.
@@ -154,9 +156,9 @@ enum {
 
 static u8 menu_sub = 0;		// which line of the bank change page
 static u8 menu_sub_edit = 0;	// ...and whether its value is being edited
-static u8 bc_ctrl_cur = 0;	// the three settings while under the cursor,
-static u8 bc_chn_cur = 0;	// loaded from tr5x6_bc_* on entering the page
-static u8 bc_omni_cur = 0;	// and written back one at a time on ENTER
+static tr5x6_bc_t bc_cur;	// the settings under the cursor: loaded from
+				// tr5x6_bc on entering the page, written back
+				// whole on ENTER - one struct, not five copies
 
 //// define a Mutex for LCD access
 //xSemaphoreHandle xSPISemaphore;
@@ -281,7 +283,7 @@ void APP_Init(void)
 	// formatted by an older firmware carries its magic at the old address,
 	// reads as empty here, and would be formatted - hence the one-shot
 	// migration app, to be run once after the bootloader update.
-	u8 magic     = *((volatile u8*)(TR5X6_FLASH_MAGIC_ADDR));
+	u8 magic     = TR5X6_ROM_MagicGet();
 	u8 unit_sel  = magic & 0x0f;
 	u8 rom_empty = (unit_sel != 5) && (unit_sel != 6);
 
@@ -304,11 +306,6 @@ void APP_Init(void)
 	TR5X6_ROM_Init();		// bank shift, A17 mux, slot table
 	TR5X6_ROM_BankChangeRecall();	// the MIDI bank change settings, or their
 					// defaults on a board that predates them
-#if APP_HARD_REV == 2
-	// TEMPORARY bring-up: prove the EEPROM before anything relies on it.
-	// Reports on the debug port, then boots on. Remove with TR5X6_EE_Test.
-	TR5X6_EE_Test();
-#endif
 	TR5X6_ROM_HOST();
 	TR5X6_DECOD_LCD_Init();		// the right decoder, the right CS edge,
 					// and only then the interrupt
@@ -438,11 +435,11 @@ void APP_MIDI_NotifyPackage(adios_midi_port_t port, adios_midi_package_t midi_pa
 /////////////////////////////////////////////////////////////////////////////
 static void MIDI_BankChange_Rx(adios_midi_package_t midi_package)
 {
-	if(!normal_start || tr5x6_bc_ctrl == BC_CTRL_NONE) return;
-	if(!tr5x6_bc_omni && midi_package.chn != (tr5x6_bc_chn-1)) return;
+	if(!normal_start || !tr5x6_bc.rx_en) return;
+	if(!tr5x6_bc.omni && midi_package.chn != tr5x6_bc.chn) return;
 
 	u8 bank;
-	switch(tr5x6_bc_ctrl){
+	switch(tr5x6_bc.ctrl){
 		case BC_CTRL_PC:
 			if(midi_package.event != ProgramChange) return;
 			bank = midi_package.program_change;
@@ -450,7 +447,7 @@ static void MIDI_BankChange_Rx(adios_midi_package_t midi_package)
 		case BC_CTRL_CC00:
 		case BC_CTRL_CC32:
 			if(midi_package.event != CC) return;
-			if(midi_package.cc_number != ((tr5x6_bc_ctrl==BC_CTRL_CC00) ? 0 : 32)) return;
+			if(midi_package.cc_number != ((tr5x6_bc.ctrl==BC_CTRL_CC00) ? 0 : 32)) return;
 			bank = midi_package.value;
 			break;
 		default: return;
@@ -468,8 +465,9 @@ static void MIDI_BankChange_Rx(adios_midi_package_t midi_package)
 /////////////////////////////////////////////////////////////////////////////
 static void MIDI_BankChange_Tx(u8 bank)
 {
-	adios_midi_chn_t chn = (adios_midi_chn_t)(tr5x6_bc_chn-1);
-	switch(tr5x6_bc_ctrl){
+	if(!tr5x6_bc.tx_en) return;
+	adios_midi_chn_t chn = (adios_midi_chn_t)tr5x6_bc.chn;
+	switch(tr5x6_bc.ctrl){
 		case BC_CTRL_PC:   ADIOS_MIDI_SendProgramChange(DIN2, chn, bank); break;
 		case BC_CTRL_CC00: ADIOS_MIDI_SendCC(DIN2, chn,  0, bank); break;
 		case BC_CTRL_CC32: ADIOS_MIDI_SendCC(DIN2, chn, 32, bank); break;
@@ -1745,10 +1743,12 @@ static const char * const menu_labels[MENU_NUM] = {
 static const char * const menu_bc_labels[MENU_BC_NUM] = {
 	"Control:",
 	"Channel:",
-	"OMNI   RX:"
+	"OMNI   RX:",
+	"Receive:",
+	"Transmit:"
 };
 
-static const char * const bc_ctrl_names[BC_CTRL_NUM] = { "NONE", "PC", "CC#0", "CC#32" };
+static const char * const bc_ctrl_names[BC_CTRL_NUM] = { "PC", "CC#0", "CC#32" };
 
 // The value column of one top-level row. Only the device ID carries one, but
 // the loop asks every row so a future entry only has to answer here.
@@ -1806,11 +1806,15 @@ static void BankChange_Page(void)
 		APP_LCD_PrintString(MENU_X_LABEL, MENU_Y_ROW(i), 0, APP_LCD_STRING_ALIGN_LEFT, -32, menu_bc_labels[i]);
 		APP_LCD_FColourSet((on_row && menu_sub_edit) ? APP_LCD_WHITE : APP_LCD_LIGHTGREY);
 		if(i==MENU_BC_CTRL)
-			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", bc_ctrl_names[bc_ctrl_cur]);
+			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", bc_ctrl_names[bc_cur.ctrl]);
 		else if(i==MENU_BC_CHN)
-			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%d", bc_chn_cur);
+			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%d", bc_cur.chn+1);
+		else if(i==MENU_BC_OMNI)
+			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", bc_cur.omni ? "On" : "Off");
+		else if(i==MENU_BC_RXEN)
+			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", bc_cur.rx_en ? "On" : "Off");
 		else
-			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", bc_omni_cur ? "On" : "Off");
+			APP_LCD_PrintFormattedString(MENU_X_VALUE, MENU_Y_ROW(i), 80, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", bc_cur.tx_en ? "On" : "Off");
 	}
 	APP_LCD_FColourSet(APP_LCD_WHITE);
 }
@@ -2056,16 +2060,20 @@ void TASK_SettingsMenu(void *pvParameters){
 				if(menu_sub_edit){
 					// the value on the line under the cursor
 					if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
-						if(menu_sub==MENU_BC_CTRL)     bc_ctrl_cur = (bc_ctrl_cur+1) % BC_CTRL_NUM;
-						else if(menu_sub==MENU_BC_CHN) bc_chn_cur  = (bc_chn_cur % 16) + 1;
-						else                           bc_omni_cur ^= 1;
+						if(menu_sub==MENU_BC_CTRL)     bc_cur.ctrl = (bc_cur.ctrl+1) % BC_CTRL_NUM;
+						else if(menu_sub==MENU_BC_CHN) bc_cur.chn  = bc_cur.chn+1;	// 4 bits wrap by themselves
+						else if(menu_sub==MENU_BC_OMNI) bc_cur.omni ^= 1;
+						else if(menu_sub==MENU_BC_RXEN) bc_cur.rx_en ^= 1;
+						else                           bc_cur.tx_en ^= 1;
 						SettingsMenu_Draw();
 						SettingsMenu_Legend();
 						tr5x6_decod_buttons_flags.inc = 0;
 					}else if(tr5x6_decod_buttons.dec && tr5x6_decod_buttons_flags.dec){
-						if(menu_sub==MENU_BC_CTRL)     bc_ctrl_cur = (bc_ctrl_cur + BC_CTRL_NUM-1) % BC_CTRL_NUM;
-						else if(menu_sub==MENU_BC_CHN) bc_chn_cur  = ((bc_chn_cur + 14) % 16) + 1;
-						else                           bc_omni_cur ^= 1;
+						if(menu_sub==MENU_BC_CTRL)     bc_cur.ctrl = (bc_cur.ctrl + BC_CTRL_NUM-1) % BC_CTRL_NUM;
+						else if(menu_sub==MENU_BC_CHN) bc_cur.chn  = bc_cur.chn-1;	// 4 bits wrap by themselves
+						else if(menu_sub==MENU_BC_OMNI) bc_cur.omni ^= 1;
+						else if(menu_sub==MENU_BC_RXEN) bc_cur.rx_en ^= 1;
+						else                           bc_cur.tx_en ^= 1;
 						SettingsMenu_Draw();
 						SettingsMenu_Legend();
 						tr5x6_decod_buttons_flags.dec = 0;
@@ -2074,18 +2082,14 @@ void TASK_SettingsMenu(void *pvParameters){
 						// record. One page write per confirmed line, the same
 						// deal the device ID gets - so leaving the page never
 						// has anything left pending.
-						tr5x6_bc_ctrl = bc_ctrl_cur;
-						tr5x6_bc_chn  = bc_chn_cur;
-						tr5x6_bc_omni = bc_omni_cur;
-						TR5X6_ROM_BankChangeStore(tr5x6_bc_ctrl, tr5x6_bc_chn, tr5x6_bc_omni);
+						tr5x6_bc = bc_cur;
+						TR5X6_ROM_BankChangeStore();
 						menu_sub_edit=0;
 						SettingsMenu_Draw();
 						SettingsMenu_Legend();
 						tr5x6_decod_buttons_flags.inst=0;
 					}else if(tr5x6_decod_buttons.last && tr5x6_decod_buttons_flags.last){
-						bc_ctrl_cur = tr5x6_bc_ctrl;	// back to what is stored
-						bc_chn_cur  = tr5x6_bc_chn;
-						bc_omni_cur = tr5x6_bc_omni;
+						bc_cur = tr5x6_bc;	// back to what is stored
 						menu_sub_edit=0;
 						SettingsMenu_Draw();
 						SettingsMenu_Legend();
@@ -2194,9 +2198,7 @@ void TASK_SettingsMenu(void *pvParameters){
 				last_id = curr_id;
 				if(menu_pos==MENU_BANK_CHANGE){
 					// the page opens on what is stored, and on its first line
-					bc_ctrl_cur = tr5x6_bc_ctrl;
-					bc_chn_cur  = tr5x6_bc_chn;
-					bc_omni_cur = tr5x6_bc_omni;
+					bc_cur = tr5x6_bc;
 					menu_sub = 0;
 					menu_sub_edit = 0;
 					APP_LCD_Clear();	// its rows are not the list's rows

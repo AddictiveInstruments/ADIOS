@@ -62,9 +62,11 @@
    La flash effacee lit 0xFF, qui n'est une valeur legale pour aucun des
    trois : une carte formatee par un firmware anterieur retombe donc sur les
    defauts d'elle-meme, sans migration. */
-#define TR5X6_FLASH_SYS_BC_CTRL_OFS		0x7F9	/* NONE / PC / CC#0 / CC#32 */
-#define TR5X6_FLASH_SYS_BC_CHN_OFS		0x7FA	/* 1..16                    */
-#define TR5X6_FLASH_SYS_BC_OMNI_OFS		0x7FB	/* 0 = off, 1 = on          */
+#define TR5X6_FLASH_SYS_BC_OFS			0x7F6	/* tr5x6_bc_t.ALL, 16 bits LE */
+/* 0x7F8..0x7FB carried the same settings as five separate bytes for one day
+   (2026-08-25); retired when they packed into the u16 above, at a FRESH
+   offset on purpose - every fielded board reads 0xFFFF there, which is
+   invalid, and recalls the defaults deterministically. */
 
 
 #define TR5X6_FLASH_INFO_SIZE 			28
@@ -86,8 +88,10 @@
 #define TR5X6_EE_PAGE_SIZE		32
 #define TR5X6_EE_SLOT_BASE		0x0000
 #define TR5X6_EE_BANK_BASE		0x1C00
+#define TR5X6_EE_BC_ADDR		0x1FFC	/* tr5x6_bc_t.ALL, 16 bits LE */
+#define TR5X6_EE_MAGIC_ADDR		0x1FFE	/* which machine, which format version */
+#define TR5X6_EE_BC_ADDR		0x1FFC	/* tr5x6_bc_t.ALL, 16 bits LE */
 #define TR5X6_EE_BANKNUM_ADDR	0x1FFF
-extern s32 TR5X6_EE_Test(void);	/* TEMPORARY bring-up test - remove with its call */
 #endif
 /* Structures ----------------------------------------------------------------*/
 typedef enum
@@ -116,16 +120,30 @@ typedef enum {
 // agree: some sequencers send Program Change, some controllers Bank Select
 // MSB (CC#0), some LSB (CC#32).
 typedef enum {
-	BC_CTRL_NONE = 0,
-	BC_CTRL_PC,
+	BC_CTRL_PC = 0,
 	BC_CTRL_CC00,
 	BC_CTRL_CC32,
-	BC_CTRL_NUM
+	BC_CTRL_NUM		// 3 = the illegal fourth value of the 2-bit field
 } tr5x6_bc_ctrl_t;
 
-#define TR5X6_BC_CTRL_DEFAULT	BC_CTRL_PC
-#define TR5X6_BC_CHN_DEFAULT	10
-#define TR5X6_BC_OMNI_DEFAULT	1
+// The five settings, packed: nine bits used of sixteen, stored as ONE
+// little-endian word at TR5X6_FLASH_SYS_BC_OFS. The channel is kept ZERO
+// BASED like adios_midi_chn_t, so it compares to an incoming package's
+// channel directly - only the screen adds 1.
+typedef union {
+	u16 ALL;
+	struct {
+		u16 ctrl:2;		// tr5x6_bc_ctrl_t
+		u16 chn:4;		// 0..15 = channel 1..16
+		u16 omni:1;		// RX on every channel
+		u16 rx_en:1;		// master switch, receive side
+		u16 tx_en:1;		// master switch, transmit side
+		u16 dummy:7;
+	};
+} tr5x6_bc_t;
+
+// PC, channel 10, OMNI on, both directions on
+#define TR5X6_BC_DEFAULT_ALL	( (u16)BC_CTRL_PC | (9u<<2) | (1u<<6) | (1u<<7) | (1u<<8) )
 
 // ONE slot structure for both hosts - the 626 layout. The 505 never shows
 // the shortnames (it has no grid), they sleep in flash, ready for the day
@@ -237,12 +255,14 @@ extern s32 TR5X6_ROM_BankStore(u8 bank);
    ADIOS finds it at the next power-up - and so does the bootloader */
 extern s32 TR5X6_ROM_DeviceIDStore(u8 device_id);
 extern u8 TR5X6_ROM_BankRecall(void);
-/* live copies of the MIDI bank change settings, recalled once at boot */
-extern u8 tr5x6_bc_ctrl;	/* tr5x6_bc_ctrl_t                          */
-extern u8 tr5x6_bc_chn;		/* 1..16 - TX always, RX when OMNI is off   */
-extern u8 tr5x6_bc_omni;	/* RX on every channel                      */
-extern s32  TR5X6_ROM_BankChangeStore(u8 ctrl, u8 chn, u8 omni);
+/* the live copy of the MIDI bank change settings, recalled once at boot;
+   Store writes its current content */
+extern tr5x6_bc_t tr5x6_bc;
+extern s32  TR5X6_ROM_BankChangeStore(void);
 extern void TR5X6_ROM_BankChangeRecall(void);
+/* which machine this board was formatted for, from wherever this revision
+   keeps it - read BEFORE tr5x6_unit exists, so it depends on nothing */
+extern u8 TR5X6_ROM_MagicGet(void);
 /* burns the record page held in RAM, if one owes it (APP_HARD_REV 1; always
    a no-op on 2 - EEPROM writes do not pend). Call it when the line is
    quiet: the burn freezes the core. */
