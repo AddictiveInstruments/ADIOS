@@ -209,6 +209,11 @@ BSL_DIR="$(cd "$ADIOS_PATH/bootloader/src" && pwd)"
 # chip needs no new file here.
 BSL_MAKEFILE="Makefile.bsl"
 BIN_FILE="$BSL_DIR/project_build/project.bin"
+# the sub-make build log lives inside project_build/ like every other
+# regenerated artifact, so `clean` disposes of it instead of leaving it to
+# accumulate at the top of the source directory forever. See the two clean
+# sites below for why they CAPTURE it rather than redirect into it.
+BSL_LOG="$BSL_DIR/project_build/gen_bsl_boundary_build.log"
 # generated .ld files live inside each side's own project_build/ (the
 # gitignored make-target build dir, not the source directory) - same reasoning
 # as the bootloader/src stray-directory fix earlier: keep every regenerated-
@@ -346,8 +351,10 @@ else
 fi
 
 build_bootloader () {
-    ( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
-        echo "Bootloader build failed, see $BSL_DIR/gen_bsl_boundary_build.log"
+    # safe to redirect here: project_build/ exists (created at parse time and
+    # re-created after each clean below) and nothing removes it during a build.
+    ( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" > "$BSL_LOG" 2>&1 ) || {
+        echo "Bootloader build failed, see $BSL_LOG"
         exit 1
     }
     if [ ! -f "$BIN_FILE" ]; then
@@ -471,8 +478,21 @@ write_header () {
 }
 
 # that it lives inside project_build/ too (2026-08-04).
-( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" cleanall > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
-    echo "Bootloader cleanall failed, see $BSL_DIR/gen_bsl_boundary_build.log"
+# CAPTURED, never redirected - and the difference is not cosmetic. The log
+# lives inside project_build/, and this very command removes project_build/.
+# A `> "$BSL_LOG"` would hold that file open across the removal: Windows then
+# refuses to delete the directory (sharing violation) and the build stops,
+# while Unix deletes it and keeps writing into an unlinked inode - the log
+# vanishes in silence and the error message points at a file that is not
+# there. Capturing holds nothing open, and the output is written only on
+# failure, which is exactly when it gets read. A successful clean has nothing
+# to say anyway: it is the output of an `rm -rf`.
+# `local` must never be used for this assignment - it would swallow the exit
+# status and `set -e` would let a failed clean through.
+cleanall_out=$( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" cleanall 2>&1 ) || {
+    mkdir -p "$BSL_DIR/project_build"
+    printf %s "$cleanall_out" > "$BSL_LOG"
+    echo "Bootloader cleanall failed, see $BSL_LOG"
     exit 1
 }
 mkdir -p "$BSL_DIR/project_build"
@@ -553,8 +573,12 @@ fi
 #
 # Before write_ld below, never after: clean wipes project_build/, and that is
 # where the linker script it writes lives.
-( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" clean > "$BSL_DIR/gen_bsl_boundary_build.log" 2>&1 ) || {
-    echo "Bootloader clean before pass 2 failed, see $BSL_DIR/gen_bsl_boundary_build.log"
+# captured, not redirected - same reason as the cleanall site above: this
+# command removes the directory the log lives in.
+clean_out=$( cd "$BSL_DIR" && ADIOS_PATH=$BSL_SUBMAKE_ADIOS_PATH make -f "$BSL_MAKEFILE" PROCESSOR="$CHIP" clean 2>&1 ) || {
+    mkdir -p "$BSL_DIR/project_build"
+    printf %s "$clean_out" > "$BSL_LOG"
+    echo "Bootloader clean before pass 2 failed, see $BSL_LOG"
     exit 1
 }
 # clean removed project_build/ entirely, and write_ld below writes into it
