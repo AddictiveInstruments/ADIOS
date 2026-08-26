@@ -112,7 +112,7 @@ DIST += $(ADIOS_PATH)/include/makefile/common.mk $(ADIOS_PATH)/include/c
 DIST += $(LD_FILE)
 
 # default rule
-all: dirs cleanhex $(PROJECT).hex $(PROJECT_OUT)/$(PROJECT).bin $(PROJECT_OUT)/$(PROJECT).lss $(PROJECT_OUT)/$(PROJECT).sym projectinfo
+all: dirs cleanhex $(PROJECT_OUT)/$(PROJECT).hex $(PROJECT_OUT)/$(PROJECT).bin $(PROJECT_OUT)/$(PROJECT).lss $(PROJECT_OUT)/$(PROJECT).sym projectinfo
 
 # Static-boundary builds resolve their linker script from the per-family
 # template here rather than in core.mk: that file is included
@@ -298,9 +298,12 @@ $(PROJECT_OUT)/%.o: %.s
 clean:
 	rm -rf $(PROJECT_OUT)
 
-# clean project image
+# clean project image. It lives in PROJECT_OUT since 2026-08-26 - it is a
+# by-product with no consumer (the boundary generator reads project.bin, the
+# named deliverables are built from the .elf), so it has no business sitting
+# at the top of a project directory.
 cleanhex:
-	rm -f $(PROJECT).hex
+	rm -f $(PROJECT_OUT)/$(PROJECT).hex
 
 # clean temporary files + project image
 cleanall: clean cleanhex
