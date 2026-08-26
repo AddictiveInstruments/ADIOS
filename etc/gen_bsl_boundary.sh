@@ -208,6 +208,10 @@ BSL_DIR="$(cd "$ADIOS_PATH/bootloader/src" && pwd)"
 # make variable instead of being baked into a separate file per SKU, so a new
 # chip needs no new file here.
 BSL_MAKEFILE="Makefile.bsl"
+# perl helpers live under etc/perl/ with the rest of the tooling, not next to
+# the bootloader sources they happen to serve. Canonicalized for the same
+# reason as BSL_DIR above.
+PERL_DIR="$(cd "$ADIOS_PATH/etc/perl" && pwd)"
 BIN_FILE="$BSL_DIR/project_build/project.bin"
 # the sub-make build log lives inside project_build/ like every other
 # regenerated artifact, so `clean` disposes of it instead of leaving it to
@@ -606,7 +610,7 @@ fi
 # chip, and it is rewritten at every build of that project. A name keyed on
 # the chip preserved nothing and scattered copies through the OS sources.
 INC_FILE="$PROJECT_DIR/adios_bsl_image.inc"
-perl "$BSL_DIR/gen_inc_file.pl" "$BIN_FILE" "$INC_FILE" adios_bsl_image adios_bsl -size="$BOUNDARY"
+perl "$PERL_DIR/gen_inc_file.pl" "$BIN_FILE" "$INC_FILE" adios_bsl_image adios_bsl -size="$BOUNDARY"
 echo "Regenerated $INC_FILE ($BOUNDARY bytes, matches final boundary)"
 
 if [ "$BSL_BOUNDARY_MODE" = "updater" ]; then
