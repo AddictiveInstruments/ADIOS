@@ -1,9 +1,13 @@
-// Windows MIDI transport - the ONLY part of this tool that knows an OS.
+// The MIDI transport interface - the ONLY part of this tool that knows an OS.
 //
-// Deliberately written against winmm directly rather than pulling RtMidi in:
-// it is the same API RtMidi wraps on Windows, it costs no dependency, and the
-// interface below is the one the portable build will implement on top of
-// RtMidi later. Nothing above this file changes when that happens.
+// One header, two implementations: platform/midi_win.cpp (winmm) and
+// platform/midi_mac.cpp (CoreMIDI). Nothing above this file changes between
+// them, which is the whole point of the split.
+//
+// Both are written against the system API directly rather than pulling RtMidi
+// in: those ARE the APIs RtMidi wraps, so the dependency would buy nothing but
+// a build step. A third platform means one more file here and one line in
+// CMakeLists - nothing else in the tool moves.
 
 #pragma once
 #include <cstdint>
@@ -25,6 +29,9 @@ public:
     bool sendSysex(const std::vector<uint8_t>& msg, std::string& err);
 private:
     void* h_ = nullptr;
+    // CoreMIDI needs BOTH the port and the destination endpoint at send time;
+    // winmm needs only the handle and leaves this null.
+    void* dest_ = nullptr;
 };
 
 class MidiIn {

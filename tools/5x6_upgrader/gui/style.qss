@@ -1,0 +1,71 @@
+/* The charter, taken from the ROM editor's Max/MSP window: slate ground,
+   inset panels darker than what surrounds them, flat controls with a hairline
+   border. One file - the commercial updater will load the same one, which is
+   the whole point of doing it once. */
+
+QWidget {
+    background: #1c212b;
+    color: #dfe4ec;
+    font-size: 12px;
+}
+
+QLabel#title       { font-size: 15px; }
+QLabel#dim         { color: #8a94a6; }
+QLabel#warn        { color: #d9a441; font-size: 11px; }
+
+/* the inset surfaces: always DARKER than the ground, never lighter */
+QLabel#inset, QFrame#inset, QPlainTextEdit {
+    background: #161a22;
+    border: none;
+    border-radius: 3px;
+    padding: 2px 8px;
+}
+QFrame#inset { padding: 8px 10px; }
+
+QFrame#rule { background: #2a2f3a; max-height: 1px; border: none; }
+
+QComboBox, QSpinBox {
+    background: #161a22;
+    border: 1px solid #3d4757;
+    border-radius: 2px;
+    padding: 3px 8px;
+    selection-background-color: #4a7ab8;
+}
+QComboBox::drop-down { border: none; width: 18px; }
+QComboBox QAbstractItemView {
+    background: #161a22;
+    border: 1px solid #3d4757;
+    selection-background-color: #4a7ab8;
+}
+
+QPushButton {
+    background: #2e3644;
+    border: 1px solid #3d4757;
+    border-radius: 2px;
+    padding: 3px 18px;
+}
+QPushButton:hover   { background: #39435a; }
+QPushButton:pressed { background: #262d38; }
+QPushButton:disabled {
+    background: #242a34;
+    border-color: #2e3644;
+    color: #5a6172;
+}
+
+QProgressBar {
+    background: #161a22;
+    border: none;
+    border-radius: 2px;
+}
+QProgressBar::chunk { background: #4a7ab8; border-radius: 2px; }
+
+/* a disabled field must read as inert, not as broken */
+QLabel:disabled, QProgressBar:disabled { color: #5a6172; }
+
+QScrollBar:vertical {
+    background: #161a22;
+    width: 10px;
+    margin: 0;
+}
+QScrollBar::handle:vertical { background: #3d4757; border-radius: 5px; min-height: 20px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }

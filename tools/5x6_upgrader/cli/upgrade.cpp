@@ -51,6 +51,30 @@ void Log::err(const char* fmt, ...)
 	if (errFn) errFn(buf);
 }
 
+void Log::warn(const char* fmt, ...)
+{
+	char buf[512];
+	va_list ap; va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
+	if (warnFn) warnFn(buf); else if (infoFn) infoFn(buf);
+}
+
+void Log::ok(const char* fmt, ...)
+{
+	char buf[512];
+	va_list ap; va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
+	if (okFn) okFn(buf); else if (infoFn) infoFn(buf);
+}
+
+void Log::status(const char* fmt, ...)
+{
+	char buf[512];
+	va_list ap; va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
+	if (statusFn) statusFn(buf);
+}
+
 namespace {
 
 const size_t BLOCK = 256;
@@ -150,23 +174,48 @@ bool inBootloader(Link& lk)
            s.find("bootloader") != std::string::npos;
 }
 
+// Is the application answering yet? Used only to stop waiting early - the
+// verification below is what actually decides.
+bool inBootloaderReady(Link& lk)
+{
+    Reply r = lk.exchange(query(lk.deviceId, 0x01), 200);
+    return r.valid && r.cmd == ACK && r.text() == "ADIOS";
+}
+
 // Walks the operator through the panel shortcut and waits. Deliberately has
 // no timeout on the instruction itself: somebody has to walk to the machine.
 bool waitForBootloader(Link& lk, Log& log)
 {
     if (inBootloader(lk)) { log.info("the board is already in bootloader mode"); return true; }
 
-    log.info("");
-    log.info("PLEASE PUT THE MACHINE IN BOOTLOADER MODE");
-    log.info("  hold LAST + UP and switch the machine on");
-    log.info("  keep them held until this tool says otherwise");
-    log.info("");
+    log.warn("PLEASE PUT THE MACHINE IN BOOTLOADER MODE");
+    log.warn("hold LAST + UP and switch the machine on");
 
-    for (int i = 0; i < 120; ++i) {          // two minutes of patience
-        if (inBootloader(lk)) { log.info("bootloader detected"); return true; }
-        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+    const int seconds = 120;                 // two minutes of patience
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(seconds);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (inBootloader(lk)) {
+            log.status("");
+            log.info("bootloader detected");
+            // Safe to let go already: from here every SysEx command we send
+            // resets the bootloader's own 2 s timer (bsl_sysex.c:189), so it
+            // stays put whether the buttons are held or not.
+            log.ok("you can release the panel buttons");
+            // From here the operator should not walk away: the sequence is
+            // about to rewrite the boot region. Nothing is written YET - the
+            // board would still restart intact - but locking here rather than
+            // two steps later is the version a tester can reason about.
+            log.lock(true);
+            return true;
+        }
+        const int left = (int)std::chrono::duration_cast<std::chrono::seconds>(
+                             deadline - std::chrono::steady_clock::now()).count();
+        log.status("waiting for the machine - %d:%02d left", left / 60, left % 60);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
-    log.err("no bootloader appeared");
+    log.status("");
+    log.err("no bootloader appeared - was LAST + UP held while switching on?");
     return false;
 }
 
@@ -241,6 +290,7 @@ bool upgrade(Link& lk, const UpgradeImages& img, Log& log)
     // in the field have it. The panel shortcut has none of that fragility -
     // holding the buttons keeps the bootloader in its service loop for as
     // long as the operator wants (main.c: hold_mode_active_after_reset).
+    log.step(0, 1);
     if (!waitForBootloader(lk, log)) return false;
 
     // --- 2. the tool ------------------------------------------------------
@@ -249,7 +299,6 @@ bool upgrade(Link& lk, const UpgradeImages& img, Log& log)
     log.info("uploading the tool");
     HexSegment toolFlat = flatten(toolSegs);
     if (!sendSegment(lk, toolFlat, "tool", log)) return false;
-    log.info("you can release the panel buttons");
 
     // --- 3. the signpost ---------------------------------------------------
     // The blind jump goes to the boundary, and the tool is not there. Copy its
@@ -292,6 +341,8 @@ bool upgrade(Link& lk, const UpgradeImages& img, Log& log)
         return false;
     }
     log.info("tool is running");
+    log.step(0, 2);
+    log.step(1, 1);
 
     // --- 5. stage 2: the tool writes the new bootloader --------------------
     log.info("writing the new bootloader");
@@ -321,6 +372,8 @@ bool upgrade(Link& lk, const UpgradeImages& img, Log& log)
     // --- 7. the application, relayed through the tool ----------------------
     // This second 0x7f falls into case B: the tool sets the reboot flag and
     // resets, so the FRESH bootloader receives the application.
+    log.step(1, 2);
+    log.step(2, 1);
     log.info("handing over to the new bootloader");
     lk.send(reset(lk.deviceId));
 
@@ -339,8 +392,41 @@ bool upgrade(Link& lk, const UpgradeImages& img, Log& log)
     log.info("starting the application");
     lk.send(reset(lk.deviceId));
 
-    log.info("done - the board should now boot WITHOUT asking which machine it is");
-    return true;
+    // --- 8. check the result rather than asking the operator to -------------
+    // The board restarts by itself, so there is nothing to switch off and on.
+    // Measured: a restart takes ~3.3 s end to end, most of it the application
+    // bringing its display up.
+    log.status("waiting for the board to come back");
+    for (int i = 0; i < 8 && !inBootloaderReady(lk); ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(700));
+    log.status("");
+
+    Reply os = lk.exchange(query(lk.deviceId, 0x01), 400);
+    Reply bd = lk.exchange(query(lk.deviceId, 0x0a), 400);   // boundary: new cores only
+    Reply pg = lk.exchange(ping(Target::App, lk.deviceId), 400);
+
+    const bool adios    = os.valid && os.cmd == ACK && os.text() == "ADIOS";
+    const bool boundary = bd.valid && bd.cmd == ACK && !bd.text().empty();
+    const bool unit     = pg.valid && pg.cmd == ACK && (pg.arg == 0x50 || pg.arg == 0x62);
+
+    log.step(2, 2);
+    log.lock(false);
+
+    if (adios)    log.info("  OS         %s", os.text().c_str());
+    if (boundary) log.info("  boundary   0x%s", bd.text().c_str());
+    if (unit)     log.info("  machine    %s", pg.arg == 0x62 ? "TR-626" : "TR-505");
+
+    if (adios && boundary && unit) {
+        // The application answering its own ping is the real proof: it only
+        // gets that far if the magic in the high page named a machine it
+        // recognises. A board whose page was left wrong would be sitting on
+        // the unit-select question instead, answering nothing.
+        log.ok("UPDATE DONE WITH SUCCESS");
+        return true;
+    }
+
+    log.err("the board came back but does not check out - do NOT let it format");
+    return false;
 }
 
 } // namespace tr5x6
