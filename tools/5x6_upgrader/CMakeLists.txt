@@ -1,4 +1,25 @@
 cmake_minimum_required(VERSION 3.21)
+
+# macOS: WHAT this binary is allowed to run on. Both must be set BEFORE
+# project(), which is when CMake freezes them.
+#
+# Without them CMake silently takes the build machine's own values, and that is
+# not a default - it is an accident. Measured on 2026-08-27: the executable came
+# out arm64-only with a floor of macOS 15.0, so no Intel Mac could open it and
+# no Mac below 15 either, while the Qt libraries macdeployqt had put INSIDE the
+# same bundle were universal and went down to 13.0. The bundle was narrower than
+# its own contents.
+#
+# 13.0 is the lowest floor reachable without rebuilding Qt itself - its binaries
+# stop there. ⚠️ And a lowered floor is a PERMISSION, not a proof: it tells the
+# linker to accept an older system, it does not check that nothing calls a newer
+# API. Ours is plain CoreMIDI, all of it far older than 13.0, but that is an
+# argument and not a test - nobody here has a Mac below 15 to try it on.
+if(APPLE)
+    set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "Intel and Apple Silicon")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "oldest macOS supported")
+endif()
+
 project(tr5x6_upgrader LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -34,6 +55,21 @@ endif()
 qt_add_executable(tr5x6_upgrader MACOSX_BUNDLE WIN32
     ${CORE} ${TRANSPORT}
     gui/main.cpp gui/MainWindow.cpp gui/MainWindow.h)
+
+if(APPLE)
+    set_target_properties(tr5x6_upgrader PROPERTIES
+        # The placeholder identifier was still com.yourcompany.tr5x6_upgrader.
+        # It is what LaunchServices files the application under, so it wants to
+        # be ours before anything is handed to a tester.
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.addictiveinstruments.tr5x6upgrader"
+        MACOSX_BUNDLE_BUNDLE_NAME    "5x6 Firmware Update"
+        # Measured empty on 2026-08-27, and that is worse than it sounds: a
+        # bundle that declares no system requirement is not refused politely on
+        # an older Mac - it is launched, and it dies in the dynamic loader with
+        # a message no musician can act on. Declaring the floor turns a crash
+        # into a sentence.
+        MACOSX_BUNDLE_MINIMUM_SYSTEM_VERSION "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+endif()
 
 qt_add_resources(tr5x6_upgrader "style" PREFIX "/" FILES gui/style.qss)
 

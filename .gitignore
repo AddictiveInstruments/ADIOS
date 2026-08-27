@@ -196,3 +196,13 @@ drivers/gnustep/
 *.project
 *.cproject
 *.xcodeproj/
+
+# Assembled distribution packages. They are rebuilt from the build output on
+
+# demand and weigh tens of megabytes; only the tester notice beside them is
+
+# source. Committing the zips would put a whole Qt runtime in the history.
+
+tools/5x6_upgrader/dist/*
+
+!tools/5x6_upgrader/dist/README.txt
