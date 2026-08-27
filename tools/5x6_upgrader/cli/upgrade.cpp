@@ -79,6 +79,15 @@ namespace {
 
 const size_t BLOCK = 256;
 
+// How many times a block is re-sent when the board answers NOTHING AT ALL.
+const int RETRIES = 2;
+
+// Link quality over one run. Counted so that a transfer which only got through
+// on re-sends still says so at the end: a marginal cable that is silently
+// papered over is a cable that will take the next board down instead.
+size_t g_retries   = 0;   // re-sends issued
+size_t g_recovered = 0;   // blocks that only completed thanks to one
+
 // Waits for query 0x0b to answer a given core type. Measured on a real board
 // on 2026-08-27: a bare restart takes 3.3 s end to end (2 s of bootloader
 // window, then the application booting its display). Fixed sleeps sized on a
@@ -229,14 +238,78 @@ bool sendSegment(Link& lk, const HexSegment& seg, const char* what, Log& log)
         const size_t n = (total - off < BLOCK) ? (total - off) : BLOCK;
         const uint32_t addr = seg.addr + static_cast<uint32_t>(off);
 
-        Reply r = writeBlock(lk, addr, seg.data.data() + off, n, 3000);
-        if (!r.valid)          { log.err("%s: no answer at 0x%08X", what, addr); return false; }
-        if (r.cmd == DISACK)   { log.err("%s: refused at 0x%08X (0x%02X)", what, addr, r.arg); return false; }
+        // SILENCE is re-tried; a REFUSAL is not. The distinction is the whole
+        // point. Measured on 2026-08-27 over a DIN link at 31250 baud: an
+        // acknowledge came back as F0 00 00 22 15 32 00 0F 7A F7 - one stray
+        // 0x00 behind the F0, seen identically by an independent MIDI monitor,
+        // so the byte was on the wire. The reply was unreadable, the board had
+        // in fact written the block, and the run died seventy blocks in. Two
+        // runs out of three ended that way.
+        //
+        // Re-sending an identical block is SAFE and was designed for: the
+        // bootloader skips every double word that already holds the value
+        // being written (bsl_sysex.c, `*(volatile uint64_t *)addr == data`),
+        // precisely so that a block whose acknowledge was lost can be sent
+        // again. The June 2025 bootloader has no such skip, so there a re-send
+        // earns WRITE_FAILED - and that is left FATAL on purpose: it can only
+        // happen while uploading the tool, where stopping costs nothing (the
+        // board still has its own bootloader and application), whereas taking
+        // a refusal for a success would let a corrupt tool go on to rewrite
+        // the bootloader.
+        bool written = false;
+        for (int attempt = 0; attempt <= RETRIES; ++attempt) {
+            Reply r = writeBlock(lk, addr, seg.data.data() + off, n, 3000);
+
+            if (r.valid && r.cmd == ACK) {
+                if (attempt) {
+                    ++g_recovered;
+                    log.warn("%s: 0x%08X needed %d attempts", what, addr, attempt + 1);
+                }
+                written = true;
+                break;
+            }
+            if (r.valid && r.cmd == DISACK) {
+                log.err("%s: refused at 0x%08X (0x%02X)", what, addr, r.arg);
+                return false;
+            }
+
+            // Nothing came back, or nothing we could read.
+            if (attempt < RETRIES) {
+                ++g_retries;
+                log.warn("%s: no answer at 0x%08X - re-sending (%d of %d)",
+                         what, addr, attempt + 1, RETRIES);
+                // Let the line settle. A very late answer would be discarded
+                // by the next send anyway, so this costs only the wait.
+                std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            }
+        }
+        if (!written) {
+            log.err("%s: no answer at 0x%08X after %d attempts",
+                    what, addr, RETRIES + 1);
+            return false;
+        }
 
         log.progress(off + n, total);
     }
     return true;
 }
+
+// Says how the link behaved on EVERY way out of upgrade(), not just the happy
+// one - a count printed only when everything went well is a count you cannot
+// use. A guard rather than a call at the end, because there are a dozen
+// returns below and one of them would eventually be added without it.
+struct LinkReport {
+    Log& log;
+    explicit LinkReport(Log& l) : log(l) { g_retries = g_recovered = 0; }
+    ~LinkReport() {
+        if (!g_retries) return;
+        log.warn("MIDI LINK WAS NOT CLEAN: %u re-send(s), %u block(s) recovered",
+                 static_cast<unsigned>(g_retries),
+                 static_cast<unsigned>(g_recovered));
+        log.warn("the data that went through is correct - but check the MIDI "
+                 "cable and the interface before the next board");
+    }
+};
 
 } // namespace
 
@@ -244,6 +317,8 @@ bool sendSegment(Link& lk, const HexSegment& seg, const char* what, Log& log)
 
 bool upgrade(Link& lk, const UpgradeImages& img, Log& log)
 {
+    LinkReport linkReport(log);
+
     HexImage migration, application;
     std::string err;
     if (!loadHex(img.migrationHex, migration, err))  { log.err("%s", err.c_str()); return false; }

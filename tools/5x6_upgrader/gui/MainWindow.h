@@ -12,6 +12,7 @@
 #pragma once
 #include <QWidget>
 #include <QThread>
+#include <QPointer>
 
 class QComboBox;
 class QSpinBox;
@@ -88,7 +89,13 @@ private:
     QLabel*         warning_  = nullptr;
     QPushButton*    closeBtn_ = nullptr;
 
-    QThread*        thread_   = nullptr;
+    // A GUARDED pointer, and it has to be. The worker thread is NOT a child of
+    // this window: a QWidget destroys its children on the way out, and Qt kills
+    // the whole process (qFatal, "Destroyed while thread is still running") if
+    // one of them is a thread that has not stopped yet. Unparented, it deletes
+    // itself when it really has finished - and QPointer is what notices, so the
+    // destructor below can never again test a pointer that outlived its object.
+    QPointer<QThread> thread_;
     bool            locked_   = false;
     int             unitType_ = 0;      // 0x50 or 0x62, from the ping
 };

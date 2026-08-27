@@ -346,7 +346,11 @@ void MainWindow::startSequence()
     auto* task = new UpgradeTask(static_cast<unsigned>(inBox_->currentIndex()),
                                  static_cast<unsigned>(outBox_->currentIndex()),
                                  static_cast<uint8_t>(idBox_->value()), mig, app);
-    thread_ = new QThread(this);
+    // NO PARENT, deliberately. As a child of this window the thread was
+    // destroyed by ~QWidget's deleteChildren() on the way out, and Qt answers
+    // the destruction of a thread that has not stopped with qFatal - the whole
+    // process aborts. It owns itself now and goes when it has really finished.
+    thread_ = new QThread;
     task->moveToThread(thread_);
 
     connect(thread_, &QThread::started,  task, &UpgradeTask::run);
@@ -361,6 +365,9 @@ void MainWindow::startSequence()
     connect(task, &UpgradeTask::finished, this, &MainWindow::onFinished);
     connect(task, &UpgradeTask::finished, thread_, &QThread::quit);
     connect(thread_, &QThread::finished,  task, &QObject::deleteLater);
+    // And the thread disposes of ITSELF, once stopped for real. This is the
+    // line that makes the unparented thread safe rather than merely leaked.
+    connect(thread_, &QThread::finished,  thread_, &QObject::deleteLater);
 
     thread_->start();
 }
@@ -411,5 +418,9 @@ void MainWindow::onFinished(bool ok)
     inBox_->setEnabled(true);
     outBox_->setEnabled(true);
     idBox_->setEnabled(true);
-    thread_ = nullptr;
+    // thread_ is NOT cleared here any more. It used to be, and that was the
+    // bug: the pointer went to zero while the thread object lived on, so the
+    // destructor's "stop it first" guard tested zero and did nothing - and the
+    // window then destroyed a running thread. QPointer now zeroes it at the
+    // one moment that is true, when the object is actually gone.
 }
