@@ -68,6 +68,9 @@ private slots:
 private:
     void appendLog(const QString& line, const char* colour);
     void setGateEnabled(bool on);
+    // Three empty grey bars again, so a second board can be started without
+    // relaunching. The log is deliberately NOT touched.
+    void resetBars();
     void startSequence();
 
     QComboBox*      inBox_    = nullptr;

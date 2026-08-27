@@ -74,6 +74,11 @@ Reply exchangeRaw(const Bytes& msg, int ms)
 // carry a `this` - the task pointer lives here for the duration of one run.
 UpgradeTask* g_task = nullptr;
 
+// Bar fill per step state: pending grey, running blue, done green - the same
+// three colours the log uses, so a glance at either tells the same story.
+// Shared by onStep() and resetBars(): two copies would drift apart.
+const char* const STEP_FILL[3] = { "#2e3644", "#4a7ab8", "#3f7d5c" };
+
 void hookSend(Link& lk, const Bytes& b)     { (void)lk; exchangeRaw(b, 0); }
 Reply hookExchange(Link& lk, const Bytes& b, int ms) { (void)lk; return exchangeRaw(b, ms); }
 
@@ -264,6 +269,25 @@ void MainWindow::setGateEnabled(bool on)
         w->setEnabled(on);
 }
 
+// Back to three empty grey bars.
+//
+// Called when a Query STARTS, not when a run ends: the outcome stays on screen
+// until the operator actually begins the next board. Testers update two
+// machines one after the other, and a run that failed has to be retryable on
+// the spot - in both cases the bars must not still be showing the attempt
+// before. The log is left alone on purpose: it is the session's record, and a
+// tester reporting a problem needs all of it, not just the last try.
+void MainWindow::resetBars()
+{
+    curStep_ = -1;
+    for (int i = 0; i < 3; ++i) {
+        stepBar_[i]->setValue(0);
+        stepBar_[i]->setStyleSheet(
+            QStringLiteral("QProgressBar::chunk { background:%1; border-radius:2px; }")
+                .arg(QLatin1String(STEP_FILL[0])));
+    }
+}
+
 void MainWindow::appendLog(const QString& line, const char* colour)
 {
     if (line.isEmpty()) return;
@@ -273,6 +297,8 @@ void MainWindow::appendLog(const QString& line, const char* colour)
 
 void MainWindow::onQuery()
 {
+    resetBars();
+
     QString err;
     if (!openPorts(static_cast<unsigned>(inBox_->currentIndex()),
                    static_cast<unsigned>(outBox_->currentIndex()), err)) {
@@ -379,12 +405,13 @@ void MainWindow::onOk(const QString& line)     { appendLog(line, "#6fcf8f"); }
 void MainWindow::onStep(int index, int state)
 {
     if (index < 0 || index > 2) return;
-    // pending grey, running blue, done green - the same three colours the log
-    // uses, so a glance at either tells the same story
-    static const char* fill[3] = { "#2e3644", "#4a7ab8", "#3f7d5c" };
+    // state indexes STEP_FILL, so it is bounded exactly like index. Both come
+    // from our own emits today, so this guards nothing yet - which is the point
+    // at which such an asymmetry is cheap to remove rather than expensive.
+    if (state < 0 || state > 2) return;
     stepBar_[index]->setStyleSheet(
         QStringLiteral("QProgressBar::chunk { background:%1; border-radius:2px; }")
-            .arg(QLatin1String(fill[state])));
+            .arg(QLatin1String(STEP_FILL[state])));
     if (state == 1) curStep_ = index;
     if (state == 2) stepBar_[index]->setValue(100);
 }
