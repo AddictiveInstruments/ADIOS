@@ -1,0 +1,42 @@
+// Windows MIDI transport - the ONLY part of this tool that knows an OS.
+//
+// Deliberately written against winmm directly rather than pulling RtMidi in:
+// it is the same API RtMidi wraps on Windows, it costs no dependency, and the
+// interface below is the one the portable build will implement on top of
+// RtMidi later. Nothing above this file changes when that happens.
+
+#pragma once
+#include <cstdint>
+#include <string>
+#include <vector>
+#include <functional>
+
+namespace tr5x6 {
+
+std::vector<std::string> midiInPorts();
+std::vector<std::string> midiOutPorts();
+
+class MidiOut {
+public:
+    ~MidiOut();
+    bool open(unsigned index, std::string& err);
+    void close();
+    // Sends one complete F0..F7 message.
+    bool sendSysex(const std::vector<uint8_t>& msg, std::string& err);
+private:
+    void* h_ = nullptr;
+};
+
+class MidiIn {
+public:
+    ~MidiIn();
+    // The callback runs on a MIDI thread, never on the caller's.
+    bool open(unsigned index, std::function<void(const std::vector<uint8_t>&)> cb,
+              std::string& err);
+    void close();
+private:
+    void* h_ = nullptr;
+    void* buf_ = nullptr;
+};
+
+} // namespace tr5x6
