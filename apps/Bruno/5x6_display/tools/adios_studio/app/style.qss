@@ -37,16 +37,19 @@ QComboBox QAbstractItemView {
     selection-background-color: #4a7ab8;
 }
 
-QPlainTextEdit {
+QListWidget {
     background: #12151c;
     border: 1px solid #2a2f3a;
     border-radius: 3px;
-    padding: 4px 6px;
+    padding: 2px;
+    outline: 0;
 }
-QPlainTextEdit#mono {
+QListWidget#mono {
     font-family: "Consolas", "Menlo", monospace;
     font-size: 12px;
 }
+QListWidget::item { padding: 0 2px; }
+QListWidget::item:selected { background: #2c4a6e; color: #f2f6fc; }
 
 QPushButton {
     background: #2e3644;

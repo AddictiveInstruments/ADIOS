@@ -133,35 +133,52 @@ void Uploader::queryInfo()
 {
     if (busy_.exchange(true)) return;
     QThread* t = QThread::create([this] {
-        // OS name first: it is the one sub-command numbered the same on both
-        // cores, and its answer ("ADIOS" vs "MIOS32") says which numbering the
-        // rest uses.
+        emit infoClear();
+
+        // OS name first: the one sub-command numbered the same on both cores,
+        // and its answer ("ADIOS" vs "MIOS32") says which numbering the rest
+        // uses.
         Reply os = exchange(query(deviceId_, Q_OS_NAME), 300);
         if (!(os.valid && os.cmd == ACK)) {
-            emit log("aucune reponse - carte absente, mauvais id, ou pas ADIOS ?", false);
+            emit infoLine("No response - board absent, wrong device id, or not ADIOS?", 2);
             busy_.store(false);
             emit finished(false);
             return;
         }
         const bool legacy = os.text() != "ADIOS";
-        emit log(QString("OS         : %1").arg(QString::fromStdString(os.text())), true);
 
-        static const QueryItem items[] = {
-            QueryItem::Processor, QueryItem::ChipId, QueryItem::Serial,
-            QueryItem::Flash, QueryItem::Ram, QueryItem::AppName1,
-            QueryItem::AppName2, QueryItem::Version, QueryItem::CoreType,
-        };
-        for (QueryItem it : items) {
+        auto ask = [&](QueryItem it) -> QString {
             uint8_t sub = querySub(it, legacy);
-            if (!sub) continue;   // this core has no such entry
+            if (!sub) return QString();               // this core has no such entry
             Reply r = exchange(query(deviceId_, sub), 250);
-            QString val = (r.valid && r.cmd == ACK)
-                              ? QString::fromStdString(r.text())
-                              : QString("-");
-            emit log(QString("%1: %2")
-                         .arg(queryLabel(it), -11)
-                         .arg(val), true);
-        }
+            return (r.valid && r.cmd == ACK) ? QString::fromStdString(r.text()) : QString();
+        };
+
+        // Core type decides the colour of the "running program" lines, exactly
+        // as the MIOS Studio charter: normal = an application is running,
+        // orange = the BSL-update tool sits in its place, red = the bootloader
+        // itself, with no application to run.
+        const QString core = ask(QueryItem::CoreType);
+        const int col = core == "UPDATER" ? 1 : core == "BSL" ? 2 : 0;
+
+        emit infoLine("Operating System: " + QString::fromStdString(os.text()), 0);
+        QString s;
+        if (!(s = ask(QueryItem::Processor)).isEmpty()) emit infoLine("Processor: " + s, 0);
+        if (!(s = ask(QueryItem::ChipId)).isEmpty())    emit infoLine("Chip ID: 0x" + s, 0);
+        if (!(s = ask(QueryItem::Serial)).isEmpty())    emit infoLine("Serial: #" + s, 0);
+        if (!(s = ask(QueryItem::Flash)).isEmpty())     emit infoLine("Flash Memory Size: " + s + " bytes", 0);
+        if (!(s = ask(QueryItem::Ram)).isEmpty())       emit infoLine("RAM Size: " + s + " bytes", 0);
+        if (!(s = ask(QueryItem::Boundary)).isEmpty())
+            emit infoLine((col == 1 ? "Uploader/BSL boundary: 0x" : "App/BSL boundary: 0x") + s, col);
+
+        // First app line NAMES the running program - coloured. The second is a
+        // copyright, the same whatever runs, so it stays neutral.
+        const QString app1 = ask(QueryItem::AppName1);
+        const QString ver  = ask(QueryItem::Version);
+        if (!app1.isEmpty()) emit infoLine(ver.isEmpty() ? app1 : (app1 + " " + ver), col);
+        const QString app2 = ask(QueryItem::AppName2);
+        if (!app2.isEmpty()) emit infoLine(app2, 0);
+
         busy_.store(false);
         emit finished(true);
     });

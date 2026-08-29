@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 
+#include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QComboBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -8,9 +10,11 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
-#include <QPlainTextEdit>
+#include <QListWidget>
+#include <QMenu>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QTimer>
@@ -21,138 +25,205 @@
 #include "../../5x6_upgrader/core/sysex.h"
 
 namespace {
-QString hexOf(const adios::Bytes& m, int cap = 24)
+// Colour codes shared with Uploader::infoLine: 0 normal, 1 updater, 2 boot.
+QColor infoColour(int c)
+{
+    switch (c) {
+    case 1:  return QColor(0xe0, 0x91, 0x3f);   // orange - BSL update tool
+    case 2:  return QColor(0xe0, 0x66, 0x6b);   // red    - the bootloader itself
+    default: return QColor(0xdf, 0xe4, 0xec);   // normal - an application runs
+    }
+}
+
+QString hexFull(const adios::Bytes& m)
 {
     QString s;
-    for (int i = 0; i < (int)m.size() && i < cap; ++i)
-        s += QString("%1 ").arg(m[i], 2, 16, QChar('0')).toUpper();
-    if ((int)m.size() > cap) s += "...";
-    return s.trimmed();
+    s.reserve(int(m.size()) * 3);
+    for (size_t i = 0; i < m.size(); ++i) {
+        if (i) s += ' ';
+        s += QString("%1").arg(m[i], 2, 16, QChar('0')).toUpper();
+    }
+    return s;
+}
+
+// A monitor / log list: one message per line, no wrap, no elision, horizontal
+// scroll, individually selectable, capped so it cannot grow without bound.
+QListWidget* makeList(int minH)
+{
+    auto* w = new QListWidget;
+    w->setObjectName("mono");
+    w->setUniformItemSizes(true);
+    w->setWordWrap(false);
+    w->setTextElideMode(Qt::ElideNone);
+    w->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    w->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    w->setMinimumHeight(minH);
+    return w;
+}
+
+void appendCapped(QListWidget* w, QListWidgetItem* it)
+{
+    // Keep auto-scroll only when the view already sits at the bottom, so a
+    // manual scroll-up to inspect a line is not yanked away on the next event.
+    QScrollBar* sb = w->verticalScrollBar();
+    const bool atBottom = sb->value() >= sb->maximum() - 2;
+    w->addItem(it);
+    while (w->count() > 5000) delete w->takeItem(0);
+    if (atBottom) w->scrollToBottom();
 }
 } // namespace
 
 MainWindow::MainWindow()
 {
     setWindowTitle(tr("ADIOS Studio"));
-    resize(920, 760);
+    resize(960, 820);
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
-    root->setSpacing(10);
+    root->setSpacing(9);
 
     // ---- port bar --------------------------------------------------------
     auto* ports = new QHBoxLayout;
     ports->setSpacing(8);
-    inBox_  = new QComboBox;  inBox_->setMinimumWidth(130); inBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    outBox_ = new QComboBox;  outBox_->setMinimumWidth(130); outBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    inBox_  = new QComboBox;  inBox_->setMinimumWidth(150);
+    inBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    outBox_ = new QComboBox;  outBox_->setMinimumWidth(150);
+    outBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     idBox_  = new QSpinBox;   idBox_->setRange(0, 127);
-    refreshBtn_ = new QPushButton(tr("↻"));
-    refreshBtn_->setObjectName("flat");
-    refreshBtn_->setFixedWidth(30);
-    connectBtn_ = new QPushButton(tr("connecter"));
+    connectBtn_ = new QPushButton(tr("Connect"));
     connectBtn_->setObjectName("primary");
-    queryBtn_ = new QPushButton(tr("interroger"));
-    queryBtn_->setObjectName("flat");
-    queryBtn_->setToolTip(tr("nom OS, processeur, flash, version de la carte connectée"));
+    queryBtn_ = new QPushButton(tr("Query"));
+    queryBtn_->setToolTip(tr("Read the connected board: OS, processor, flash, version"));
     link_ = new QLabel; link_->setObjectName("dim");
     ports->addWidget(new QLabel(tr("In")));
     ports->addWidget(inBox_, 1);
     ports->addWidget(new QLabel(tr("Out")));
     ports->addWidget(outBox_, 1);
-    ports->addWidget(new QLabel(tr("id")));
+    ports->addWidget(new QLabel(tr("Device ID")));
     ports->addWidget(idBox_);
-    ports->addWidget(refreshBtn_);
     ports->addWidget(connectBtn_);
     ports->addWidget(queryBtn_);
     root->addLayout(ports);
     root->addWidget(link_);
 
+    // ---- device info -----------------------------------------------------
+    auto* dg = new QGroupBox(tr("Device Info"));
+    auto* dl = new QVBoxLayout(dg);
+    devInfo_ = makeList(120);
+    dl->addWidget(devInfo_);
+    root->addWidget(dg);
+
     // ---- upload ----------------------------------------------------------
-    auto* up = new QGroupBox(tr("Upload firmware"));
-    auto* upl = new QVBoxLayout(up);
-    auto* row = new QHBoxLayout;
-    hexPath_ = new QLineEdit; hexPath_->setPlaceholderText(tr("fichier .hex"));
-    browseBtn_ = new QPushButton(tr("parcourir")); browseBtn_->setObjectName("flat");
-    uploadBtn_ = new QPushButton(tr("envoyer")); uploadBtn_->setObjectName("primary");
+    auto* ug = new QGroupBox(tr("Upload Firmware"));
+    auto* ul = new QVBoxLayout(ug);
+    auto* urow = new QHBoxLayout;
+    hexPath_ = new QLineEdit; hexPath_->setPlaceholderText(tr(".hex file"));
+    browseBtn_ = new QPushButton(tr("Browse")); browseBtn_->setObjectName("flat");
+    uploadBtn_ = new QPushButton(tr("Upload")); uploadBtn_->setObjectName("primary");
     uploadBtn_->setEnabled(false);
-    row->addWidget(hexPath_, 1);
-    row->addWidget(browseBtn_);
-    row->addWidget(uploadBtn_);
-    upl->addLayout(row);
+    urow->addWidget(hexPath_, 1);
+    urow->addWidget(browseBtn_);
+    urow->addWidget(uploadBtn_);
+    ul->addLayout(urow);
     progress_ = new QProgressBar; progress_->setRange(0, 100); progress_->setValue(0);
-    upl->addWidget(progress_);
-    root->addWidget(up);
+    ul->addWidget(progress_);
+    ul->addWidget(new QLabel(tr("Upload status")));
+    uploadStatus_ = makeList(70);
+    ul->addWidget(uploadStatus_);
+    root->addWidget(ug);
 
     // ---- terminal --------------------------------------------------------
-    auto* tg = new QGroupBox(tr("Terminal ADIOS / SysEx"));
+    auto* tg = new QGroupBox(tr("Terminal (SysEx)"));
     auto* tl = new QVBoxLayout(tg);
-    term_ = new QPlainTextEdit; term_->setReadOnly(true);
-    term_->setMinimumHeight(120);
-    term_->setObjectName("mono");
-    term_->setMaximumBlockCount(5000);
+    term_ = makeList(90);
     tl->addWidget(term_);
     auto* srow = new QHBoxLayout;
     sysexBox_ = new QLineEdit;
-    sysexBox_->setPlaceholderText(tr("F0 00 22 15 32 00 0F F7   (Entrée pour envoyer)"));
-    sendBtn_ = new QPushButton(tr("envoyer")); sendBtn_->setObjectName("flat");
-    auto* clearTerm = new QPushButton(tr("effacer")); clearTerm->setObjectName("flat");
+    sysexBox_->setPlaceholderText(tr("F0 00 22 15 32 00 0F F7   (Enter to send)"));
+    sendBtn_ = new QPushButton(tr("Send")); sendBtn_->setObjectName("flat");
     srow->addWidget(sysexBox_, 1);
     srow->addWidget(sendBtn_);
-    srow->addWidget(clearTerm);
     tl->addLayout(srow);
     root->addWidget(tg);
-    connect(clearTerm, &QPushButton::clicked, this, [this] { term_->clear(); });
 
     // ---- monitor ---------------------------------------------------------
-    auto* mg = new QGroupBox(tr("Moniteur MIDI"));
+    auto* mg = new QGroupBox(tr("MIDI Monitor"));
     auto* ml = new QVBoxLayout(mg);
     auto* split = new QSplitter(Qt::Horizontal);
-    monIn_  = new QPlainTextEdit; monIn_->setReadOnly(true);  monIn_->setObjectName("mono");  monIn_->setMaximumBlockCount(5000);
-    monOut_ = new QPlainTextEdit; monOut_->setReadOnly(true); monOut_->setObjectName("mono"); monOut_->setMaximumBlockCount(5000);
-    auto wrap = [](const QString& title, QPlainTextEdit* e) {
-        auto* w = new QWidget; auto* v = new QVBoxLayout(w);
-        v->setContentsMargins(0, 0, 0, 0); v->setSpacing(3);
-        auto* lab = new QLabel(title); lab->setObjectName("dim");
-        v->addWidget(lab); v->addWidget(e);
-        return w;
-    };
-    split->addWidget(wrap(tr("IN"), monIn_));
-    split->addWidget(wrap(tr("OUT"), monOut_));
-    ml->addWidget(split, 1);
-    auto* mrow = new QHBoxLayout;
-    muteRt_ = new QCheckBox(tr("masquer horloge / temps réel"));
+    monIn_  = makeList(120);
+    monOut_ = makeList(120);
+    muteRt_ = new QCheckBox(tr("hide clock / realtime"));
     muteRt_->setChecked(true);
-    auto* clearMon = new QPushButton(tr("effacer")); clearMon->setObjectName("flat");
-    mrow->addWidget(muteRt_, 1);
-    mrow->addWidget(clearMon);
-    ml->addLayout(mrow);
+    auto* inPane = new QWidget; auto* inV = new QVBoxLayout(inPane);
+    inV->setContentsMargins(0, 0, 0, 0); inV->setSpacing(3);
+    auto* inHdr = new QHBoxLayout;
+    auto* inLbl = new QLabel(tr("IN")); inLbl->setObjectName("dim");
+    inHdr->addWidget(inLbl);
+    inHdr->addStretch(1);
+    inHdr->addWidget(muteRt_);
+    inV->addLayout(inHdr);
+    inV->addWidget(monIn_);
+    auto* outPane = new QWidget; auto* outV = new QVBoxLayout(outPane);
+    outV->setContentsMargins(0, 0, 0, 0); outV->setSpacing(3);
+    auto* outLbl = new QLabel(tr("OUT")); outLbl->setObjectName("dim");
+    outV->addWidget(outLbl);
+    outV->addWidget(monOut_);
+    split->addWidget(inPane);
+    split->addWidget(outPane);
+    ml->addWidget(split, 1);
     root->addWidget(mg, 1);
-    connect(clearMon, &QPushButton::clicked, this, [this] { monIn_->clear(); monOut_->clear(); });
 
+    // Right-click menus (select all / copy / clear) on every list.
+    auto wireMenu = [this](QListWidget* w) {
+        w->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(w, &QWidget::customContextMenuRequested, this, [w](const QPoint& p) {
+            QMenu m;
+            QAction* sa = m.addAction(tr("Select All"));
+            QAction* co = m.addAction(tr("Copy"));
+            m.addSeparator();
+            QAction* cl = m.addAction(tr("Clear"));
+            QAction* a = m.exec(w->viewport()->mapToGlobal(p));
+            if (a == sa) w->selectAll();
+            else if (a == co) {
+                QString t;
+                for (auto* it : w->selectedItems()) t += it->text() + '\n';
+                if (!t.isEmpty()) QApplication::clipboard()->setText(t);
+            } else if (a == cl) w->clear();
+        });
+    };
+    wireMenu(monIn_);
+    wireMenu(monOut_);
+    wireMenu(term_);
+    wireMenu(devInfo_);
+    wireMenu(uploadStatus_);
+
+    // ---- uploader wiring -------------------------------------------------
     uploader_ = new Uploader(&out_, &outGuard_, this);
     connect(uploader_, &Uploader::log, this, [this](QString l, bool ok) {
-        term_->appendPlainText((ok ? "  " : "! ") + l);
+        auto* it = new QListWidgetItem((ok ? "  " : "! ") + l);
+        if (!ok) it->setForeground(infoColour(2));
+        appendCapped(uploadStatus_, it);
     });
     connect(uploader_, &Uploader::progress, this, [this](int p) { progress_->setValue(p); });
     connect(uploader_, &Uploader::sent, this, [this](QByteArray b) {
-        // The uploader's own traffic, echoed into the OUT monitor - queries,
-        // write-memory blocks, the bootloader handshake.
         monitorLine(true, adios::Bytes(b.begin(), b.end()));
     });
+    connect(uploader_, &Uploader::infoClear, this, [this] { devInfo_->clear(); });
+    connect(uploader_, &Uploader::infoLine, this, [this](QString t, int c) {
+        auto* it = new QListWidgetItem(t);
+        it->setForeground(infoColour(c));
+        appendCapped(devInfo_, it);
+    });
     connect(uploader_, &Uploader::finished, this, [this](bool) {
-        // Shared by upload and query; each already logs its own outcome, so
-        // this only hands the controls back.
         uploadBtn_->setEnabled(connected_ && !hexPath_->text().isEmpty());
         queryBtn_->setEnabled(connected_);
     });
 
-    connect(refreshBtn_, &QPushButton::clicked, this, &MainWindow::refreshPorts);
     connect(connectBtn_, &QPushButton::clicked, this, &MainWindow::toggleConnect);
     connect(queryBtn_,   &QPushButton::clicked, this, [this] {
         if (!connected_ || uploader_->busy()) return;
         uploader_->setDeviceId(uint8_t(idBox_->value()));
         queryBtn_->setEnabled(false);
-        term_->appendPlainText("== interrogation ==");
         uploader_->queryInfo();
     });
     connect(browseBtn_,  &QPushButton::clicked, this, &MainWindow::chooseHex);
@@ -166,7 +237,8 @@ MainWindow::MainWindow()
     connect(timer_, &QTimer::timeout, this, &MainWindow::onTick);
     timer_->start(20);
 
-    refreshPorts();
+    for (const auto& p : adios::inPorts())  inBox_->addItem(QString::fromStdString(p));
+    for (const auto& p : adios::outPorts()) outBox_->addItem(QString::fromStdString(p));
     setConnected(false);
 }
 
@@ -176,25 +248,12 @@ MainWindow::~MainWindow()
     out_.close();
 }
 
-void MainWindow::refreshPorts()
-{
-    const QString keepIn  = inBox_->currentText();
-    const QString keepOut = outBox_->currentText();
-    inBox_->clear();
-    outBox_->clear();
-    for (const auto& p : adios::inPorts())  inBox_->addItem(QString::fromStdString(p));
-    for (const auto& p : adios::outPorts()) outBox_->addItem(QString::fromStdString(p));
-    int i = inBox_->findText(keepIn);   if (i >= 0) inBox_->setCurrentIndex(i);
-    int o = outBox_->findText(keepOut); if (o >= 0) outBox_->setCurrentIndex(o);
-}
-
 void MainWindow::setConnected(bool on)
 {
     connected_ = on;
-    connectBtn_->setText(on ? tr("déconnecter") : tr("connecter"));
+    connectBtn_->setText(on ? tr("Disconnect") : tr("Connect"));
     inBox_->setEnabled(!on);
     outBox_->setEnabled(!on);
-    refreshBtn_->setEnabled(!on);
     uploadBtn_->setEnabled(on && !hexPath_->text().isEmpty());
     sendBtn_->setEnabled(on);
     queryBtn_->setEnabled(on);
@@ -206,11 +265,11 @@ void MainWindow::toggleConnect()
         in_.close();
         out_.close();
         setConnected(false);
-        link_->setText(tr("déconnecté"));
+        link_->setText(tr("disconnected"));
         return;
     }
     if (inBox_->count() == 0 || outBox_->count() == 0) {
-        link_->setText(tr("aucun port MIDI"));
+        link_->setText(tr("no MIDI port"));
         return;
     }
     std::string err;
@@ -227,7 +286,7 @@ void MainWindow::toggleConnect()
     uploader_->setDeviceId(uint8_t(idBox_->value()));
     clock_.restart();
     setConnected(true);
-    link_->setText(tr("connecté — %1 → %2")
+    link_->setText(tr("connected  —  %1  →  %2")
                        .arg(inBox_->currentText(), outBox_->currentText()));
 }
 
@@ -245,7 +304,7 @@ void MainWindow::onTick()
     for (auto& r : batch) routeIn(r.bytes, r.t_us);
 }
 
-void MainWindow::routeIn(const adios::Bytes& msg, uint64_t t_us)
+void MainWindow::routeIn(const adios::Bytes& msg, uint64_t)
 {
     monitorLine(false, msg);
 
@@ -258,17 +317,10 @@ void MainWindow::routeIn(const adios::Bytes& msg, uint64_t t_us)
             QString txt = QString::fromStdString(r.text());
             QString kind = r.cmd == tr5x6::ACK ? "ACK" : r.cmd == tr5x6::DISACK ? "DISACK"
                           : QString("cmd 0x%1").arg(r.cmd, 2, 16, QChar('0'));
-            QString line = QString("< %1  %2").arg(kind, txt.isEmpty() ? hexOf(r.payload) : txt);
-            term_->appendPlainText(line);
+            appendCapped(term_, new QListWidgetItem(
+                QString("< %1   %2").arg(kind, txt.isEmpty() ? hexFull(r.payload) : txt)));
         }
     }
-    (void)t_us;
-}
-
-QString MainWindow::nowStamp()
-{
-    double s = clock_.isValid() ? clock_.elapsed() / 1000.0 : 0.0;
-    return QString("%1").arg(s, 8, 'f', 3);
 }
 
 void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
@@ -278,8 +330,14 @@ void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
     QString line = QString("%1  %2   %3")
                        .arg(nowStamp())
                        .arg(d.label.c_str(), -34)
-                       .arg(QString::fromStdString(d.hex));
-    (out ? monOut_ : monIn_)->appendPlainText(line);
+                       .arg(hexFull(msg));
+    appendCapped(out ? monOut_ : monIn_, new QListWidgetItem(line));
+}
+
+QString MainWindow::nowStamp()
+{
+    double s = clock_.isValid() ? clock_.elapsed() / 1000.0 : 0.0;
+    return QString("%1").arg(s, 9, 'f', 3);
 }
 
 bool MainWindow::sendRaw(const adios::Bytes& msg)
@@ -289,16 +347,16 @@ bool MainWindow::sendRaw(const adios::Bytes& msg)
     bool ok;
     { std::lock_guard<std::mutex> g(outGuard_); ok = out_.send(msg, err); }
     if (ok) monitorLine(true, msg);
-    else    term_->appendPlainText("! envoi : " + QString::fromStdString(err));
+    else    appendCapped(term_, new QListWidgetItem("! send: " + QString::fromStdString(err)));
     return ok;
 }
 
 void MainWindow::sendSysex()
 {
-    if (!connected_) { term_->appendPlainText("! non connecté"); return; }
+    if (!connected_) return;
     adios::Bytes m;
     if (!adios::parseHexLine(sysexBox_->text().toStdString(), m)) {
-        term_->appendPlainText("! hex invalide");
+        appendCapped(term_, new QListWidgetItem(tr("! invalid hex")));
         return;
     }
     sendRaw(m);
@@ -307,7 +365,7 @@ void MainWindow::sendSysex()
 void MainWindow::chooseHex()
 {
     QString f = QFileDialog::getOpenFileName(this, tr("Firmware .hex"), QString(),
-                                             tr("Intel HEX (*.hex);;Tous (*)"));
+                                             tr("Intel HEX (*.hex);;All files (*)"));
     if (!f.isEmpty()) hexPath_->setText(f);
 }
 
@@ -317,7 +375,8 @@ void MainWindow::doUpload()
     uploader_->setDeviceId(uint8_t(idBox_->value()));
     progress_->setValue(0);
     uploadBtn_->setEnabled(false);
-    term_->appendPlainText(QString("== upload %1 ==")
-                               .arg(QFileInfo(hexPath_->text()).fileName()));
+    uploadStatus_->clear();
+    appendCapped(uploadStatus_, new QListWidgetItem(
+        QString("== upload %1 ==").arg(QFileInfo(hexPath_->text()).fileName())));
     uploader_->start(hexPath_->text());
 }

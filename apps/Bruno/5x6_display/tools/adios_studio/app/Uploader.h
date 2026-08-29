@@ -47,12 +47,16 @@ public:
     bool busy() const { return busy_.load(); }
 
 signals:
-    void log(QString line, bool ok);
+    void log(QString line, bool ok);         // upload status lines
     void progress(int pct);
     void finished(bool ok);
     // Every message the uploader puts on the wire, so the window can echo it
     // into the MIDI OUT monitor - queued to the GUI thread as a QByteArray.
     void sent(QByteArray msg);
+    // Structured device-info lines from queryInfo(), for the Device Info panel.
+    // colour: 0 normal (app running), 1 orange (updater), 2 red (bootloader).
+    void infoClear();
+    void infoLine(QString text, int colour);
 
 private:
     void         sendMsg(const tr5x6::Bytes& msg);   // send + echo to monitor
