@@ -34,7 +34,7 @@ QString hexOf(const adios::Bytes& m, int cap = 24)
 MainWindow::MainWindow()
 {
     setWindowTitle(tr("ADIOS Studio"));
-    resize(760, 720);
+    resize(920, 760);
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
@@ -43,14 +43,17 @@ MainWindow::MainWindow()
     // ---- port bar --------------------------------------------------------
     auto* ports = new QHBoxLayout;
     ports->setSpacing(8);
-    inBox_  = new QComboBox;  inBox_->setMinimumWidth(150);
-    outBox_ = new QComboBox;  outBox_->setMinimumWidth(150);
+    inBox_  = new QComboBox;  inBox_->setMinimumWidth(130); inBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    outBox_ = new QComboBox;  outBox_->setMinimumWidth(130); outBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     idBox_  = new QSpinBox;   idBox_->setRange(0, 127);
     refreshBtn_ = new QPushButton(tr("↻"));
     refreshBtn_->setObjectName("flat");
     refreshBtn_->setFixedWidth(30);
     connectBtn_ = new QPushButton(tr("connecter"));
     connectBtn_->setObjectName("primary");
+    queryBtn_ = new QPushButton(tr("interroger"));
+    queryBtn_->setObjectName("flat");
+    queryBtn_->setToolTip(tr("nom OS, processeur, flash, version de la carte connectée"));
     link_ = new QLabel; link_->setObjectName("dim");
     ports->addWidget(new QLabel(tr("In")));
     ports->addWidget(inBox_, 1);
@@ -60,6 +63,7 @@ MainWindow::MainWindow()
     ports->addWidget(idBox_);
     ports->addWidget(refreshBtn_);
     ports->addWidget(connectBtn_);
+    ports->addWidget(queryBtn_);
     root->addLayout(ports);
     root->addWidget(link_);
 
@@ -91,10 +95,13 @@ MainWindow::MainWindow()
     sysexBox_ = new QLineEdit;
     sysexBox_->setPlaceholderText(tr("F0 00 22 15 32 00 0F F7   (Entrée pour envoyer)"));
     sendBtn_ = new QPushButton(tr("envoyer")); sendBtn_->setObjectName("flat");
+    auto* clearTerm = new QPushButton(tr("effacer")); clearTerm->setObjectName("flat");
     srow->addWidget(sysexBox_, 1);
     srow->addWidget(sendBtn_);
+    srow->addWidget(clearTerm);
     tl->addLayout(srow);
     root->addWidget(tg);
+    connect(clearTerm, &QPushButton::clicked, this, [this] { term_->clear(); });
 
     // ---- monitor ---------------------------------------------------------
     auto* mg = new QGroupBox(tr("Moniteur MIDI"));
@@ -112,23 +119,37 @@ MainWindow::MainWindow()
     split->addWidget(wrap(tr("IN"), monIn_));
     split->addWidget(wrap(tr("OUT"), monOut_));
     ml->addWidget(split, 1);
+    auto* mrow = new QHBoxLayout;
     muteRt_ = new QCheckBox(tr("masquer horloge / temps réel"));
     muteRt_->setChecked(true);
-    ml->addWidget(muteRt_);
+    auto* clearMon = new QPushButton(tr("effacer")); clearMon->setObjectName("flat");
+    mrow->addWidget(muteRt_, 1);
+    mrow->addWidget(clearMon);
+    ml->addLayout(mrow);
     root->addWidget(mg, 1);
+    connect(clearMon, &QPushButton::clicked, this, [this] { monIn_->clear(); monOut_->clear(); });
 
     uploader_ = new Uploader(&out_, &outGuard_, this);
     connect(uploader_, &Uploader::log, this, [this](QString l, bool ok) {
         term_->appendPlainText((ok ? "  " : "! ") + l);
     });
     connect(uploader_, &Uploader::progress, this, [this](int p) { progress_->setValue(p); });
-    connect(uploader_, &Uploader::finished, this, [this](bool ok) {
-        uploadBtn_->setEnabled(connected_);
-        term_->appendPlainText(ok ? "== upload OK ==" : "== upload ÉCHOUÉ ==");
+    connect(uploader_, &Uploader::finished, this, [this](bool) {
+        // Shared by upload and query; each already logs its own outcome, so
+        // this only hands the controls back.
+        uploadBtn_->setEnabled(connected_ && !hexPath_->text().isEmpty());
+        queryBtn_->setEnabled(connected_);
     });
 
     connect(refreshBtn_, &QPushButton::clicked, this, &MainWindow::refreshPorts);
     connect(connectBtn_, &QPushButton::clicked, this, &MainWindow::toggleConnect);
+    connect(queryBtn_,   &QPushButton::clicked, this, [this] {
+        if (!connected_ || uploader_->busy()) return;
+        uploader_->setDeviceId(uint8_t(idBox_->value()));
+        queryBtn_->setEnabled(false);
+        term_->appendPlainText("== interrogation ==");
+        uploader_->queryInfo();
+    });
     connect(browseBtn_,  &QPushButton::clicked, this, &MainWindow::chooseHex);
     connect(uploadBtn_,  &QPushButton::clicked, this, &MainWindow::doUpload);
     connect(sendBtn_,    &QPushButton::clicked, this, &MainWindow::sendSysex);
@@ -171,6 +192,7 @@ void MainWindow::setConnected(bool on)
     refreshBtn_->setEnabled(!on);
     uploadBtn_->setEnabled(on && !hexPath_->text().isEmpty());
     sendBtn_->setEnabled(on);
+    queryBtn_->setEnabled(on);
 }
 
 void MainWindow::toggleConnect()

@@ -38,6 +38,12 @@ public:
     // Loads the file and runs the upload on a detached worker. Emits progress
     // and then finished exactly once.
     void start(const QString& hexPath);
+
+    // Interrogates the connected board - OS name, processor, flash, RAM,
+    // version - and emits each answer through log(). Also on a worker thread,
+    // sharing the same reply latch, so it cannot run during an upload.
+    void queryInfo();
+
     bool busy() const { return busy_.load(); }
 
 signals:

@@ -123,6 +123,46 @@ bool Uploader::run(const QString& hexPath)
     return true;
 }
 
+void Uploader::queryInfo()
+{
+    if (busy_.exchange(true)) return;
+    QThread* t = QThread::create([this] {
+        // OS name first: it is the one sub-command numbered the same on both
+        // cores, and its answer ("ADIOS" vs "MIOS32") says which numbering the
+        // rest uses.
+        Reply os = exchange(query(deviceId_, Q_OS_NAME), 300);
+        if (!(os.valid && os.cmd == ACK)) {
+            emit log("aucune reponse - carte absente, mauvais id, ou pas ADIOS ?", false);
+            busy_.store(false);
+            emit finished(false);
+            return;
+        }
+        const bool legacy = os.text() != "ADIOS";
+        emit log(QString("OS         : %1").arg(QString::fromStdString(os.text())), true);
+
+        static const QueryItem items[] = {
+            QueryItem::Processor, QueryItem::ChipId, QueryItem::Serial,
+            QueryItem::Flash, QueryItem::Ram, QueryItem::AppName1,
+            QueryItem::AppName2, QueryItem::Version, QueryItem::CoreType,
+        };
+        for (QueryItem it : items) {
+            uint8_t sub = querySub(it, legacy);
+            if (!sub) continue;   // this core has no such entry
+            Reply r = exchange(query(deviceId_, sub), 250);
+            QString val = (r.valid && r.cmd == ACK)
+                              ? QString::fromStdString(r.text())
+                              : QString("-");
+            emit log(QString("%1: %2")
+                         .arg(queryLabel(it), -11)
+                         .arg(val), true);
+        }
+        busy_.store(false);
+        emit finished(true);
+    });
+    connect(t, &QThread::finished, t, &QObject::deleteLater);
+    t->start();
+}
+
 void Uploader::start(const QString& hexPath)
 {
     if (busy_.exchange(true)) return;

@@ -57,6 +57,7 @@ private:
     QSpinBox*    idBox_  = nullptr;
     QPushButton* connectBtn_ = nullptr;
     QPushButton* refreshBtn_ = nullptr;
+    QPushButton* queryBtn_ = nullptr;
     QLabel*      link_ = nullptr;
 
     // --- upload ---
