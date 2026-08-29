@@ -1,0 +1,33 @@
+@echo off
+REM ADIOS Studio - Qt window. Everything it needs is inside the Qt install:
+REM no PATH setup, no Qt Creator, builds the same from a terminal or a script.
+
+setlocal
+pushd "%~dp0"
+
+set VS=C:\Program Files\Microsoft Visual Studio\2022\Community
+set QT=C:\Qt\6.11.2\msvc2022_64
+set CMAKE=C:\Qt\Tools\CMake_64\bin\cmake.exe
+set NINJA=C:\Qt\Tools\Ninja\ninja.exe
+
+if not exist "%QT%\lib\cmake\Qt6" ( echo Qt 6 MSVC 2022 64-bit not found at "%QT%" & exit /b 1 )
+if not exist "%CMAKE%" ( echo CMake not found at "%CMAKE%" & exit /b 1 )
+
+call "%VS%\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+if errorlevel 1 ( echo Visual Studio 2022 not found at "%VS%" & exit /b 1 )
+
+"%CMAKE%" -B build-gui -G Ninja ^
+  -DCMAKE_MAKE_PROGRAM="%NINJA%" ^
+  -DCMAKE_PREFIX_PATH="%QT%" ^
+  -DCMAKE_BUILD_TYPE=Release
+if errorlevel 1 exit /b 1
+
+"%CMAKE%" --build build-gui
+if errorlevel 1 exit /b 1
+
+"%QT%\bin\windeployqt.exe" --no-translations --no-system-d3d-compiler ^
+    --no-compiler-runtime build-gui\adios_studio.exe >nul
+if errorlevel 1 exit /b 1
+
+echo.
+echo built build-gui\adios_studio.exe

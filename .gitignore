@@ -215,3 +215,4 @@ apps/Bruno/5x6_display/tools/5x6_screen/helper/*.exe
 apps/Bruno/5x6_display/tools/5x6_screen/helper/*.obj
 apps/Bruno/5x6_display/tools/5x6_upgrader/build/
 apps/Bruno/5x6_display/tools/5x6_upgrader/build-gui/
+apps/Bruno/5x6_display/tools/adios_studio/build-gui/
