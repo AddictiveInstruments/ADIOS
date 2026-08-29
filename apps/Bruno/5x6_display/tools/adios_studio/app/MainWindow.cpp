@@ -24,6 +24,7 @@
 
 #include "Uploader.h"
 #include "decode.h"
+#include "ui_MainWindow.h"
 #include "../../5x6_upgrader/core/sysex.h"
 
 namespace {
@@ -48,21 +49,6 @@ QString hexFull(const adios::Bytes& m)
     return s;
 }
 
-// A monitor / log list: one message per line, no wrap, no elision, horizontal
-// scroll, individually selectable, capped so it cannot grow without bound.
-QListWidget* makeList(int minH)
-{
-    auto* w = new QListWidget;
-    w->setObjectName("mono");
-    w->setUniformItemSizes(true);
-    w->setWordWrap(false);
-    w->setTextElideMode(Qt::ElideNone);
-    w->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    w->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    w->setMinimumHeight(minH);
-    return w;
-}
-
 void appendCapped(QListWidget* w, QListWidgetItem* it)
 {
     // Keep auto-scroll only when the view already sits at the bottom, so a
@@ -77,119 +63,56 @@ void appendCapped(QListWidget* w, QListWidgetItem* it)
 
 MainWindow::MainWindow()
 {
-    setWindowTitle(tr("ADIOS Studio"));
-    resize(960, 820);
+    ui_ = new Ui::MainWindow;
+    ui_->setupUi(this);
 
-    auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(12, 12, 12, 12);
-    root->setSpacing(8);
+    // The .ui gives the static tree; the code keeps these pointers so the rest
+    // of the logic reads unchanged, and applies the runtime-only properties a
+    // designer file cannot express.
+    inBox_        = ui_->inBox;
+    outBox_       = ui_->outBox;
+    idBox_        = ui_->idBox;
+    connectBtn_   = ui_->connectBtn;
+    queryBtn_     = ui_->queryBtn;
+    link_         = ui_->link;
+    devInfo_      = ui_->devInfo;
+    hexPath_      = ui_->hexPath;
+    browseBtn_    = ui_->browseBtn;
+    uploadBtn_    = ui_->uploadBtn;
+    progress_     = ui_->progress;
+    uploadStatus_ = ui_->uploadStatus;
+    term_         = ui_->term;
+    sysexBox_     = ui_->sysexBox;
+    sendBtn_      = ui_->sendBtn;
+    monIn_        = ui_->monIn;
+    monOut_       = ui_->monOut;
+    muteRt_       = ui_->muteRt;
 
-    // ---- port bar (status inline, no row of its own) ---------------------
-    auto* ports = new QHBoxLayout;
-    ports->setSpacing(8);
-    inBox_  = new QComboBox;  inBox_->setMinimumWidth(130);
-    inBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    outBox_ = new QComboBox;  outBox_->setMinimumWidth(130);
-    outBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    idBox_  = new QSpinBox;   idBox_->setRange(0, 127);
-    connectBtn_ = new QPushButton(tr("Connect"));
-    connectBtn_->setObjectName("primary");
-    queryBtn_ = new QPushButton(tr("Query"));
-    queryBtn_->setToolTip(tr("Read the connected board: OS, processor, flash, version"));
-    link_ = new QLabel; link_->setObjectName("dim");
-    ports->addWidget(new QLabel(tr("In")));
-    ports->addWidget(inBox_, 1);
-    ports->addWidget(new QLabel(tr("Out")));
-    ports->addWidget(outBox_, 1);
-    ports->addWidget(new QLabel(tr("Device ID")));
-    ports->addWidget(idBox_);
-    ports->addWidget(connectBtn_);
-    ports->addWidget(queryBtn_);
-    ports->addWidget(link_);
-    root->addLayout(ports);
+    // Monitor / log lists: one message per line, no wrap, no elision,
+    // horizontal scroll, individually selectable. (See makeList's old body.)
+    for (QListWidget* w : { devInfo_, uploadStatus_, term_, monIn_, monOut_ }) {
+        w->setUniformItemSizes(true);
+        w->setWordWrap(false);
+        w->setTextElideMode(Qt::ElideNone);
+        w->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        w->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    }
 
-    // ---- upload controls (file + progress), full width -------------------
-    hexPath_ = new QLineEdit; hexPath_->setPlaceholderText(tr(".hex file"));
-    browseBtn_ = new QPushButton(tr("Browse")); browseBtn_->setObjectName("flat");
-    uploadBtn_ = new QPushButton(tr("Upload")); uploadBtn_->setObjectName("primary");
-    uploadBtn_->setEnabled(false);
-    progress_ = new QProgressBar; progress_->setRange(0, 100); progress_->setValue(0);
-    auto* urow = new QHBoxLayout;
-    urow->addWidget(new QLabel(tr("Firmware")));
-    urow->addWidget(hexPath_, 1);
-    urow->addWidget(browseBtn_);
-    urow->addWidget(uploadBtn_);
-    root->addLayout(urow);
-    root->addWidget(progress_);
+    // Splitter behaviour the .ui cannot carry: Device Info fixed, the other
+    // two share the rest, and a wider window feeds the terminal first.
+    ui_->colsSplit->setStretchFactor(0, 0);
+    ui_->colsSplit->setStretchFactor(1, 1);
+    ui_->colsSplit->setStretchFactor(2, 2);
+    ui_->colsSplit->setSizes({ 340, 300, 300 });
+    ui_->monSplit->setSizes({ 480, 480 });
 
-    // ---- three columns: Device Info | Upload Status | Terminal -----------
-    // Device Info keeps a fixed width, just enough for its lines; the other
-    // two share the rest through a draggable bar, and a wider window feeds the
-    // terminal first (its stretch factor is the larger).
-    auto* cols = new QSplitter(Qt::Horizontal);
-
-    auto column = [](const QString& title, QWidget* body) {
-        auto* g = new QGroupBox(title);
-        auto* v = new QVBoxLayout(g);
-        v->setContentsMargins(8, 8, 8, 8);
-        v->addWidget(body);
-        return g;
-    };
-
-    devInfo_ = makeList(140);
-    auto* dcol = column(tr("Device Info"), devInfo_);
-    dcol->setMinimumWidth(340);
-    dcol->setMaximumWidth(340);
-
-    uploadStatus_ = makeList(140);
-    auto* ucol = column(tr("Upload Status"), uploadStatus_);
-
-    // Terminal column carries the send line under its list.
-    auto* tg = new QGroupBox(tr("Terminal (SysEx)"));
-    auto* tl = new QVBoxLayout(tg);
-    tl->setContentsMargins(8, 8, 8, 8);
-    term_ = makeList(140);
-    tl->addWidget(term_);
-    auto* srow = new QHBoxLayout;
-    sysexBox_ = new QLineEdit;
-    sysexBox_->setPlaceholderText(tr("F0 00 22 15 32 00 0F F7   (Enter to send)"));
-    sendBtn_ = new QPushButton(tr("Send")); sendBtn_->setObjectName("flat");
-    srow->addWidget(sysexBox_, 1);
-    srow->addWidget(sendBtn_);
-    tl->addLayout(srow);
-
-    cols->addWidget(dcol);
-    cols->addWidget(ucol);
-    cols->addWidget(tg);
-    cols->setStretchFactor(0, 0);   // Device Info fixed
-    cols->setStretchFactor(1, 1);   // Upload Status
-    cols->setStretchFactor(2, 2);   // Terminal grows first on resize
-    cols->setSizes({340, 300, 300});
-    root->addWidget(cols, 1);
-
-    // ---- monitor: one aligned header row, then the two panes -------------
-    auto* mg = new QGroupBox(tr("MIDI Monitor"));
-    auto* ml = new QVBoxLayout(mg);
-    muteRt_ = new QCheckBox(tr("hide clock / realtime"));
-    muteRt_->setChecked(true);
-    auto* mhdr = new QHBoxLayout;
-    auto* inLbl = new QLabel(tr("IN")); inLbl->setObjectName("dim");
-    auto* outLbl = new QLabel(tr("OUT")); outLbl->setObjectName("dim");
-    mhdr->addWidget(inLbl);
-    mhdr->addSpacing(10);
-    mhdr->addWidget(muteRt_);
-    mhdr->addStretch(1);
-    mhdr->addWidget(outLbl);
-    mhdr->addStretch(1);
-    ml->addLayout(mhdr);
-    auto* split = new QSplitter(Qt::Horizontal);
-    monIn_  = makeList(120);
-    monOut_ = makeList(120);
-    split->addWidget(monIn_);
-    split->addWidget(monOut_);
-    split->setSizes({480, 480});
-    ml->addWidget(split, 1);
-    root->addWidget(mg, 1);
+    // The two big rows take the vertical space; the port bar, firmware row and
+    // progress bar stay their natural height. Without this the QVBoxLayout,
+    // which the .ui leaves stretch-less, would pad the top rows instead.
+    if (auto* rl = qobject_cast<QVBoxLayout*>(layout())) {
+        rl->setStretch(rl->indexOf(ui_->colsSplit), 1);
+        rl->setStretch(rl->indexOf(ui_->monGroup), 1);
+    }
 
     // Right-click menus (select all / copy / clear) on every list.
     auto wireMenu = [this](QListWidget* w) {
@@ -265,6 +188,7 @@ MainWindow::~MainWindow()
 {
     in_.close();
     out_.close();
+    delete ui_;
 }
 
 // Last ports (by name, so a re-enumeration still finds them), device id, hex

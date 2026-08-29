@@ -25,6 +25,7 @@ class QCheckBox;
 class QListWidget;
 class QTimer;
 class Uploader;
+namespace Ui { class MainWindow; }
 
 class MainWindow : public QWidget {
     Q_OBJECT
@@ -54,7 +55,9 @@ private:
     void setConnected(bool on);
     QString nowStamp();
 
-    // --- ports ---
+    Ui::MainWindow* ui_ = nullptr;   // the static layout, from MainWindow.ui
+
+    // --- ports --- (pointers grabbed from ui_ after setupUi)
     QComboBox*   inBox_  = nullptr;
     QComboBox*   outBox_ = nullptr;
     QSpinBox*    idBox_  = nullptr;

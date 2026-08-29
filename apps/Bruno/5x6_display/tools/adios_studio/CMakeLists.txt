@@ -30,12 +30,15 @@ endif()
 
 qt_add_executable(adios_studio MACOSX_BUNDLE WIN32
     app/main.cpp
-    app/MainWindow.cpp app/MainWindow.h
+    app/MainWindow.cpp app/MainWindow.h app/MainWindow.ui
     app/Uploader.cpp   app/Uploader.h
     app/decode.cpp     app/decode.h
     ${MIDI} midi/midi.h
     ${UPGRADER}/core/sysex.cpp
     ${UPGRADER}/core/hexfile.cpp)
+
+# uic writes ui_MainWindow.h into the build tree; let the sources #include it.
+target_include_directories(adios_studio PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 qt_add_resources(adios_studio "style" PREFIX "/" FILES app/style.qss)
 

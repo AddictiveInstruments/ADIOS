@@ -8,7 +8,7 @@ QWidget {
     font-size: 12px;
 }
 
-QLabel#dim { color: #8a94a6; }
+QLabel#link, QLabel#lblMonIn, QLabel#lblMonOut { color: #8a94a6; }
 
 QGroupBox {
     border: 1px solid #2a2f3a;
@@ -44,7 +44,8 @@ QListWidget {
     padding: 2px;
     outline: 0;
 }
-QListWidget#mono {
+QListWidget#devInfo, QListWidget#uploadStatus, QListWidget#term,
+QListWidget#monIn, QListWidget#monOut {
     font-family: "Consolas", "Menlo", monospace;
     font-size: 12px;
 }
@@ -61,21 +62,21 @@ QPushButton:hover   { background: #39435a; }
 QPushButton:pressed { background: #262d38; }
 QPushButton:disabled { background: #242a34; border-color: #2e3644; color: #5a6172; }
 
-QPushButton#primary {
+QPushButton#connectBtn, QPushButton#uploadBtn {
     background: #4a7ab8;
     border: 1px solid #5a8ac8;
     color: #f2f6fc;
 }
-QPushButton#primary:hover    { background: #5686c4; }
-QPushButton#primary:pressed  { background: #3d6aa4; }
-QPushButton#primary:disabled { background: #2f3a4a; border-color: #34404f; color: #5a6172; }
+QPushButton#connectBtn:hover,    QPushButton#uploadBtn:hover    { background: #5686c4; }
+QPushButton#connectBtn:pressed,  QPushButton#uploadBtn:pressed  { background: #3d6aa4; }
+QPushButton#connectBtn:disabled, QPushButton#uploadBtn:disabled { background: #2f3a4a; border-color: #34404f; color: #5a6172; }
 
-QPushButton#flat {
+QPushButton#browseBtn, QPushButton#sendBtn {
     background: transparent;
     border: 1px solid #3d4757;
     color: #b9c1cf;
 }
-QPushButton#flat:hover { background: #232a35; color: #dfe4ec; }
+QPushButton#browseBtn:hover, QPushButton#sendBtn:hover { background: #232a35; color: #dfe4ec; }
 
 QProgressBar {
     background: #12151c;

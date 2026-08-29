@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QWidget" name="MainWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>960</width><height>820</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>ADIOS Studio</string>
+  </property>
+  <layout class="QVBoxLayout" name="root">
+   <property name="spacing"><number>8</number></property>
+   <property name="leftMargin"><number>12</number></property>
+   <property name="topMargin"><number>12</number></property>
+   <property name="rightMargin"><number>12</number></property>
+   <property name="bottomMargin"><number>12</number></property>
+   <item>
+    <layout class="QHBoxLayout" name="ports">
+     <property name="spacing"><number>8</number></property>
+     <item><widget class="QLabel" name="lblIn"><property name="text"><string>In</string></property></widget></item>
+     <item>
+      <widget class="QComboBox" name="inBox">
+       <property name="minimumSize"><size><width>130</width><height>0</height></size></property>
+       <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Fixed"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
+      </widget>
+     </item>
+     <item><widget class="QLabel" name="lblOut"><property name="text"><string>Out</string></property></widget></item>
+     <item>
+      <widget class="QComboBox" name="outBox">
+       <property name="minimumSize"><size><width>130</width><height>0</height></size></property>
+       <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Fixed"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
+      </widget>
+     </item>
+     <item><widget class="QLabel" name="lblId"><property name="text"><string>Device ID</string></property></widget></item>
+     <item>
+      <widget class="QSpinBox" name="idBox">
+       <property name="maximum"><number>127</number></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="connectBtn">
+       <property name="text"><string>Connect</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="queryBtn">
+       <property name="text"><string>Query</string></property>
+       <property name="toolTip"><string>Read the connected board: OS, processor, flash, version</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="link">
+       <property name="text"><string/></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="firmware">
+     <property name="spacing"><number>8</number></property>
+     <item><widget class="QLabel" name="lblFw"><property name="text"><string>Firmware</string></property></widget></item>
+     <item>
+      <widget class="QLineEdit" name="hexPath">
+       <property name="placeholderText"><string>.hex file</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="browseBtn">
+       <property name="text"><string>Browse</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="uploadBtn">
+       <property name="text"><string>Upload</string></property>
+       <property name="enabled"><bool>false</bool></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QProgressBar" name="progress">
+     <property name="maximum"><number>100</number></property>
+     <property name="value"><number>0</number></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QSplitter" name="colsSplit">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <widget class="QGroupBox" name="devGroup">
+      <property name="title"><string>Device Info</string></property>
+      <property name="minimumSize"><size><width>340</width><height>0</height></size></property>
+      <property name="maximumSize"><size><width>340</width><height>16777215</height></size></property>
+      <layout class="QVBoxLayout" name="devLayout">
+       <item><widget class="QListWidget" name="devInfo"/></item>
+      </layout>
+     </widget>
+     <widget class="QGroupBox" name="statusGroup">
+      <property name="title"><string>Upload Status</string></property>
+      <layout class="QVBoxLayout" name="statusLayout">
+       <item><widget class="QListWidget" name="uploadStatus"/></item>
+      </layout>
+     </widget>
+     <widget class="QGroupBox" name="termGroup">
+      <property name="title"><string>Terminal (SysEx)</string></property>
+      <layout class="QVBoxLayout" name="termLayout">
+       <item><widget class="QListWidget" name="term"/></item>
+       <item>
+        <layout class="QHBoxLayout" name="sendRow">
+         <item>
+          <widget class="QLineEdit" name="sysexBox">
+           <property name="placeholderText"><string>F0 00 22 15 32 00 0F F7   (Enter to send)</string></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="sendBtn">
+           <property name="text"><string>Send</string></property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="monGroup">
+     <property name="title"><string>MIDI Monitor</string></property>
+     <layout class="QVBoxLayout" name="monLayout">
+      <item>
+       <layout class="QHBoxLayout" name="monHeader">
+        <item><widget class="QLabel" name="lblMonIn"><property name="text"><string>IN</string></property></widget></item>
+        <item>
+         <widget class="QCheckBox" name="muteRt">
+          <property name="text"><string>hide clock / realtime</string></property>
+          <property name="checked"><bool>true</bool></property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="monHeaderSpacer1">
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+          <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+         </spacer>
+        </item>
+        <item><widget class="QLabel" name="lblMonOut"><property name="text"><string>OUT</string></property></widget></item>
+        <item>
+         <spacer name="monHeaderSpacer2">
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+          <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QSplitter" name="monSplit">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <widget class="QListWidget" name="monIn"/>
+        <widget class="QListWidget" name="monOut"/>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
