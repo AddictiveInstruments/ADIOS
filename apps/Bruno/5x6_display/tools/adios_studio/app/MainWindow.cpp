@@ -134,6 +134,11 @@ MainWindow::MainWindow()
         term_->appendPlainText((ok ? "  " : "! ") + l);
     });
     connect(uploader_, &Uploader::progress, this, [this](int p) { progress_->setValue(p); });
+    connect(uploader_, &Uploader::sent, this, [this](QByteArray b) {
+        // The uploader's own traffic, echoed into the OUT monitor - queries,
+        // write-memory blocks, the bootloader handshake.
+        monitorLine(true, adios::Bytes(b.begin(), b.end()));
+    });
     connect(uploader_, &Uploader::finished, this, [this](bool) {
         // Shared by upload and query; each already logs its own outcome, so
         // this only hands the controls back.

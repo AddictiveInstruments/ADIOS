@@ -23,17 +23,19 @@ void Uploader::feedReply(const Reply& r)
     replyCv_.notify_one();
 }
 
+void Uploader::sendMsg(const Bytes& msg)
+{
+    { std::lock_guard<std::mutex> g(*sendGuard_); std::string err; out_->send(msg, err); }
+    emit sent(QByteArray(reinterpret_cast<const char*>(msg.data()), int(msg.size())));
+}
+
 Reply Uploader::exchange(const Bytes& msg, int timeoutMs)
 {
     {
         std::lock_guard<std::mutex> lk(replyMx_);
         haveReply_ = false;
     }
-    {
-        std::lock_guard<std::mutex> g(*sendGuard_);
-        std::string err;
-        out_->send(msg, err);
-    }
+    sendMsg(msg);
     std::unique_lock<std::mutex> lk(replyMx_);
     if (replyCv_.wait_for(lk, std::chrono::milliseconds(timeoutMs),
                           [this] { return haveReply_; }))
@@ -43,28 +45,30 @@ Reply Uploader::exchange(const Bytes& msg, int timeoutMs)
 
 bool Uploader::enterBootloader()
 {
-    // Already there? The bootloader answers its own name to the OS-name query.
-    Reply r = exchange(query(deviceId_, Q_OS_NAME), 200);
-    auto isBsl = [&](const Reply& x) {
-        if (!(x.valid && x.cmd == ACK && x.text() == "ADIOS")) return false;
-        Reply a = exchange(query(deviceId_, 0x08), 200);   // app-name line
-        std::string s = a.valid ? a.text() : "";
-        for (auto& c : s) c = char(tolower((unsigned char)c));
-        return s.find("bootloader") != std::string::npos;
+    // Core type (query 0x0b) is the clean discriminator the firmware added for
+    // exactly this flow: "APP" while the application runs, "BSL" once the
+    // bootloader is resident. Legacy cores DISACK it - treated as "not BSL".
+    auto coreType = [&]() -> std::string {
+        Reply r = exchange(query(deviceId_, 0x0b), 250);
+        return (r.valid && r.cmd == ACK) ? r.text() : std::string();
     };
-    if (isBsl(r)) { emit log("déjà en bootloader", true); return true; }
 
-    emit log("demande de passage en bootloader...", true);
-    // Ask a running application to restart into its bootloader. Then poll: the
-    // reset itself does not answer, so silence for a beat is expected.
-    { std::lock_guard<std::mutex> g(*sendGuard_); std::string e; out_->send(reset(deviceId_), e); }
+    if (coreType() == "BSL") { emit log("déjà en bootloader", true); return true; }
 
-    for (int i = 0; i < 40; ++i) {   // ~4 s, the 2 s BSL window plus reboot
+    // The firmware reboots into its bootloader on QUERY 0x7f (not a top-level
+    // command): it acks with arg 0x7f - the "wait, I'm rebooting" handshake -
+    // then resets with the stay-resident flag set. See adios_midi.c case 0x7f.
+    emit log("demande de passage en bootloader (query 0x7f)...", true);
+    Reply ack = exchange(query(deviceId_, 0x7f), 500);
+    if (ack.valid && ack.cmd == ACK)
+        emit log("la carte accuse réception, elle redémarre...", true);
+
+    for (int i = 0; i < 50; ++i) {   // ~5 s: the reboot plus the 2 s BSL window
         QThread::msleep(100);
-        r = exchange(query(deviceId_, Q_OS_NAME), 150);
-        if (isBsl(r)) { emit log("bootloader détecté", true); return true; }
+        std::string ct = coreType();
+        if (ct == "BSL") { emit log("bootloader détecté", true); return true; }
     }
-    emit log("aucun bootloader n'est apparu", false);
+    emit log("aucun bootloader n'est apparu — LAST+UP tenus à l'allumage ?", false);
     return false;
 }
 
@@ -118,8 +122,10 @@ bool Uploader::run(const QString& hexPath)
             emit progress(int(done * 100 / totalBytes));
         }
     }
-    emit log("upload terminé, redémarrage de la carte", true);
-    { std::lock_guard<std::mutex> g(*sendGuard_); std::string e; out_->send(reset(deviceId_), e); }
+    emit log("upload terminé, sortie du bootloader", true);
+    // Query 0x7f to a resident bootloader releases its halt state and jumps to
+    // the freshly written application (adios_midi.c, BSL branch).
+    sendMsg(query(deviceId_, 0x7f));
     return true;
 }
 

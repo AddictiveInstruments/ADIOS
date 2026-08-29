@@ -50,8 +50,12 @@ signals:
     void log(QString line, bool ok);
     void progress(int pct);
     void finished(bool ok);
+    // Every message the uploader puts on the wire, so the window can echo it
+    // into the MIDI OUT monitor - queued to the GUI thread as a QByteArray.
+    void sent(QByteArray msg);
 
 private:
+    void         sendMsg(const tr5x6::Bytes& msg);   // send + echo to monitor
     tr5x6::Reply exchange(const tr5x6::Bytes& msg, int timeoutMs);
     bool enterBootloader();
     bool run(const QString& hexPath);
