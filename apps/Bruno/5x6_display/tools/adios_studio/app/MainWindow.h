@@ -32,6 +32,9 @@ public:
     MainWindow();
     ~MainWindow() override;
 
+protected:
+    void closeEvent(QCloseEvent*) override;
+
 private slots:
     void toggleConnect();
     void chooseHex();
@@ -40,6 +43,8 @@ private slots:
     void onTick();
 
 private:
+    void saveSettings();
+    void restoreSettings();
     struct RxMsg { adios::Bytes bytes; uint64_t t_us; };
 
     void onMidiIn(const adios::Bytes& msg, uint64_t t_us);   // MIDI thread
@@ -88,4 +93,5 @@ private:
     std::vector<RxMsg>   rxQueue_;
     QTimer*              timer_ = nullptr;
     QElapsedTimer        clock_;
+    QString              lastDir_;   // remembered browse folder
 };

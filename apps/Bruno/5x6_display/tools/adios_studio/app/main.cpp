@@ -7,6 +7,8 @@ int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("ADIOS Studio"));
+    app.setOrganizationName(QStringLiteral("Addictive Instruments"));
+    // so QSettings has a home for the remembered ports, id and hex file
 
     // Same charter as the ROM editor, the updater and the screen tool - one
     // recognisable family on both systems. A missing stylesheet is not fatal;

@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -15,6 +16,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSettings>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QTimer>
@@ -80,14 +82,14 @@ MainWindow::MainWindow()
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
-    root->setSpacing(9);
+    root->setSpacing(8);
 
-    // ---- port bar --------------------------------------------------------
+    // ---- port bar (status inline, no row of its own) ---------------------
     auto* ports = new QHBoxLayout;
     ports->setSpacing(8);
-    inBox_  = new QComboBox;  inBox_->setMinimumWidth(150);
+    inBox_  = new QComboBox;  inBox_->setMinimumWidth(130);
     inBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    outBox_ = new QComboBox;  outBox_->setMinimumWidth(150);
+    outBox_ = new QComboBox;  outBox_->setMinimumWidth(130);
     outBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     idBox_  = new QSpinBox;   idBox_->setRange(0, 127);
     connectBtn_ = new QPushButton(tr("Connect"));
@@ -103,39 +105,50 @@ MainWindow::MainWindow()
     ports->addWidget(idBox_);
     ports->addWidget(connectBtn_);
     ports->addWidget(queryBtn_);
+    ports->addWidget(link_);
     root->addLayout(ports);
-    root->addWidget(link_);
 
-    // ---- device info -----------------------------------------------------
-    auto* dg = new QGroupBox(tr("Device Info"));
-    auto* dl = new QVBoxLayout(dg);
-    devInfo_ = makeList(120);
-    dl->addWidget(devInfo_);
-    root->addWidget(dg);
-
-    // ---- upload ----------------------------------------------------------
-    auto* ug = new QGroupBox(tr("Upload Firmware"));
-    auto* ul = new QVBoxLayout(ug);
-    auto* urow = new QHBoxLayout;
+    // ---- upload controls (file + progress), full width -------------------
     hexPath_ = new QLineEdit; hexPath_->setPlaceholderText(tr(".hex file"));
     browseBtn_ = new QPushButton(tr("Browse")); browseBtn_->setObjectName("flat");
     uploadBtn_ = new QPushButton(tr("Upload")); uploadBtn_->setObjectName("primary");
     uploadBtn_->setEnabled(false);
+    progress_ = new QProgressBar; progress_->setRange(0, 100); progress_->setValue(0);
+    auto* urow = new QHBoxLayout;
+    urow->addWidget(new QLabel(tr("Firmware")));
     urow->addWidget(hexPath_, 1);
     urow->addWidget(browseBtn_);
     urow->addWidget(uploadBtn_);
-    ul->addLayout(urow);
-    progress_ = new QProgressBar; progress_->setRange(0, 100); progress_->setValue(0);
-    ul->addWidget(progress_);
-    ul->addWidget(new QLabel(tr("Upload status")));
-    uploadStatus_ = makeList(70);
-    ul->addWidget(uploadStatus_);
-    root->addWidget(ug);
+    root->addLayout(urow);
+    root->addWidget(progress_);
 
-    // ---- terminal --------------------------------------------------------
+    // ---- three columns: Device Info | Upload Status | Terminal -----------
+    // Device Info keeps a fixed width, just enough for its lines; the other
+    // two share the rest through a draggable bar, and a wider window feeds the
+    // terminal first (its stretch factor is the larger).
+    auto* cols = new QSplitter(Qt::Horizontal);
+
+    auto column = [](const QString& title, QWidget* body) {
+        auto* g = new QGroupBox(title);
+        auto* v = new QVBoxLayout(g);
+        v->setContentsMargins(8, 8, 8, 8);
+        v->addWidget(body);
+        return g;
+    };
+
+    devInfo_ = makeList(140);
+    auto* dcol = column(tr("Device Info"), devInfo_);
+    dcol->setMinimumWidth(340);
+    dcol->setMaximumWidth(340);
+
+    uploadStatus_ = makeList(140);
+    auto* ucol = column(tr("Upload Status"), uploadStatus_);
+
+    // Terminal column carries the send line under its list.
     auto* tg = new QGroupBox(tr("Terminal (SysEx)"));
     auto* tl = new QVBoxLayout(tg);
-    term_ = makeList(90);
+    tl->setContentsMargins(8, 8, 8, 8);
+    term_ = makeList(140);
     tl->addWidget(term_);
     auto* srow = new QHBoxLayout;
     sysexBox_ = new QLineEdit;
@@ -144,32 +157,37 @@ MainWindow::MainWindow()
     srow->addWidget(sysexBox_, 1);
     srow->addWidget(sendBtn_);
     tl->addLayout(srow);
-    root->addWidget(tg);
 
-    // ---- monitor ---------------------------------------------------------
+    cols->addWidget(dcol);
+    cols->addWidget(ucol);
+    cols->addWidget(tg);
+    cols->setStretchFactor(0, 0);   // Device Info fixed
+    cols->setStretchFactor(1, 1);   // Upload Status
+    cols->setStretchFactor(2, 2);   // Terminal grows first on resize
+    cols->setSizes({340, 300, 300});
+    root->addWidget(cols, 1);
+
+    // ---- monitor: one aligned header row, then the two panes -------------
     auto* mg = new QGroupBox(tr("MIDI Monitor"));
     auto* ml = new QVBoxLayout(mg);
+    muteRt_ = new QCheckBox(tr("hide clock / realtime"));
+    muteRt_->setChecked(true);
+    auto* mhdr = new QHBoxLayout;
+    auto* inLbl = new QLabel(tr("IN")); inLbl->setObjectName("dim");
+    auto* outLbl = new QLabel(tr("OUT")); outLbl->setObjectName("dim");
+    mhdr->addWidget(inLbl);
+    mhdr->addSpacing(10);
+    mhdr->addWidget(muteRt_);
+    mhdr->addStretch(1);
+    mhdr->addWidget(outLbl);
+    mhdr->addStretch(1);
+    ml->addLayout(mhdr);
     auto* split = new QSplitter(Qt::Horizontal);
     monIn_  = makeList(120);
     monOut_ = makeList(120);
-    muteRt_ = new QCheckBox(tr("hide clock / realtime"));
-    muteRt_->setChecked(true);
-    auto* inPane = new QWidget; auto* inV = new QVBoxLayout(inPane);
-    inV->setContentsMargins(0, 0, 0, 0); inV->setSpacing(3);
-    auto* inHdr = new QHBoxLayout;
-    auto* inLbl = new QLabel(tr("IN")); inLbl->setObjectName("dim");
-    inHdr->addWidget(inLbl);
-    inHdr->addStretch(1);
-    inHdr->addWidget(muteRt_);
-    inV->addLayout(inHdr);
-    inV->addWidget(monIn_);
-    auto* outPane = new QWidget; auto* outV = new QVBoxLayout(outPane);
-    outV->setContentsMargins(0, 0, 0, 0); outV->setSpacing(3);
-    auto* outLbl = new QLabel(tr("OUT")); outLbl->setObjectName("dim");
-    outV->addWidget(outLbl);
-    outV->addWidget(monOut_);
-    split->addWidget(inPane);
-    split->addWidget(outPane);
+    split->addWidget(monIn_);
+    split->addWidget(monOut_);
+    split->setSizes({480, 480});
     ml->addWidget(split, 1);
     root->addWidget(mg, 1);
 
@@ -239,6 +257,7 @@ MainWindow::MainWindow()
 
     for (const auto& p : adios::inPorts())  inBox_->addItem(QString::fromStdString(p));
     for (const auto& p : adios::outPorts()) outBox_->addItem(QString::fromStdString(p));
+    restoreSettings();
     setConnected(false);
 }
 
@@ -246,6 +265,34 @@ MainWindow::~MainWindow()
 {
     in_.close();
     out_.close();
+}
+
+// Last ports (by name, so a re-enumeration still finds them), device id, hex
+// file and its folder come back on the next launch.
+void MainWindow::restoreSettings()
+{
+    QSettings s;
+    int i = inBox_->findText(s.value("inPort").toString());   if (i >= 0) inBox_->setCurrentIndex(i);
+    int o = outBox_->findText(s.value("outPort").toString());  if (o >= 0) outBox_->setCurrentIndex(o);
+    idBox_->setValue(s.value("deviceId", 0).toInt());
+    hexPath_->setText(s.value("hexFile").toString());
+    lastDir_ = s.value("browseDir").toString();
+}
+
+void MainWindow::saveSettings()
+{
+    QSettings s;
+    s.setValue("inPort",   inBox_->currentText());
+    s.setValue("outPort",  outBox_->currentText());
+    s.setValue("deviceId", idBox_->value());
+    s.setValue("hexFile",  hexPath_->text());
+    s.setValue("browseDir", lastDir_);
+}
+
+void MainWindow::closeEvent(QCloseEvent* e)
+{
+    saveSettings();
+    e->accept();
 }
 
 void MainWindow::setConnected(bool on)
@@ -364,9 +411,12 @@ void MainWindow::sendSysex()
 
 void MainWindow::chooseHex()
 {
-    QString f = QFileDialog::getOpenFileName(this, tr("Firmware .hex"), QString(),
+    QString f = QFileDialog::getOpenFileName(this, tr("Firmware .hex"), lastDir_,
                                              tr("Intel HEX (*.hex);;All files (*)"));
-    if (!f.isEmpty()) hexPath_->setText(f);
+    if (!f.isEmpty()) {
+        hexPath_->setText(f);
+        lastDir_ = QFileInfo(f).absolutePath();
+    }
 }
 
 void MainWindow::doUpload()
