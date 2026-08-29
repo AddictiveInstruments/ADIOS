@@ -203,6 +203,15 @@ drivers/gnustep/
 
 # source. Committing the zips would put a whole Qt runtime in the history.
 
-tools/5x6_upgrader/dist/*
+apps/Bruno/5x6_display/tools/5x6_upgrader/dist/*
 
-!tools/5x6_upgrader/dist/README.txt
+!apps/Bruno/5x6_display/tools/5x6_upgrader/dist/README.txt
+
+# CMake/Ninja build trees and their outputs, for both bench tools. Everything
+# here is rebuilt by build-gui.bat / .sh - the built executables, the deployed
+# Qt DLLs, the 32-bit dump helper. None of it belongs in the history.
+apps/Bruno/5x6_display/tools/5x6_screen/build-gui/
+apps/Bruno/5x6_display/tools/5x6_screen/helper/*.exe
+apps/Bruno/5x6_display/tools/5x6_screen/helper/*.obj
+apps/Bruno/5x6_display/tools/5x6_upgrader/build/
+apps/Bruno/5x6_display/tools/5x6_upgrader/build-gui/

@@ -106,6 +106,9 @@ static s32 TR5X6_SYSEX_Cmd_WriteInfo(u8 cmd_state, u8 midi_in);
 static s32 TR5X6_SYSEX_Cmd_ReadBlock(u8 cmd_state, u8 midi_in);
 static s32 TR5X6_SYSEX_Cmd_WriteBlock(u8 cmd_state, u8 midi_in);
 static s32 TR5X6_SYSEX_Cmd_Ping(u8 cmd_state, u8 midi_in);
+#if APP_LCD_MIRROR
+static s32 TR5X6_SYSEX_Cmd_MirrorHalt(u8 cmd_state, u8 midi_in);
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -545,6 +548,12 @@ s32 TR5X6_SYSEX_Cmd(u8 cmd_state, u8 midi_in)
 		TR5X6_SYSEX_Cmd_BankDataEnd(cmd_state, midi_in);
 		sysex_last_cmd = sysex_cmd;
 		break;
+#if APP_LCD_MIRROR
+	case CMD_MIRROR_HALT:
+		TR5X6_SYSEX_Cmd_MirrorHalt(cmd_state, midi_in);
+		sysex_last_cmd = sysex_cmd;
+		break;
+#endif
 	case CMD_ACK:
 		TR5X6_SYSEX_Cmd_Ping(cmd_state, midi_in);
 		break;
@@ -1174,6 +1183,40 @@ s32 TR5X6_SYSEX_Cmd_Ping(u8 cmd_state, u8 midi_in)
 
 	return 0; // no error
 }
+
+#if APP_LCD_MIRROR
+/////////////////////////////////////////////////////////////////////////////
+// Command 0A: MIRROR_HALT - one value byte. 1 parks the screen task for a
+// probe capture, 0 releases it. The freeze itself lands at the screen
+// task's next cycle top: a clean frame boundary, never mid-SPI.
+/////////////////////////////////////////////////////////////////////////////
+extern void APP_ScreenHalt(u8 on);
+static u8 sysex_mirror_halt_val;
+s32 TR5X6_SYSEX_Cmd_MirrorHalt(u8 cmd_state, u8 midi_in)
+{
+	switch( cmd_state ) {
+
+	case TR5X6_SYSEX_CMD_STATE_BEGIN:
+		sysex_mirror_halt_val = 0x7f;              // nothing received yet
+		break;
+
+	case TR5X6_SYSEX_CMD_STATE_CONT:
+		sysex_mirror_halt_val = midi_in;
+		break;
+
+	default: // TR5X6_SYSEX_CMD_STATE_END
+		TR5X6_SYSEX_Send_Footer(0);
+		if( sysex_mirror_halt_val <= 1 ) {
+			APP_ScreenHalt(sysex_mirror_halt_val);
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_ACK, sysex_mirror_halt_val);
+		} else
+			TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, TR5X6_SYSEX_DISACK_INVALID_COMMAND);
+		break;
+	}
+
+	return 0; // no error
+}
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // Command 0F: Ping (just send back acknowledge)

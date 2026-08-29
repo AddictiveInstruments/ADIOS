@@ -42,7 +42,13 @@
 //       there: byte addressable, no erase, a million cycles.
 // The SysEx device ID never moves - last two bytes of internal flash in
 // BOTH revisions, because that is where the bootloader looks.
-#define APP_HARD_REV 1
+#define APP_HARD_REV 2
+// The bench prototype of rev 2: same everything, except the TFT read wire is
+// PATCHED onto PB6 because PB2 - the default SPI MISO, where rev 2 production
+// boards put the wire - still carries DC on this board. Production rev 2
+// moves DC to PB15 and hands PB2 to MISO. Three deliverables exist: rev1,
+// rev2, proto_rev2.
+#define APP_HARD_PROTO 1
 
 // The linker reservation follows the revision, HERE and not in the
 // Makefile - the build evaluates this file and reads the result. Rev 2
@@ -75,16 +81,39 @@
 // no build-time unit switch any more.
 
 //#define REDUCED_APP_LCD
+
+// Screen capture through the debug probe - freeze on SysEx MIRROR_HALT, dump
+// the panel's GDRAM over SPI, resume. See app_lcd.h. Costs one flag test per
+// drawing call when idle; nothing is armed, nothing polls, nothing slows.
+// Needs the TFT read wire, so rev 1 boards cannot have it.
+#if APP_HARD_REV == 2
+#define APP_LCD_MIRROR 1
+#endif
+// GDRAM readback trial - result in lcd_rdtest[], read by the SWD probe.
+// Wiring proven 2026-08-29 (red/green/blue/white back bit-exact); off since.
+#define APP_LCD_READ_TEST 0
+#define APP_LCD_MIRROR_FIFO_SIZE 8192
 // (ADIOS_MIDI_DEFAULT_PORT / _DEBUG_PORT are set in the BSL_RELAY block of
 // the UART section below, with the rest of this board's MIDI wiring)
 // disable code modules
+
 // adios_spi.c - SPI0 drives the ROM (tr5x6_rom.c), SPI1 drives the TFT
 // (5x6_tft.c). Both use ADIOS_SPI_CS_PinSet(spi, value) for chip select.
 #define ADIOS_USE_SPI0
 #define ADIOS_USE_SPI1
-#define TR5X6_DECOD_SOFT_SPI
-#ifdef TR5X6_DECOD_SOFT_SPI
+#if APP_HARD_REV == 2
+# if APP_HARD_PROTO
+// the TFT read wire, PATCHED: panel SDO -> PB6 (SPI2_MISO, AF4 - proven)
+#define ADIOS_SPI1_MISO_PORT GPIOB
+#define ADIOS_SPI1_MISO_PIN  LL_GPIO_PIN_6
+#define ADIOS_SPI1_MISO_AF   LL_GPIO_AF_4
+# else
+// production rev 2: MISO on PB2 (the SPI default - nothing to override) and
+// DC moved out of its way, onto PB15
+#define APP_LCD_DC LL_GPIO_PIN_15
+# endif
 #endif
+
 #define ADIOS_DONT_USE_AIN
 //#define ADIOS_DONT_USE_LCD
 // (the MIDI core itself is always compiled - not optional, see adios_midi.c;
@@ -133,6 +162,13 @@
 // Only the second one is the bootloader's business - it is the connector
 // the outside world (and ADIOS Studio) talks to - so it lives in the relayed
 // block below; the host link is this application's alone.
+// The OS default is 64 bytes, sized for a machine that sends the occasional
+// note. This one merges its host's MIDI and, with the screen mirror on,
+// streams the display as well - and ADIOS_MIDI_SendSysEx does not queue when
+// the buffer fills, it gives up in the MIDDLE of the message. A truncated
+// SysEx is discarded whole by the receiver, so the loss is total and silent.
+#define ADIOS_UART_TX_BUFFER_SIZE 512
+
 #define ADIOS_USE_UART0
 
 // BSL_RELAY_BEGIN - copied verbatim into the bootloader and updater builds
@@ -162,6 +198,10 @@
 
 #define ADIOS_TASK_HOOKS_STACK_SIZE	1000
 #define ADIOS_TASK_MIDI_HOOKS_STACK_SIZE	1900
+// The mirror's drain task, in bytes like the two below. It holds one SysEx
+// message on its stack (about 110 bytes) and calls the MIDI sender; it needs
+// no more, and asking for more would take it from the same heap the other two
+// draw on.
 #define TFT_TASK_STACK_SIZE	1900
 #define ROM_TASK_STACK_SIZE	2100
 

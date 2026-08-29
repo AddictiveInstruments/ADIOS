@@ -42,6 +42,48 @@
 // size of u8 array is 480*320*2 = 307200 Ohhhhhh, this will never be used !!!
 #define APP_LCD_4BITMAP_SIZE ((APP_LCD_NUM_X*APP_LCD_WIDTH * APP_LCD_NUM_Y*APP_LCD_HEIGHT * APP_LCD_COLOUR_DEPTH) / 8)
 
+/////////////////////////////////////////////////////////////////////////////
+// Screen capture through the DEBUG PROBE - a bench aid for writing manuals,
+// not a feature of the instrument: OFF unless a project asks for it, and it
+// then costs neither flash nor RAM.
+//
+// HOW IT WORKS (the long version heads the implementation block in app_lcd.c)
+//   1. SysEx MIRROR_HALT 1 - the application parks its screen task at a
+//      frame boundary and APP_LCD_FreezeSet(1) locks every drawing entry
+//      point: the panel's GDRAM stops changing.
+//   2. The debug probe asks for the dump; APP_LCD_DumpService() - called
+//      from a small application task - clocks the GDRAM out over SPI into
+//      the ring the probe reads: the panel's REAL pixels, 460800 bytes of
+//      RGB666, not a reconstruction.
+//   3. MIRROR_HALT 0 - the task resumes where it parked.
+// Outside a capture nothing runs and nothing is armed: the machinery costs
+// one flag test per drawing call.
+//
+// HOW TO USE IT
+//   1. define APP_LCD_MIRROR 1 in the project's config
+//   2. call APP_LCD_MirrorInit() once, after APP_LCD_Init()
+//   3. call APP_LCD_DumpService() from a low-priority task, and wire the
+//      MIRROR_HALT command to APP_LCD_FreezeSet() + suspend/resume of the
+//      screen task (see the application's SysEx parser)
+/////////////////////////////////////////////////////////////////////////////
+
+#ifndef APP_LCD_MIRROR
+#define APP_LCD_MIRROR 0
+#endif
+
+// GDRAM readback trial - proves the MISO wire, its pin mux, the dummy byte
+// and the read clock in one go, with the result read out by the SWD probe.
+#ifndef APP_LCD_READ_TEST
+#define APP_LCD_READ_TEST 0
+#endif
+
+// Ring between the dump servant and the probe. A POWER OF TWO - the ring
+// arithmetic relies on it - and big enough that the probe's read cadence,
+// not the ring, paces the dump.
+#ifndef APP_LCD_MIRROR_FIFO_SIZE
+#define APP_LCD_MIRROR_FIFO_SIZE 8192
+#endif
+
 #define APP_LCD_STRING_ALIGN_LEFT     0
 #define APP_LCD_STRING_ALIGN_CENTER   1
 #define APP_LCD_STRING_ALIGN_RIGHT    2
@@ -91,6 +133,25 @@ typedef enum{
 /////////////////////////////////////////////////////////////////////////////
 // Prototypes
 /////////////////////////////////////////////////////////////////////////////
+
+#if APP_LCD_MIRROR
+// Screen capture - see the block near the top of this file.
+extern s32 APP_LCD_MirrorInit(void);
+extern s32 APP_LCD_FreezeSet(u8 on);
+extern s32 APP_LCD_DumpService(void);
+#else
+// No-ops when the capture is out, so the calls can stay in the application
+// without a guard around them and without costing an instruction.
+# define APP_LCD_MirrorInit()        0
+# define APP_LCD_FreezeSet(on)       do { } while(0)
+# define APP_LCD_DumpService()       0
+#endif
+
+#if APP_LCD_READ_TEST
+extern void APP_LCD_ReadTest(void);
+#else
+# define APP_LCD_ReadTest()          do { } while(0)
+#endif
 
 // hooks to ADIOS_LCD
 extern s32 APP_LCD_Init(u32 mode);

@@ -34,9 +34,17 @@
 
  */
 #define APP_LCD_SPI  		1
+#ifndef APP_LCD_PORT
 #define APP_LCD_PORT 		GPIOB
+#endif
+#ifndef APP_LCD_CS
 #define APP_LCD_CS 	 		LL_GPIO_PIN_1
+#endif
+// rev2 boards hand PB2 to the TFT read wire (the SPI default MISO) and move
+// DC to PB15 - the config overrides this default there.
+#ifndef APP_LCD_DC
 #define APP_LCD_DC 	 		LL_GPIO_PIN_2
+#endif
 #define APP_LCD_LITE 		LL_GPIO_PIN_0
 #define APP_LCD_RST     	LL_GPIO_PIN_12
 
@@ -153,6 +161,169 @@ static u32 app_lcd_fore_color = 0;
 static u8  app_lcd_rotation=1;
 static u16 app_lcd_width=APP_LCD_WIDTH;
 static u16 app_lcd_height=APP_LCD_HEIGHT;
+
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+// SCREEN CAPTURE THROUGH THE DEBUG PROBE
+//
+// There is no streaming mirror any more - it lost to arithmetic: every MIDI
+// transport in front of it swallowed half of a sustained stream, and pacing
+// the drawing to a probe slowed the instrument. A capture is now three moves:
+//
+//   1. SysEx command MIRROR_HALT 1 - the screen task parks itself at its
+//      next cycle top (a clean frame boundary, never mid-SPI) and lcd_frozen
+//      locks every drawing entry point, so even a context that is NOT
+//      suspended - a bank transfer drawing from the SysEx path - cannot
+//      change the panel. The GDRAM is now still.
+//   2. The probe writes mir_dump_req; the dump servant clocks the panel's
+//      GDRAM out over SPI (RAMRD, read speed) straight into the ring, where
+//      the probe collects it: 480x320x3 = 460800 bytes of RGB666 - the
+//      panel's REAL content, not a reconstruction of what was sent to it.
+//   3. MIRROR_HALT 0 - the task resumes exactly where it parked.
+//
+// Outside a capture: no probe session, no polling, nothing armed. The whole
+// machinery costs one flag test per drawing call.
+//
+// The probe finds everything by scanning RAM for the magic below: the map is
+// filled at RUN TIME because a `used` static initialiser is still discarded
+// by --gc-sections - the living reference is what survives.
+/////////////////////////////////////////////////////////////////////////////
+#if APP_LCD_MIRROR
+
+// The ring between the dump servant and the probe. RAW bytes, no framing:
+// the probe knows the total and simply consumes.
+static u8  mir_buf[APP_LCD_MIRROR_FIFO_SIZE];
+static volatile u16 mir_head;        // servant writes, the probe reads
+volatile u32 mir_swd_tail;           // probe-written consumption index - a
+                                     // full aligned word: one SWD word-write
+                                     // is atomic where a torn u16 is not
+
+// The freeze. Choreographed by the application (the task suspends itself);
+// enforced here by MIR_FROZEN_GATE() on every drawing entry point.
+volatile u8 lcd_frozen;
+
+// The dump conversation, entirely probe-driven:
+//   mir_dump_req  1 = wanted (probe writes)   0 = idle/done (servant clears)
+//   mir_dump_pos  bytes clocked out so far - the probe's progress bar
+volatile u32 mir_dump_req;
+volatile u32 mir_dump_pos;
+
+#define MIR_DUMP_TOTAL ((u32)APP_LCD_WIDTH * APP_LCD_HEIGHT * 3)
+
+typedef struct {
+	char magic[8];
+	u32  head_addr;
+	u32  tail_addr;
+	u32  buf_addr;
+	u32  buf_size;
+	u32  frozen_addr;
+	u32  dump_req_addr;
+	u32  dump_pos_addr;
+} mir_map_t;
+static volatile mir_map_t mir_map;
+
+s32 APP_LCD_MirrorInit(void)
+{
+	mir_head = 0;
+	mir_swd_tail = 0;
+	lcd_frozen = 0;
+	mir_dump_req = 0;
+	mir_dump_pos = 0;
+	memcpy((void *)mir_map.magic, "MIR5X6RT", 8);
+	mir_map.head_addr     = (u32)&mir_head;
+	mir_map.tail_addr     = (u32)&mir_swd_tail;
+	mir_map.buf_addr      = (u32)mir_buf;
+	mir_map.buf_size      = APP_LCD_MIRROR_FIFO_SIZE;
+	mir_map.frozen_addr   = (u32)&lcd_frozen;
+	mir_map.dump_req_addr = (u32)&mir_dump_req;
+	mir_map.dump_pos_addr = (u32)&mir_dump_pos;
+	return 0;
+}
+
+// The application's side of the choreography: the screen task calls (1) just
+// before suspending itself, (0) right after being resumed.
+s32 APP_LCD_FreezeSet(u8 on)
+{
+	lcd_frozen = on ? 1 : 0;
+	return 0;
+}
+
+static u16 mir_free(void)
+{
+	u16 h = mir_head, t = (u16)mir_swd_tail;
+	return (t > h) ? (u16)(t - h - 1)
+	               : (u16)(APP_LCD_MIRROR_FIFO_SIZE - h + t - 1);
+}
+
+// One call, as much as the ring accepts. The whole screen is ONE read
+// transaction: window and RAMRD are sent once, then CS STAYS LOW between
+// calls - nothing else touches this SPI while the screen is frozen, that is
+// what the freeze is for - and the panel hands out pixels from where it
+// stopped. Reads are specified slower than writes: 4 MHz during the dump,
+// the display's 8 MHz restored at the end.
+s32 APP_LCD_DumpService(void)
+{
+	if( !lcd_frozen ) {
+		if( mir_dump_req || (mir_dump_pos && mir_dump_pos < MIR_DUMP_TOTAL) ) {
+			// released mid-dump (probe died, user moved on): close the
+			// transaction the panel still has open, forget the progress
+			CS_DIS();
+			ADIOS_SPI_TransferModeInit(APP_LCD_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_8);
+			mir_dump_req = 0;
+			mir_dump_pos = 0;
+		}
+		return 0;
+	}
+
+	if( !mir_dump_req )
+		return 0;
+
+	if( mir_dump_pos == 0 || mir_dump_pos >= MIR_DUMP_TOTAL ) {
+		// a fresh dump: the probe has just zeroed its tail
+		mir_dump_pos = 0;
+		mir_head = 0;
+		APP_LCD_Cmd(APP_LCD_CASET);
+		APP_LCD_Data(0); APP_LCD_Data(0);
+		APP_LCD_Data((u8)((app_lcd_width - 1) >> 8));
+		APP_LCD_Data((u8)((app_lcd_width - 1) & 0xff));
+		APP_LCD_Cmd(APP_LCD_PASET);
+		APP_LCD_Data(0); APP_LCD_Data(0);
+		APP_LCD_Data((u8)((app_lcd_height - 1) >> 8));
+		APP_LCD_Data((u8)((app_lcd_height - 1) & 0xff));
+		ADIOS_SPI_TransferModeInit(APP_LCD_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_16);
+		DC_COMMAND();
+		CS_ENA();
+		ADIOS_SPI_TransferByte(APP_LCD_SPI, APP_LCD_RAMRD);
+		DC_DATA();
+		(void)ADIOS_SPI_TransferByte(APP_LCD_SPI, 0x00);   // turnaround byte
+	}
+
+	while( mir_dump_pos < MIR_DUMP_TOTAL && mir_free() ) {
+		u16 h = mir_head;
+		mir_buf[h] = (u8)ADIOS_SPI_TransferByte(APP_LCD_SPI, 0x00);
+		mir_head = (u16)((h + 1) & (APP_LCD_MIRROR_FIFO_SIZE - 1));
+		++mir_dump_pos;
+	}
+
+	if( mir_dump_pos >= MIR_DUMP_TOTAL ) {
+		CS_DIS();
+		ADIOS_SPI_TransferModeInit(APP_LCD_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_8);
+		mir_dump_req = 0;          // done - the probe sees pos == total
+	}
+
+	return (s32)mir_dump_pos;
+}
+
+#endif
+
+// The gate every drawing entry point walks through. Free when the capture is
+// compiled out; one volatile test when it is in.
+#if APP_LCD_MIRROR
+#define MIR_FROZEN_GATE() do { if( lcd_frozen ) return 0; } while (0)
+#else
+#define MIR_FROZEN_GATE() do { } while (0)
+#endif
+
 static const u16 ball[12] = {
 							 0b0000000011110000,
 							 0b0000001111111100,
@@ -172,11 +343,19 @@ static const u8 noire[5] = {
 							 0b00011111,
 							 0b00001111,
 							 0b00000110};
-static const u8 croche[4] = {
-							 0b00001111,
-							 0b00001110,
-							 0b00011100,
-							 0b11110000};
+// Stored by ROW, like noire, beat, ball and corner. It used to be stored by
+// COLUMN and read transposed - the same pixels, but the odd one out of the
+// five, and the only reason a helper would have needed to know which way a
+// table runs. Transposed once here so nothing downstream has to care.
+static const u8 croche[8] = {
+							 0b00000001,
+							 0b00000011,
+							 0b00000111,
+							 0b00000111,
+							 0b00001100,
+							 0b00001000,
+							 0b00001000,
+							 0b00001000};
 static const u8 corner[8] = {
 							 0b00000001,
 							 0b00000011,
@@ -527,6 +706,7 @@ s32 APP_LCD_Data_Multi(u8 *buff, size_t buff_size){
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_SendFastPixels(u32 n, u16 color)
 {
+	MIR_FROZEN_GATE();
 	u8 r = (color >>8) & 0xF8;
 	u8 g = (color >>3) & 0xFC;
 	u8 b = color <<3;
@@ -569,6 +749,7 @@ s32 APP_LCD_SendFastPixels(u32 n, u16 color)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_DrawFastVLine(s16 x, s16 y, s16 h, u16 color)
 {
+	MIR_FROZEN_GATE();
 	if( x >= app_lcd_width || y >= app_lcd_height )
 		return -1; // pixel is outside bitmap
 	if ((y + h - 1) >= app_lcd_height)
@@ -587,6 +768,7 @@ s32 APP_LCD_DrawFastVLine(s16 x, s16 y, s16 h, u16 color)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_DrawFastHLine(s16 x, s16 y, s16 w, u16 color)
 {
+	MIR_FROZEN_GATE();
 	if( x >= app_lcd_width || y >= app_lcd_height )
 		return -1; // pixel is outside bitmap
 	if ((x + w - 1) >= app_lcd_width)
@@ -604,6 +786,7 @@ s32 APP_LCD_DrawFastHLine(s16 x, s16 y, s16 w, u16 color)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_DrawFastBeat(u16 x, u16 y, u16 color)
 {
+	MIR_FROZEN_GATE();
 	if( x >= app_lcd_width || y >= app_lcd_height )
 		return -1; // pixel is outside bitmap
 	u16 w =9;
@@ -645,6 +828,7 @@ s32 APP_LCD_DrawFastBeat(u16 x, u16 y, u16 color)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_DrawFastBall(u16 x, u16 y, u16 color)
 {
+	MIR_FROZEN_GATE();
 	if( x >= app_lcd_width || y >= app_lcd_height )
 		return -1; // pixel is outside bitmap
 	u16 w =12;
@@ -688,6 +872,7 @@ s32 APP_LCD_DrawFastBall(u16 x, u16 y, u16 color)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_DrawFastNoire(u16 x, u16 y, u16 color)
 {
+	MIR_FROZEN_GATE();
 	if( x >= app_lcd_width || y >= app_lcd_height )
 		return -1; // pixel is outside bitmap
 	u16 w =5;
@@ -730,6 +915,7 @@ s32 APP_LCD_DrawFastNoire(u16 x, u16 y, u16 color)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_DrawFastCroche(u16 x, u16 y, u16 color)
 {
+	MIR_FROZEN_GATE();
 	if( x >= app_lcd_width || y >= app_lcd_height )
 		return -1; // pixel is outside bitmap
 	u16 w =4;
@@ -747,7 +933,7 @@ s32 APP_LCD_DrawFastCroche(u16 x, u16 y, u16 color)
 	u8 frm_buf[96];
 	for (int i=0; i < 8; i++){
 		for (int j=0; j < 4; j++){
-			if(croche[j]&(1<<i)){
+			if(croche[i]&(1<<j)){
 				frm_buf[i*12+j*3] = r;
 				frm_buf[i*12+j*3+1] = g;
 				frm_buf[i*12+j*3+2] = b;
@@ -772,6 +958,7 @@ s32 APP_LCD_DrawFastCroche(u16 x, u16 y, u16 color)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_DrawFastCorner(u16 x, u16 y, u16 color)
 {
+	MIR_FROZEN_GATE();
 	if( x >= app_lcd_width || y >= app_lcd_height )
 		return -1; // pixel is outside bitmap
 	u16 w =8;
@@ -1316,6 +1503,7 @@ s32 APP_LCD_BitmapPixelSet(adios_lcd_bitmap_t bitmap, u16 x, u16 y, u32 colour)
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_Rectangle(u16 x, u16 y, u16 w, u16 h, u8 border, u16 bd_color, u8 fill, u16 fill_color)
 {
+	MIR_FROZEN_GATE();
 	if( x >= app_lcd_width || y >= app_lcd_height )
 		return -1; // pixel is outside bitmap
 #if 0
@@ -1375,6 +1563,8 @@ s32 APP_LCD_Rectangle(u16 x, u16 y, u16 w, u16 h, u8 border, u16 bd_color, u8 fi
 			APP_LCD_SetAddrWindow(x+w-bx, y, x+w-1 , y+h-1);
 			n = bx*h;
 			APP_LCD_SendFastPixels(n, bd_color);
+#if APP_LCD_MIRROR
+#endif
 	}
 
 #endif
@@ -1855,6 +2045,7 @@ s32 APP_LCD_BitmapFusion(adios_lcd_bitmap_t top_bmp, float top_luma, adios_lcd_b
 /////////////////////////////////////////////////////////////////////////////
 s32 APP_LCD_SendBitmap(adios_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
 {
+	MIR_FROZEN_GATE();
 
 	if( x_pos >= app_lcd_width || y_pos >= app_lcd_height )
 		return -1; // pixel is outside bitmap
@@ -1862,6 +2053,7 @@ s32 APP_LCD_SendBitmap(adios_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
 		bitmap.width = app_lcd_width - x_pos;
 	if ((y_pos + bitmap.height - 1) >= app_lcd_height)
 		bitmap.height = app_lcd_height - y_pos;
+
 
 #if 0
 	//if( !ADIOS_LCD_TypeIsGLCD() )
@@ -1937,7 +2129,6 @@ s32 APP_LCD_SendBitmap(adios_lcd_bitmap_t bitmap, u16 x_pos, u16 y_pos)
 					memory_ptr++;
 				}
 				memory_ptr = bitmap.memory + (line * bitmap.line_offset);
-
 			}
 
 			DC_DATA();
@@ -2123,3 +2314,58 @@ s32 APP_LCD_BitmapPrint(adios_lcd_bitmap_t bitmap)
 void APP_LCD_DummyFunc(void){
 	CS_DIS();
 }
+
+/////////////////////////////////////////////////////////////////////////////
+// GDRAM readback trial - the first thing the MISO wire ever carries.
+//
+// Four known pixels go in through the NORMAL write path, then come back
+// through RAMRD, and both rows land in lcd_rdtest for the SWD probe:
+//   [0..11]  what the panel should hold (the write path's own 666 bytes)
+//   [12]     the turnaround byte the panel spends reversing its bus -
+//            RECORDED rather than assumed away: if the alignment ever
+//            differs, the dump shows it and no rebuild is needed
+//   [13..24] the twelve bytes read back
+//   [25]     0x55 once the trial ran
+// The panel stores 6 bits per channel: compare with the low two bits
+// masked. Reads are specified slower than writes on this controller -
+// 4 MHz for the exchange, the display's 8 MHz restored right after.
+/////////////////////////////////////////////////////////////////////////////
+#if APP_LCD_READ_TEST
+volatile u8 lcd_rdtest[26];
+
+void APP_LCD_ReadTest(void)
+{
+	static const u16 col[4] = { APP_LCD_RED, APP_LCD_GREEN, APP_LCD_BLUE, APP_LCD_WHITE };
+	int i;
+
+	// top-left corner: the splash paints over the evidence a moment later
+	for(i = 0; i < 4; ++i) {
+		APP_LCD_DrawFastVLine((s16)i, 0, 1, col[i]);
+		lcd_rdtest[i*3 + 0] = (u8)((col[i] >> 8) & 0xF8);
+		lcd_rdtest[i*3 + 1] = (u8)((col[i] >> 3) & 0xFC);
+		lcd_rdtest[i*3 + 2] = (u8)(col[i] << 3);
+	}
+
+	// the same four pixels, as a read window this time
+	APP_LCD_Cmd(APP_LCD_CASET);
+	APP_LCD_Data(0); APP_LCD_Data(0); APP_LCD_Data(0); APP_LCD_Data(3);
+	APP_LCD_Cmd(APP_LCD_PASET);
+	APP_LCD_Data(0); APP_LCD_Data(0); APP_LCD_Data(0); APP_LCD_Data(0);
+
+	ADIOS_SPI_TransferModeInit(APP_LCD_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_16);
+
+	// CS stays LOW across the whole exchange - command, turnaround, data
+	DC_COMMAND();
+	CS_ENA();
+	ADIOS_SPI_TransferByte(APP_LCD_SPI, APP_LCD_RAMRD);
+	DC_DATA();
+	lcd_rdtest[12] = (u8)ADIOS_SPI_TransferByte(APP_LCD_SPI, 0x00);
+	for(i = 0; i < 12; ++i)
+		lcd_rdtest[13 + i] = (u8)ADIOS_SPI_TransferByte(APP_LCD_SPI, 0x00);
+	CS_DIS();
+
+	ADIOS_SPI_TransferModeInit(APP_LCD_SPI, ADIOS_SPI_MODE_CLK0_PHASE0, ADIOS_SPI_PRESCALER_8);
+
+	lcd_rdtest[25] = 0x55;
+}
+#endif

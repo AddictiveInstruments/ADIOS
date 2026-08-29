@@ -1,0 +1,87 @@
+/* The charter, shared with the ROM editor and the updater: slate ground,
+   inset surfaces darker than what surrounds them, flat controls with a
+   hairline border. One look across the three tools, on both systems. */
+
+QWidget {
+    background: #1c212b;
+    color: #dfe4ec;
+    font-size: 12px;
+}
+
+QLabel#dim  { color: #8a94a6; }
+QLabel#warn { color: #d9a441; font-size: 11px; }
+
+/* the panel: the 480x320 view, black like the real TFT and framed so it
+   reads as a screen rather than a hole in the window */
+QLabel#panel {
+    background: #000000;
+    border: 1px solid #2a2f3a;
+    border-radius: 3px;
+}
+
+QComboBox, QSpinBox {
+    background: #161a22;
+    border: 1px solid #3d4757;
+    border-radius: 2px;
+    padding: 3px 8px;
+    selection-background-color: #4a7ab8;
+}
+QComboBox::drop-down { border: none; width: 18px; }
+QComboBox QAbstractItemView {
+    background: #161a22;
+    border: 1px solid #3d4757;
+    selection-background-color: #4a7ab8;
+}
+
+QPushButton {
+    background: #2e3644;
+    border: 1px solid #3d4757;
+    border-radius: 2px;
+    padding: 3px 18px;
+}
+QPushButton:hover   { background: #39435a; }
+QPushButton:pressed { background: #262d38; }
+QPushButton:disabled {
+    background: #242a34;
+    border-color: #2e3644;
+    color: #5a6172;
+}
+
+/* the one action that matters, in the charter's accent blue */
+QPushButton#primary {
+    background: #4a7ab8;
+    border: 1px solid #5a8ac8;
+    color: #f2f6fc;
+}
+QPushButton#primary:hover    { background: #5686c4; }
+QPushButton#primary:pressed  { background: #3d6aa4; }
+QPushButton#primary:disabled { background: #2f3a4a; border-color: #34404f; color: #5a6172; }
+
+/* the folder link: a control that must not look like a button */
+QPushButton#flat {
+    background: transparent;
+    border: none;
+    color: #8a94a6;
+    padding: 3px 4px;
+}
+QPushButton#flat:hover { color: #dfe4ec; }
+
+/* the shot log: an inset surface, darker than the ground */
+QListWidget {
+    background: #161a22;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 6px;
+    font-family: "Consolas", "Menlo", monospace;
+}
+QListWidget::item { padding: 1px 0; }
+
+QLabel:disabled { color: #5a6172; }
+
+QScrollBar:vertical {
+    background: #161a22;
+    width: 10px;
+    margin: 0;
+}
+QScrollBar::handle:vertical { background: #3d4757; border-radius: 5px; min-height: 20px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }

@@ -31,9 +31,18 @@ first time. This is expected.
             -> click "More info", then "Run anyway".
 
   macOS     "cannot be opened because the developer cannot be verified"
-            -> RIGHT-CLICK the application, choose "Open", then "Open"
-               again in the dialog. A normal double-click will NOT work
-               the first time.
+
+            On macOS 14 and earlier:
+              RIGHT-CLICK the application, choose "Open", then "Open"
+              again in the dialog. A normal double-click will NOT work.
+
+            On macOS 15 (Sequoia) and later, that shortcut was REMOVED by
+            Apple. Do this instead:
+              1. double-click the application once and let it be refused;
+              2. open  System Settings > Privacy & Security ;
+              3. scroll down - a line names the application and offers
+                 "Open Anyway". Click it, then confirm.
+            You only do this once, ever.
 
 
 HOW TO RUN IT

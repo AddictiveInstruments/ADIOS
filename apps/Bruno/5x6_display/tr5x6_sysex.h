@@ -28,6 +28,7 @@
 #define CMD_WRITE_BLOCK 		0x6
 #define CMD_BANK_DATA_START 	0x7
 #define CMD_BANK_DATA_END 		0x8
+#define CMD_MIRROR_HALT 		0xA
 #define CMD_ACK 				0xf
 #define CMD_DISACK 				0xe
 

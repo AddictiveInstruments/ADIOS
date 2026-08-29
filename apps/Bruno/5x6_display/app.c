@@ -37,6 +37,9 @@
 // use same priority as ADIOS specific tasks (3)
 #define PRIORITY_TASK_TFT_HANDLER	( tskIDLE_PRIORITY + 3 )
 #define PRIORITY_TASK_ROM_HANDLER	( tskIDLE_PRIORITY + 2 )
+// Below both of the above, deliberately: the screen mirror is the one thing
+// here allowed to be late. When the instrument is busy it waits, and nothing
+// it does can delay the display or the ROM.
 #define x_offset	8
 #define y_offset	15
 #define w_max		464
@@ -89,9 +92,46 @@ static s32 NOTIFY_MIDI_Rx(adios_midi_port_t port, u8 byte);
 static void MIDI_BankChange_Rx(adios_midi_package_t midi_package);
 static void MIDI_BankChange_Tx(u8 bank);
 
+
 TaskHandle_t xSettings = NULL;
 TaskHandle_t xTFTRefresh = NULL;
 TaskHandle_t xROMCheck = NULL;
+
+#if APP_LCD_MIRROR
+// Raised by SysEx MIRROR_HALT 1, cleared by MIRROR_HALT 0. The screen task
+// polls it at its cycle top and parks itself - the freeze happens at a frame
+// boundary, never mid-transaction.
+static volatile u8 screen_freeze_req;
+
+// The whole choreography, called from the SysEx parser. The COMMAND owns the
+// freeze flag, not the task: arming it here means a second HALT 1 still shows
+// the probe a frozen screen even when the task is already parked (it cannot
+// re-arm a flag it only sets while running). The gate stops every drawing
+// context the instant this returns; the task parks itself a cycle later, but
+// nothing draws in between. Resuming a task that never suspended is harmless.
+void APP_ScreenHalt(u8 on)
+{
+	if( on ) {
+		APP_LCD_FreezeSet(1);
+		screen_freeze_req = 1;
+	} else {
+		screen_freeze_req = 0;
+		APP_LCD_FreezeSet(0);
+		if( xTFTRefresh ) vTaskResume(xTFTRefresh);
+		if( xSettings )   vTaskResume(xSettings);
+	}
+}
+
+// Feeds the GDRAM dump whenever a frozen screen and a probe request line up;
+// two flag tests and back to sleep the rest of the time.
+static void TASK_Dump(void *pvParameters)
+{
+	while( 1 ) {
+		vTaskDelay(5 / portTICK_RATE_MS);
+		APP_LCD_DumpService();
+	}
+}
+#endif
 static u8 normal_start = 0;
 u32 old_count;
 u8 old_segments[40];
@@ -176,6 +216,11 @@ void APP_Init(void)
 	// GPIO clock, its own SPI, its own pins. It does NOT go through the bus
 	// decoder, which only listens to the host's display lines as inputs.
 	APP_LCD_Init(0);
+#if APP_LCD_MIRROR
+		// screen mirror - armed and drained by the debug probe, see app_lcd.h
+		APP_LCD_MirrorInit();
+		xTaskCreate(TASK_Dump, "Dump", 512/4, NULL, tskIDLE_PRIORITY + 1, NULL);
+#endif
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 	APP_LCD_FColourSet(APP_LCD_WHITE);
 	APP_LCD_FontInit((u8*)GLCD_FONT_PIXEL12X10, Is1BIT);
@@ -213,6 +258,7 @@ void APP_Init(void)
 					// defaults on a board that predates them
 	TR5X6_ROM_HOST();
 	TR5X6_DECOD_LCD_Init();		// the right decoder, the right CS edge,
+	APP_LCD_ReadTest();
 					// and only then the interrupt
 
 	// ---- and now the three roads ------------------------------------------
@@ -262,6 +308,7 @@ void APP_Init(void)
 		xTaskCreate(TASK_TFT_Periodic, "TFT_Handler", (TFT_TASK_STACK_SIZE)/4, NULL, PRIORITY_TASK_TFT_HANDLER, &xTFTRefresh);
 		// periodic ROM task
 		xTaskCreate(TASK_ROM_Periodic, "ROM_Handler", (ROM_TASK_STACK_SIZE)/4, NULL, PRIORITY_TASK_ROM_HANDLER, &xROMCheck);
+
 		first_start=1;
 	}
 
@@ -1512,6 +1559,14 @@ static void TASK_TFT_Periodic(void *pvParameters)
 		// wait for 40 mS
 		vTaskDelayUntil(&xLastExecutionTime, 40 / portTICK_RATE_MS);
 		if(!APP_LCD_IsReady())return;
+#if APP_LCD_MIRROR
+		// MIRROR_HALT parked us? Suspend HERE, at the cycle top - a clean
+		// frame boundary, never mid-SPI. The freeze flag is already set by
+		// the command (APP_ScreenHalt), so this only stops the redraw; woken
+		// by MIRROR_HALT 0, which clears the flag and resumes us.
+		if( screen_freeze_req )
+			vTaskSuspend(NULL);
+#endif
 		if(first_start)APP_TFT_Background();	// prints the background
 		if(normal_start){
 			// Digits
@@ -1980,6 +2035,10 @@ void TASK_SettingsMenu(void *pvParameters){
 	while( 1 ) {
 		// wait for 40 mS
 		vTaskDelayUntil(&xLastExecutionTime, 40 / portTICK_RATE_MS);
+#if APP_LCD_MIRROR
+		if( screen_freeze_req )
+			vTaskSuspend(NULL);
+#endif
 		if(menu_edit){
 			if(menu_pos==MENU_DEVICE_ID){
 				if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
