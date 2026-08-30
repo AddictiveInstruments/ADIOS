@@ -243,9 +243,19 @@ void MainWindow::connectPorts()
     setConnected(true);
 }
 
-// ---- MIDI thread: park the message, the timer drains it ------------------
+// ---- MIDI thread ---------------------------------------------------------
 void MainWindow::onMidiIn(const adios::Bytes& msg, uint64_t t_us)
 {
+    // Wake a waiting Ping/upload RIGHT HERE, on the MIDI thread, the instant
+    // the board answers - do NOT make the reply wait for the display timer.
+    // That detour is what made a Ping miss the answer it had already received.
+    // feedReply is mutex+condvar, safe to call from this thread.
+    if (msg.size() >= 7 && msg[0] == 0xf0 && msg[1] == 0x00 &&
+        msg[2] == 0x22 && msg[3] == 0x15) {
+        tr5x6::Reply r = tr5x6::parse(msg.data(), msg.size());
+        if (r.valid) uploader_->feedReply(r);
+    }
+    // The display still goes through the queue + timer.
     std::lock_guard<std::mutex> lk(rxMx_);
     rxQueue_.push_back({msg, t_us});
 }
@@ -261,12 +271,12 @@ void MainWindow::routeIn(const adios::Bytes& msg, uint64_t)
 {
     monitorLine(false, msg);
 
-    // ADIOS-family SysEx also feeds the terminal (as text) and the uploader.
+    // ADIOS-family SysEx is shown as text in the terminal too. The uploader
+    // was already woken on the MIDI thread (onMidiIn), so this only displays.
     if (msg.size() >= 7 && msg[0] == 0xf0 && msg[1] == 0x00 &&
         msg[2] == 0x22 && msg[3] == 0x15) {
         tr5x6::Reply r = tr5x6::parse(msg.data(), msg.size());
         if (r.valid) {
-            uploader_->feedReply(r);
             QString txt = QString::fromStdString(r.text());
             QString kind = r.cmd == tr5x6::ACK ? "ACK" : r.cmd == tr5x6::DISACK ? "DISACK"
                           : QString("cmd 0x%1").arg(r.cmd, 2, 16, QChar('0'));

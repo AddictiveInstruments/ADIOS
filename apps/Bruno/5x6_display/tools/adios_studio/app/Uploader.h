@@ -60,7 +60,7 @@ signals:
 
 private:
     void         sendMsg(const tr5x6::Bytes& msg);   // send + echo to monitor
-    tr5x6::Reply exchange(const tr5x6::Bytes& msg, int timeoutMs, int tries = 1);
+    tr5x6::Reply exchange(const tr5x6::Bytes& msg, int timeoutMs);
     bool enterBootloader();
     bool run(const QString& hexPath);
 

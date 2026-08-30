@@ -29,25 +29,22 @@ void Uploader::sendMsg(const Bytes& msg)
     emit sent(QByteArray(reinterpret_cast<const char*>(msg.data()), int(msg.size())));
 }
 
-Reply Uploader::exchange(const Bytes& msg, int timeoutMs, int tries)
+Reply Uploader::exchange(const Bytes& msg, int timeoutMs)
 {
-    // Resend on pure silence. The very first request after an idle link is
-    // regularly lost at the transport (the FastLane drops it, or the MIDI port
-    // needs priming) - which is why a Ping used to take two clicks. A query is
-    // an idempotent read, so resending it is free; a real answer (ACK OR
-    // DISACK) sets haveReply_ and returns on the first pass.
-    for (int attempt = 0; attempt < tries; ++attempt) {
-        {
-            std::lock_guard<std::mutex> lk(replyMx_);
-            haveReply_ = false;
-        }
-        sendMsg(msg);
-        std::unique_lock<std::mutex> lk(replyMx_);
-        if (replyCv_.wait_for(lk, std::chrono::milliseconds(timeoutMs),
-                              [this] { return haveReply_; }))
-            return reply_;
+    // Arm the latch BEFORE sending. The reply is delivered straight from the
+    // MIDI thread (MainWindow::onMidiIn) into feedReply, not routed through the
+    // display timer, so the board's first answer wakes this wait at once - one
+    // send, one reply.
+    {
+        std::lock_guard<std::mutex> lk(replyMx_);
+        haveReply_ = false;
     }
-    return Reply{};   // valid == false: silent after every try
+    sendMsg(msg);
+    std::unique_lock<std::mutex> lk(replyMx_);
+    if (replyCv_.wait_for(lk, std::chrono::milliseconds(timeoutMs),
+                          [this] { return haveReply_; }))
+        return reply_;
+    return Reply{};   // valid == false: a real timeout
 }
 
 bool Uploader::enterBootloader()
@@ -145,7 +142,7 @@ void Uploader::queryInfo()
         // OS name first: the one sub-command numbered the same on both cores,
         // and its answer ("ADIOS" vs "MIOS32") says which numbering the rest
         // uses.
-        Reply os = exchange(query(deviceId_, Q_OS_NAME), 300, 3);
+        Reply os = exchange(query(deviceId_, Q_OS_NAME), 500);
         if (!(os.valid && os.cmd == ACK)) {
             emit infoLine("No response - board absent, wrong device id, or not ADIOS?", 2);
             busy_.store(false);
@@ -157,7 +154,7 @@ void Uploader::queryInfo()
         auto ask = [&](QueryItem it) -> QString {
             uint8_t sub = querySub(it, legacy);
             if (!sub) return QString();               // this core has no such entry
-            Reply r = exchange(query(deviceId_, sub), 250, 3);
+            Reply r = exchange(query(deviceId_, sub), 400);
             return (r.valid && r.cmd == ACK) ? QString::fromStdString(r.text()) : QString();
         };
 
