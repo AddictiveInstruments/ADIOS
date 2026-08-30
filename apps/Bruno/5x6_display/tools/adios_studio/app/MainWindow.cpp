@@ -148,7 +148,9 @@ MainWindow::MainWindow()
     connect(queryBtn_,   &QPushButton::clicked, this, [this] {
         if (!connected_ || uploader_->busy()) return;
         uploader_->setDeviceId(uint8_t(idBox_->value()));
-        queryBtn_->setEnabled(false);
+        // Do NOT disable the button here: disabling the focused widget makes Qt
+        // hand focus to the next tab stop (the hex field), which then selects
+        // all its text. The busy_ guard above already blocks a second Ping.
         uploader_->queryInfo();
     });
     connect(browseBtn_,  &QPushButton::clicked, this, &MainWindow::chooseHex);
