@@ -88,31 +88,13 @@ MainWindow::MainWindow()
     monOut_       = ui_->monOut;
     muteRt_       = ui_->muteRt;
 
-    // Monitor / log lists: one message per line, no wrap, no elision,
-    // horizontal scroll, individually selectable. (See makeList's old body.)
-    for (QListWidget* w : { devInfo_, uploadStatus_, term_, monIn_, monOut_ }) {
-        w->setUniformItemSizes(true);
-        w->setWordWrap(false);
-        w->setTextElideMode(Qt::ElideNone);
-        w->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        w->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    }
-
-    // Splitter behaviour the .ui cannot carry: Device Info fixed, the other
-    // two share the rest, and a wider window feeds the terminal first.
+    // Everything about the LAYOUT now lives in MainWindow.ui, so Qt Designer
+    // shows exactly what compiles. The one thing a .ui cannot carry is a
+    // splitter's stretch factor - how a WIDER window is shared. Device Info
+    // stays put, and the extra width feeds the terminal before the status.
     ui_->colsSplit->setStretchFactor(0, 0);
     ui_->colsSplit->setStretchFactor(1, 1);
     ui_->colsSplit->setStretchFactor(2, 2);
-    ui_->colsSplit->setSizes({ 340, 300, 300 });
-    ui_->monSplit->setSizes({ 480, 480 });
-
-    // The two big rows take the vertical space; the port bar, firmware row and
-    // progress bar stay their natural height. Without this the QVBoxLayout,
-    // which the .ui leaves stretch-less, would pad the top rows instead.
-    if (auto* rl = qobject_cast<QVBoxLayout*>(layout())) {
-        rl->setStretch(rl->indexOf(ui_->colsSplit), 1);
-        rl->setStretch(rl->indexOf(ui_->monGroup), 1);
-    }
 
     // Right-click menus (select all / copy / clear) on every list.
     auto wireMenu = [this](QListWidget* w) {
