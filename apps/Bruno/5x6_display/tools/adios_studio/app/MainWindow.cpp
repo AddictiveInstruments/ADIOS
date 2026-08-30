@@ -27,6 +27,9 @@
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QStackedWidget>
+#include <QStyle>
+#include <QStyledItemDelegate>
+#include <QTime>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -115,6 +118,47 @@ private:
     bool sub_ = false;
 };
 
+// Renders a monitor line, drawing the two hex chars of a RECREATED running-status
+// byte in a dimmer colour. The item carries UserRole = true and UserRole+1 = the
+// character index of that byte; otherwise the line paints as one colour.
+class MonitorDelegate : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+    void paint(QPainter* p, const QStyleOptionViewItem& opt, const QModelIndex& idx) const override
+    {
+        QStyleOptionViewItem o = opt;
+        initStyleOption(&o, idx);
+        const QWidget* w = o.widget;
+        QStyle* st = w ? w->style() : QApplication::style();
+        p->save();
+        st->drawPrimitive(QStyle::PE_PanelItemViewItem, &o, p, w);   // background + selection
+        const QString text = o.text;
+        const QRect tr = st->subElementRect(QStyle::SE_ItemViewItemText, &o, w);
+        const QFontMetrics fm(o.font);
+        p->setFont(o.font);
+        const QColor base = (o.state & QStyle::State_Selected)
+                            ? o.palette.highlightedText().color() : QColor(0xdf, 0xe4, 0xec);
+        const QColor dim = QColor(0x80, 0x8a, 0x99);      // recreated status byte
+        int x = tr.left();
+        auto seg = [&](const QString& s, const QColor& c) {
+            if (s.isEmpty()) return;
+            p->setPen(c);
+            p->drawText(QRect(x, tr.top(), fm.horizontalAdvance(s) + 2, tr.height()),
+                        Qt::AlignVCenter | Qt::AlignLeft, s);
+            x += fm.horizontalAdvance(s);
+        };
+        const int pos = idx.data(Qt::UserRole + 1).toInt();
+        if (idx.data(Qt::UserRole).toBool() && pos >= 0 && pos + 2 <= text.size()) {
+            seg(text.left(pos), base);
+            seg(text.mid(pos, 2), dim);
+            seg(text.mid(pos + 2), base);
+        } else {
+            seg(text, base);
+        }
+        p->restore();
+    }
+};
+
 // Colour codes shared with Uploader::infoLine: 0 normal, 1 updater, 2 boot.
 QColor infoColour(int c)
 {
@@ -171,6 +215,8 @@ MainWindow::MainWindow()
     sendBtn_      = ui_->sendBtn;
     monIn_        = ui_->monIn;
     monOut_       = ui_->monOut;
+    monIn_->setItemDelegate(new MonitorDelegate(monIn_));
+    monOut_->setItemDelegate(new MonitorDelegate(monOut_));
 
     // A .ui cannot carry a splitter's stretch factor, so both splitters get the
     // SAME recipe here: the first pane keeps its size (stretch 0), the second
@@ -427,17 +473,20 @@ void MainWindow::routeIn(const adios::Bytes& msg, uint64_t)
 {
     monitorLine(false, msg);
 
-    // ADIOS-family SysEx is shown as text in the terminal too. The uploader
-    // was already woken on the MIDI thread (onMidiIn), so this only displays.
-    if (msg.size() >= 7 && msg[0] == 0xf0 && msg[1] == 0x00 &&
-        msg[2] == 0x22 && msg[3] == 0x15) {
-        tr5x6::Reply r = tr5x6::parse(msg.data(), msg.size());
-        if (r.valid) {
-            QString txt = QString::fromStdString(r.text());
-            QString kind = r.cmd == tr5x6::ACK ? "ACK" : r.cmd == tr5x6::DISACK ? "DISACK"
-                          : QString("cmd 0x%1").arg(r.cmd, 2, 16, QChar('0'));
-            appendCapped(term_, new QListWidgetItem(
-                QString("< %1   %2").arg(kind, txt.isEmpty() ? hexFull(r.payload) : txt)));
+    // Debug Terminal: the core sends console text as a "debug string" SysEx
+    // (cmd 0x0D, sub 0x40) - F0 00 22 15 32 <id> 0D 40 <7-bit ascii...> F7.
+    // Decode the ASCII and print it, one entry per embedded line. (Ping/query
+    // ACKs are handled by the uploader and shown in Device Info, not here.)
+    if (msg.size() >= 9 && msg[0] == 0xf0 && msg[1] == 0x00 && msg[2] == 0x22 &&
+        msg[3] == 0x15 && msg[4] == 0x32 && msg[6] == 0x0d &&
+        (msg[7] == 0x40 || msg[7] == 0x00)) {
+        QString text;
+        for (size_t i = 8; i < msg.size() && msg[i] != 0xf7; ++i)
+            if (msg[i] < 0x80) text += QChar(msg[i]);
+        const QStringList lines = text.split('\n');
+        for (int k = 0; k < lines.size(); ++k) {
+            if (k == lines.size() - 1 && lines[k].isEmpty()) break;   // drop the final newline
+            appendCapped(term_, new QListWidgetItem(lines[k]));
         }
     }
 }
@@ -447,12 +496,27 @@ void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
     // The Filter always gates the Input side; it gates the Output side only when
     // its "Apply Filter" toggle is on (same settings, reused).
     if (!passesInFilter(msg) && (!out || applyOutFilter_)) return;
+
+    // Running status: a channel-voice message repeating the previous status byte
+    // travelled WITHOUT it on the wire, so its status byte here is recreated.
+    uint8_t& last = out ? lastStatusOut_ : lastStatusIn_;
+    bool running = false;
+    if (!msg.empty()) {
+        const uint8_t stb = msg[0];
+        if (stb >= 0x80 && stb <= 0xef)      { running = (stb == last); last = stb; }
+        else if (stb >= 0xf0 && stb <= 0xf7) { last = 0; }   // system common cancels it
+        // 0xf8..0xff (real time) is interleaved and leaves running status untouched
+    }
+
     adios::Decoded d = adios::decode(msg);
-    QString line = QString("%1  %2   %3")
-                       .arg(nowStamp())
-                       .arg(d.label.c_str(), -34)
-                       .arg(hexFull(msg));
-    appendCapped(out ? monOut_ : monIn_, new QListWidgetItem(line));
+    const QString hex = hexFull(msg);
+    const QString line = QString("%1   %2  %3").arg(nowStamp()).arg(d.label.c_str(), -38).arg(hex);
+    auto* it = new QListWidgetItem(line);
+    if (running) {
+        it->setData(Qt::UserRole, true);
+        it->setData(Qt::UserRole + 1, int(line.length() - hex.length()));   // status byte offset
+    }
+    appendCapped(out ? monOut_ : monIn_, it);
 }
 
 // Every on/off flag in filter_, paired with a stable key, so save and restore
@@ -673,8 +737,7 @@ bool MainWindow::passesInFilter(const adios::Bytes& m) const
 
 QString MainWindow::nowStamp()
 {
-    double s = clock_.isValid() ? clock_.elapsed() / 1000.0 : 0.0;
-    return QString("%1").arg(s, 9, 'f', 3);
+    return QTime::currentTime().toString("HH:mm:ss.zzz");   // absolute time of day
 }
 
 bool MainWindow::sendRaw(const adios::Bytes& msg)
@@ -691,12 +754,16 @@ bool MainWindow::sendRaw(const adios::Bytes& msg)
 void MainWindow::sendSysex()
 {
     if (!connected_) return;
-    adios::Bytes m;
-    if (!adios::parseHexLine(sysexBox_->text().toStdString(), m)) {
-        appendCapped(term_, new QListWidgetItem(tr("! invalid hex")));
-        return;
-    }
+    const QString cmd = sysexBox_->text();
+    // Terminal "input string": F0 00 22 15 32 <id> 0D 00 <7-bit ascii...> 0A F7.
+    // The trailing '\n' is what makes the core dispatch the accumulated line.
+    adios::Bytes m = { 0xf0, 0x00, 0x22, 0x15, 0x32, uint8_t(idBox_->value()), 0x0d, 0x00 };
+    for (QChar c : cmd) m.push_back(uint8_t(c.toLatin1()) & 0x7f);
+    m.push_back('\n');
+    m.push_back(0xf7);
     sendRaw(m);
+    appendCapped(term_, new QListWidgetItem("> " + cmd));   // echo the typed line
+    sysexBox_->clear();
 }
 
 void MainWindow::chooseHex()

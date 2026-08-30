@@ -129,7 +129,7 @@
       </layout>
      </widget>
      <widget class="QGroupBox" name="termGroup">
-      <property name="title"><string>Terminal (SysEx)</string></property>
+      <property name="title"><string>Terminal (Debug)</string></property>
       <property name="sizePolicy"><sizepolicy hsizetype="Preferred" vsizetype="Preferred"><horstretch>2</horstretch><verstretch>0</verstretch></sizepolicy></property>
       <layout class="QVBoxLayout" name="termLayout">
        <property name="leftMargin"><number>0</number></property>
@@ -149,7 +149,7 @@
         <layout class="QHBoxLayout" name="sendRow">
          <item>
           <widget class="QLineEdit" name="sysexBox">
-           <property name="placeholderText"><string>F0 00 22 15 32 00 0F F7   (Enter to send)</string></property>
+           <property name="placeholderText"><string>type a command, Enter to send  (e.g. help)</string></property>
           </widget>
          </item>
          <item>

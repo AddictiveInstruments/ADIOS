@@ -108,6 +108,8 @@ private:
     QListWidget* monIn_ = nullptr;
     QListWidget* monOut_ = nullptr;
     bool         applyOutFilter_ = false;   // reuse the Input filter on the Output side
+    uint8_t      lastStatusIn_ = 0;         // running-status tracking, per direction
+    uint8_t      lastStatusOut_ = 0;
 
     adios::In   in_;
     adios::Out  out_;
