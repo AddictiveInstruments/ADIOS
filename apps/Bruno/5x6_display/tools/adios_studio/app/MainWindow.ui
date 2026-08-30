@@ -82,14 +82,19 @@
     </widget>
    </item>
    <item>
-    <widget class="QSplitter" name="colsSplit">
+    <widget class="QSplitter" name="rowsSplit">
+     <property name="orientation"><enum>Qt::Vertical</enum></property>
+     <widget class="QSplitter" name="colsSplit">
      <property name="orientation"><enum>Qt::Horizontal</enum></property>
      <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
      <widget class="QGroupBox" name="devGroup">
       <property name="title"><string>Device Info</string></property>
-      <property name="minimumSize"><size><width>340</width><height>0</height></size></property>
-      <property name="maximumSize"><size><width>340</width><height>16777215</height></size></property>
+      <property name="minimumSize"><size><width>240</width><height>0</height></size></property>
       <layout class="QVBoxLayout" name="devLayout">
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
        <item>
         <widget class="QListWidget" name="devInfo">
          <property name="wordWrap"><bool>false</bool></property>
@@ -101,10 +106,17 @@
        </item>
       </layout>
      </widget>
-     <widget class="QGroupBox" name="statusGroup">
+     <widget class="QStackedWidget" name="panelStack">
+      <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
+      <property name="currentIndex"><number>1</number></property>
+      <widget class="QGroupBox" name="statusGroup">
       <property name="title"><string>Upload Status</string></property>
       <property name="sizePolicy"><sizepolicy hsizetype="Preferred" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
       <layout class="QVBoxLayout" name="statusLayout">
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
        <item>
         <widget class="QListWidget" name="uploadStatus">
          <property name="wordWrap"><bool>false</bool></property>
@@ -120,6 +132,10 @@
       <property name="title"><string>Terminal (SysEx)</string></property>
       <property name="sizePolicy"><sizepolicy hsizetype="Preferred" vsizetype="Preferred"><horstretch>2</horstretch><verstretch>0</verstretch></sizepolicy></property>
       <layout class="QVBoxLayout" name="termLayout">
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
        <item>
         <widget class="QListWidget" name="term">
          <property name="wordWrap"><bool>false</bool></property>
@@ -145,40 +161,19 @@
        </item>
       </layout>
      </widget>
+     </widget>
     </widget>
-   </item>
-   <item>
-    <widget class="QGroupBox" name="monGroup">
-     <property name="title"><string>MIDI Monitor</string></property>
-     <property name="sizePolicy"><sizepolicy hsizetype="Preferred" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
-     <layout class="QVBoxLayout" name="monLayout">
-      <item>
-       <layout class="QHBoxLayout" name="monHeader">
-        <item><widget class="QLabel" name="lblMonIn"><property name="text"><string>IN</string></property></widget></item>
-        <item>
-         <widget class="QCheckBox" name="muteRt">
-          <property name="text"><string>hide clock / realtime</string></property>
-          <property name="checked"><bool>true</bool></property>
-         </widget>
-        </item>
-        <item>
-         <spacer name="monHeaderSpacer1">
-          <property name="orientation"><enum>Qt::Horizontal</enum></property>
-          <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
-         </spacer>
-        </item>
-        <item><widget class="QLabel" name="lblMonOut"><property name="text"><string>OUT</string></property></widget></item>
-        <item>
-         <spacer name="monHeaderSpacer2">
-          <property name="orientation"><enum>Qt::Horizontal</enum></property>
-          <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
-         </spacer>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <widget class="QSplitter" name="monSplit">
-        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+    <widget class="QSplitter" name="monSplit">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
+     <widget class="QGroupBox" name="inGroup">
+      <property name="title"><string>MIDI Input Monitor</string></property>
+      <layout class="QVBoxLayout" name="inLayout">
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
+       <item>
         <widget class="QListWidget" name="monIn">
          <property name="wordWrap"><bool>false</bool></property>
          <property name="uniformItemSizes"><bool>true</bool></property>
@@ -186,6 +181,17 @@
          <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
          <property name="selectionMode"><enum>QAbstractItemView::ExtendedSelection</enum></property>
         </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QGroupBox" name="outGroup">
+      <property name="title"><string>MIDI Output Monitor</string></property>
+      <layout class="QVBoxLayout" name="outLayout">
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
+       <item>
         <widget class="QListWidget" name="monOut">
          <property name="wordWrap"><bool>false</bool></property>
          <property name="uniformItemSizes"><bool>true</bool></property>
@@ -193,9 +199,10 @@
          <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
          <property name="selectionMode"><enum>QAbstractItemView::ExtendedSelection</enum></property>
         </widget>
-       </widget>
-      </item>
-     </layout>
+       </item>
+      </layout>
+     </widget>
+    </widget>
     </widget>
    </item>
   </layout>

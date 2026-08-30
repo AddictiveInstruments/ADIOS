@@ -20,6 +20,8 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QSplitterHandle>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -85,15 +87,51 @@ MainWindow::MainWindow()
     sendBtn_      = ui_->sendBtn;
     monIn_        = ui_->monIn;
     monOut_       = ui_->monOut;
-    muteRt_       = ui_->muteRt;
 
-    // Everything about the LAYOUT now lives in MainWindow.ui, so Qt Designer
-    // shows exactly what compiles. The one thing a .ui cannot carry is a
-    // splitter's stretch factor - how a WIDER window is shared. Device Info
-    // stays put, and the extra width feeds the terminal before the status.
-    ui_->colsSplit->setStretchFactor(0, 0);
-    ui_->colsSplit->setStretchFactor(1, 1);
-    ui_->colsSplit->setStretchFactor(2, 2);
+    // A .ui cannot carry a splitter's stretch factor, so both splitters get the
+    // SAME recipe here: the first pane keeps its size (stretch 0), the second
+    // takes the rest (stretch 1), and only the handle moves them - never a window
+    // resize. Neither pane can be dragged away to nothing.
+    //   rowsSplit (vertical):   Device-Info row on top | MIDI Monitor below
+    //   colsSplit (horizontal): Device Info | Terminal / Upload-Status column
+    for (QSplitter* sp : {ui_->rowsSplit, ui_->colsSplit}) {
+        sp->setStretchFactor(0, 0);
+        sp->setStretchFactor(1, 1);
+        sp->setChildrenCollapsible(false);
+    }
+    // monSplit is the exception: BOTH monitor groups stretch EQUALLY, so their
+    // current ratio is preserved on a window resize (50/50 by default).
+    ui_->monSplit->setStretchFactor(0, 1);
+    ui_->monSplit->setStretchFactor(1, 1);
+    ui_->monSplit->setChildrenCollapsible(false);
+    // Splitter layout, once they have a real size (a splitter ignores setSizes
+    // given before it is shown). A remembered layout wins; otherwise the built-in
+    // defaults - 220 px for the panels row, 300 px for Device Info (snug around
+    // its widest line, the serial). stretch(0) then pins each first pane on a
+    // window resize, so only the handle changes those sizes - and whatever the
+    // user drags is saved on close and comes back next launch.
+    QTimer::singleShot(0, this, [this] {
+        QSettings s;
+        const QByteArray rs = s.value("rowsSplitState").toByteArray();
+        const QByteArray cs = s.value("colsSplitState").toByteArray();
+        const QByteArray ms = s.value("monSplitState").toByteArray();
+        if (rs.isEmpty()) ui_->rowsSplit->setSizes({220, qMax(0, ui_->rowsSplit->height() - 220)});
+        else              ui_->rowsSplit->restoreState(rs);
+        if (cs.isEmpty()) ui_->colsSplit->setSizes({300, qMax(0, ui_->colsSplit->width() - 300)});
+        else              ui_->colsSplit->restoreState(cs);
+        if (ms.isEmpty()) {                                  // 50/50: two equal
+            int hw = ui_->monSplit->width() / 2;             // halves, above the
+            ui_->monSplit->setSizes({hw, hw});               // group minimums so
+        } else                                               // nothing gets clamped
+            ui_->monSplit->restoreState(ms);
+    });
+
+    // A QSplitter handle does not repaint on mouse-over unless hover events are
+    // enabled on it, so the ::handle:hover stylesheet rule never fires. Turn
+    // them on by hand, on every splitter.
+    for (QSplitter* sp : {ui_->rowsSplit, ui_->colsSplit, ui_->monSplit})
+        for (int i = 0; i < sp->count(); ++i)
+            if (QSplitterHandle* h = sp->handle(i)) h->setAttribute(Qt::WA_Hover, true);
 
     // Right-click menus (select all / copy / clear) on every list.
     auto wireMenu = [this](QListWidget* w) {
@@ -136,9 +174,25 @@ MainWindow::MainWindow()
         it->setForeground(infoColour(c));
         appendCapped(devInfo_, it);
     });
-    connect(uploader_, &Uploader::finished, this, [this](bool) {
+    connect(uploader_, &Uploader::finished, this, [this](bool ok) {
         uploadBtn_->setEnabled(connected_ && !hexPath_->text().isEmpty());
         queryBtn_->setEnabled(connected_);
+        // finished() is shared with the Ping/query worker; only an actual upload
+        // runs the post-upload sequence.
+        if (!wasUpload_) return;
+        wasUpload_ = false;
+        // Same timing as MIOS Studio: the uploader already waited 3 s after the
+        // reboot command (Uploader::run), and the window adds 5 s more here
+        // (UploadWindow.cpp TIMER_DELAYED_PROGRESS_OFF = 5000) so the app is sure
+        // to have booted before we query it. Upload Status stays up the whole
+        // time (the startup debug still fills the hidden Terminal); then the
+        // Terminal comes back and the delayed re-read fires, refreshing Device
+        // Info with what now runs.
+        QTimer::singleShot(5000, this, [this, ok] {
+            progress_->setValue(0);
+            ui_->panelStack->setCurrentWidget(ui_->termGroup);
+            if (ok && connected_) uploader_->queryInfo();
+        });
     });
 
     // No Connect button: the ports open by themselves, and re-open whenever
@@ -202,6 +256,9 @@ void MainWindow::saveSettings()
     s.setValue("deviceId", idBox_->value());
     s.setValue("hexFile",  hexPath_->text());
     s.setValue("browseDir", lastDir_);
+    s.setValue("rowsSplitState", ui_->rowsSplit->saveState());
+    s.setValue("colsSplitState", ui_->colsSplit->saveState());
+    s.setValue("monSplitState",  ui_->monSplit->saveState());
 }
 
 void MainWindow::closeEvent(QCloseEvent* e)
@@ -291,7 +348,7 @@ void MainWindow::routeIn(const adios::Bytes& msg, uint64_t)
 void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
 {
     adios::Decoded d = adios::decode(msg);
-    if (d.isRealtime && muteRt_->isChecked()) return;
+    if (d.isRealtime && hideRealtime_) return;
     QString line = QString("%1  %2   %3")
                        .arg(nowStamp())
                        .arg(d.label.c_str(), -34)
@@ -340,6 +397,8 @@ void MainWindow::chooseHex()
 void MainWindow::doUpload()
 {
     if (!connected_ || uploader_->busy()) return;
+    wasUpload_ = true;
+    ui_->panelStack->setCurrentWidget(ui_->statusGroup);   // show Upload Status
     uploader_->setDeviceId(uint8_t(idBox_->value()));
     progress_->setValue(0);
     uploadBtn_->setEnabled(false);

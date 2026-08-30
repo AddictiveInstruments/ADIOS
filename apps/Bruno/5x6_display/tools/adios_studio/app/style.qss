@@ -14,11 +14,11 @@ QGroupBox {
     border: 1px solid #2a2f3a;
     border-radius: 4px;
     margin-top: 10px;
-    padding: 8px 8px 8px 8px;
+    padding: 15px;                /* symmetric - listbox border sits under the title's first letter */
 }
 QGroupBox::title {
     subcontrol-origin: margin;
-    left: 10px;
+    left: 10px;                   /* title stays where it was */
     padding: 0 4px;
     color: #8a94a6;
 }
@@ -41,7 +41,7 @@ QListWidget {
     background: #12151c;
     border: 1px solid #2a2f3a;
     border-radius: 3px;
-    padding: 2px;
+    padding: 0;              /* no frame padding: the scrollbars sit flush to the border */
     outline: 0;
 }
 QListWidget#devInfo, QListWidget#uploadStatus, QListWidget#term,
@@ -49,7 +49,7 @@ QListWidget#monIn, QListWidget#monOut {
     font-family: "Consolas", "Menlo", monospace;
     font-size: 12px;
 }
-QListWidget::item { padding: 0 2px; }
+QListWidget::item { padding: 0 4px; }   /* text inset lives on the item, not the frame */
 QListWidget::item:selected { background: #2c4a6e; color: #f2f6fc; }
 
 QPushButton {
@@ -57,6 +57,7 @@ QPushButton {
     border: 1px solid #3d4757;
     border-radius: 2px;
     padding: 4px 16px;
+    outline: 0;              /* no dotted focus rectangle when the button keeps focus */
 }
 QPushButton:hover   { background: #39435a; }
 QPushButton:pressed { background: #262d38; }
@@ -90,8 +91,25 @@ QProgressBar::chunk { background: #4a7ab8; border-radius: 2px; }
 
 QCheckBox { color: #8a94a6; }
 
-QSplitter::handle { background: #2a2f3a; width: 3px; }
+/* Handles are invisible at rest - they show the window ground between blocks -
+   and only light up under the mouse. Same 4 px thickness both ways. */
+QSplitter::handle            { background: transparent; }
+QSplitter::handle:horizontal { width: 4px; }
+QSplitter::handle:vertical   { height: 4px; }
+QSplitter::handle:hover      { background: #4a5566; }
 
-QScrollBar:vertical { background: #12151c; width: 10px; margin: 0; }
-QScrollBar::handle:vertical { background: #3d4757; border-radius: 5px; min-height: 20px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+/* Scrollbars: horizontal and vertical styled identically. The groove is a plain
+   very light grey - it replaces the native dithered "checkerboard" that leaked
+   through on the unstyled (horizontal) bar and the scroll-area corner. Arrows
+   and page steps are flattened so nothing native shows. */
+QScrollBar:vertical   { background: #cdd2da; width: 10px;  margin: 0; border: none; }
+QScrollBar:horizontal { background: #cdd2da; height: 10px; margin: 0; border: none; }
+QScrollBar::handle:vertical   { background: #3d4757; border-radius: 5px; min-height: 20px; }
+QScrollBar::handle:horizontal { background: #3d4757; border-radius: 5px; min-width: 20px; }
+QScrollBar::handle:hover { background: #4a5566; }
+QScrollBar::add-line:vertical,   QScrollBar::sub-line:vertical   { height: 0; width: 0; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+/* The little square where the two scrollbars meet is NOT a scrollbar: it takes
+   the window ground, not the grey groove colour. */
+QAbstractScrollArea::corner, QListWidget::corner { background: #1c212b; border: none; }

@@ -81,12 +81,13 @@ private:
     // --- monitor ---
     QListWidget* monIn_ = nullptr;
     QListWidget* monOut_ = nullptr;
-    QCheckBox*   muteRt_ = nullptr;
+    bool         hideRealtime_ = true;   // filter clock/realtime (checkbox to return later)
 
     adios::In   in_;
     adios::Out  out_;
     std::mutex  outGuard_;
     bool        connected_ = false;
+    bool        wasUpload_ = false;   // tells the shared finished() an upload just ran
 
     Uploader*   uploader_ = nullptr;
 
