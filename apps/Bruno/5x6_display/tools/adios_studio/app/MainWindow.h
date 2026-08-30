@@ -37,7 +37,7 @@ protected:
     void closeEvent(QCloseEvent*) override;
 
 private slots:
-    void toggleConnect();
+    void connectPorts();   // auto: opens the selected In/Out, no Connect button
     void chooseHex();
     void doUpload();
     void sendSysex();
@@ -61,9 +61,7 @@ private:
     QComboBox*   inBox_  = nullptr;
     QComboBox*   outBox_ = nullptr;
     QSpinBox*    idBox_  = nullptr;
-    QPushButton* connectBtn_ = nullptr;
-    QPushButton* queryBtn_ = nullptr;
-    QLabel*      link_ = nullptr;
+    QPushButton* queryBtn_ = nullptr;   // labelled "Ping"
 
     // --- device info ---
     QListWidget* devInfo_ = nullptr;

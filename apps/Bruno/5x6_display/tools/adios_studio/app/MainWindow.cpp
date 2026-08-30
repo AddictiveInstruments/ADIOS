@@ -17,6 +17,7 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QTimer>
@@ -72,9 +73,7 @@ MainWindow::MainWindow()
     inBox_        = ui_->inBox;
     outBox_       = ui_->outBox;
     idBox_        = ui_->idBox;
-    connectBtn_   = ui_->connectBtn;
     queryBtn_     = ui_->queryBtn;
-    link_         = ui_->link;
     devInfo_      = ui_->devInfo;
     hexPath_      = ui_->hexPath;
     browseBtn_    = ui_->browseBtn;
@@ -142,7 +141,10 @@ MainWindow::MainWindow()
         queryBtn_->setEnabled(connected_);
     });
 
-    connect(connectBtn_, &QPushButton::clicked, this, &MainWindow::toggleConnect);
+    // No Connect button: the ports open by themselves, and re-open whenever
+    // the selection changes.
+    connect(inBox_,  QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::connectPorts);
+    connect(outBox_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::connectPorts);
     connect(queryBtn_,   &QPushButton::clicked, this, [this] {
         if (!connected_ || uploader_->busy()) return;
         uploader_->setDeviceId(uint8_t(idBox_->value()));
@@ -160,10 +162,15 @@ MainWindow::MainWindow()
     connect(timer_, &QTimer::timeout, this, &MainWindow::onTick);
     timer_->start(20);
 
-    for (const auto& p : adios::inPorts())  inBox_->addItem(QString::fromStdString(p));
-    for (const auto& p : adios::outPorts()) outBox_->addItem(QString::fromStdString(p));
-    restoreSettings();
-    setConnected(false);
+    // Fill and restore WITHOUT firing the combo signal (which would reconnect
+    // on every added item); then open the remembered ports exactly once.
+    {
+        QSignalBlocker b1(inBox_), b2(outBox_);
+        for (const auto& p : adios::inPorts())  inBox_->addItem(QString::fromStdString(p));
+        for (const auto& p : adios::outPorts()) outBox_->addItem(QString::fromStdString(p));
+        restoreSettings();
+    }
+    connectPorts();
 }
 
 MainWindow::~MainWindow()
@@ -204,43 +211,36 @@ void MainWindow::closeEvent(QCloseEvent* e)
 void MainWindow::setConnected(bool on)
 {
     connected_ = on;
-    connectBtn_->setText(on ? tr("Disconnect") : tr("Connect"));
-    inBox_->setEnabled(!on);
-    outBox_->setEnabled(!on);
     uploadBtn_->setEnabled(on && !hexPath_->text().isEmpty());
     sendBtn_->setEnabled(on);
     queryBtn_->setEnabled(on);
 }
 
-void MainWindow::toggleConnect()
+// Opens the selected In/Out ports. Called at startup and whenever a combo
+// changes - there is no Connect button. A failure is reported in the Terminal
+// (the status label is gone) and simply leaves the actions disabled.
+void MainWindow::connectPorts()
 {
-    if (connected_) {
-        in_.close();
-        out_.close();
-        setConnected(false);
-        link_->setText(tr("disconnected"));
-        return;
-    }
-    if (inBox_->count() == 0 || outBox_->count() == 0) {
-        link_->setText(tr("no MIDI port"));
-        return;
-    }
+    in_.close();
+    out_.close();
+    setConnected(false);
+
+    if (inBox_->count() == 0 || outBox_->count() == 0) return;
+
     std::string err;
     if (!out_.open(unsigned(outBox_->currentIndex()), err)) {
-        link_->setText(QString::fromStdString(err));
+        appendCapped(term_, new QListWidgetItem("! MIDI Out: " + QString::fromStdString(err)));
         return;
     }
     if (!in_.open(unsigned(inBox_->currentIndex()),
                   [this](const adios::Bytes& m, uint64_t t) { onMidiIn(m, t); }, err)) {
         out_.close();
-        link_->setText(QString::fromStdString(err));
+        appendCapped(term_, new QListWidgetItem("! MIDI In: " + QString::fromStdString(err)));
         return;
     }
     uploader_->setDeviceId(uint8_t(idBox_->value()));
     clock_.restart();
     setConnected(true);
-    link_->setText(tr("connected  —  %1  →  %2")
-                       .arg(inBox_->currentText(), outBox_->currentText()));
 }
 
 // ---- MIDI thread: park the message, the timer drains it ------------------
