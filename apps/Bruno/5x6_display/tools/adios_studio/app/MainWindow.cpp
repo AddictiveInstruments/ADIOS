@@ -7,22 +7,28 @@
 #include <QComboBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontMetrics>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
+#include <QPainter>
+#include <QRadioButton>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSettings>
+#include <QSizePolicy>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QStackedWidget>
 #include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include "Uploader.h"
@@ -31,6 +37,84 @@
 #include "../../5x6_upgrader/core/sysex.h"
 
 namespace {
+// A small square button painting an equilateral disclosure triangle - pointing
+// down when expanded (checked), right when collapsed. The side equals the text
+// height, so it scales with the font.
+class TriangleButton : public QToolButton {
+public:
+    explicit TriangleButton(QWidget* parent = nullptr) : QToolButton(parent) {
+        setCheckable(true);
+        setAutoRaise(true);
+        setChecked(true);
+        setCursor(Qt::PointingHandCursor);
+        setAttribute(Qt::WA_Hover, true);
+    }
+    QSize sizeHint() const override { return QSize(16, fontMetrics().height()); }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        const double s = qMax(7.0, fontMetrics().ascent() * 0.60);   // side, kept small
+        const double h = s * 0.86602540378;               // equilateral height (s*sqrt3/2)
+        const double cx = width() / 2.0, cy = height() / 2.0;
+        QPointF tri[3];                                   // centred by bounding box
+        if (isChecked()) {                                // pointing down
+            tri[0] = QPointF(cx - s / 2, cy - h / 2);
+            tri[1] = QPointF(cx + s / 2, cy - h / 2);
+            tri[2] = QPointF(cx,         cy + h / 2);
+        } else {                                          // pointing right
+            tri[0] = QPointF(cx - h / 2, cy - s / 2);
+            tri[1] = QPointF(cx - h / 2, cy + s / 2);
+            tri[2] = QPointF(cx + h / 2, cy);
+        }
+        QColor col = isChecked() ? QColor(0xdf, 0xe4, 0xec) : QColor(0x8a, 0x94, 0xa6);
+        if (underMouse()) col = QColor(0xff, 0xff, 0xff);
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setPen(Qt::NoPen);
+        p.setBrush(col);
+        p.drawPolygon(tri, 3);
+    }
+};
+
+// A filter checkbox drawn by hand: a coloured box border (green = on, red = off,
+// grey = disabled) with NO fill, a white tick when on, and text that dims when
+// off (the "sub-filter is inactive" cue).
+class FilterCheckBox : public QCheckBox {
+public:
+    using QCheckBox::QCheckBox;
+    void setSub(bool s) { sub_ = s; update(); }   // child sub-filter -> dimmer text
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        const int box = 12;
+        const double top = (height() - box) / 2.0;
+        // Border shows the STATE (green on / red off); text colour shows the TREE
+        // LEVEL (parent brighter, child dimmer) - not the checked state.
+        QColor border = isChecked() ? QColor(0x55, 0xb5, 0x6a) : QColor(0xe0, 0x66, 0x6b);
+        QColor txt    = sub_ ? QColor(0x5a, 0x61, 0x72) : QColor(0x8a, 0x94, 0xa6);
+        if (!isEnabled()) { border = QColor(0x3a, 0x3f, 0x4a); txt = QColor(0x41, 0x46, 0x50); }
+        p.setPen(QPen(border, 1.0));
+        p.setBrush(Qt::NoBrush);                         // no fill, ever
+        p.drawRoundedRect(QRectF(0.5, top + 0.5, box - 1, box - 1), 2, 2);
+        if (isChecked()) {                               // white tick
+            QColor chk = isEnabled() ? QColor(0xff, 0xff, 0xff) : QColor(0x6a, 0x70, 0x7c);
+            QPen pen(chk, 1.6); pen.setCapStyle(Qt::RoundCap); pen.setJoinStyle(Qt::RoundJoin);
+            p.setPen(pen);
+            QPointF tick[3] = { QPointF(2.6, top + 6.2), QPointF(4.8, top + 8.6), QPointF(9.2, top + 3.0) };
+            p.drawPolyline(tick, 3);
+        }
+        p.setPen(txt);
+        p.drawText(QRect(box + 6, 0, width() - box - 6, height()),
+                   Qt::AlignVCenter | Qt::AlignLeft, text());
+    }
+    QSize sizeHint() const override {
+        return QSize(12 + 6 + fontMetrics().horizontalAdvance(text()) + 2,
+                     qMax(16, fontMetrics().height()));
+    }
+private:
+    bool sub_ = false;
+};
+
 // Colour codes shared with Uploader::infoLine: 0 normal, 1 updater, 2 boot.
 QColor infoColour(int c)
 {
@@ -132,6 +216,8 @@ MainWindow::MainWindow()
     for (QSplitter* sp : {ui_->rowsSplit, ui_->colsSplit, ui_->monSplit})
         for (int i = 0; i < sp->count(); ++i)
             if (QSplitterHandle* h = sp->handle(i)) h->setAttribute(Qt::WA_Hover, true);
+
+    buildInputFilter();   // the collapsible Filter above the Input monitor list
 
     // Right-click menus (select all / copy / clear) on every list.
     auto wireMenu = [this](QListWidget* w) {
@@ -259,6 +345,17 @@ void MainWindow::saveSettings()
     s.setValue("rowsSplitState", ui_->rowsSplit->saveState());
     s.setValue("colsSplitState", ui_->colsSplit->saveState());
     s.setValue("monSplitState",  ui_->monSplit->saveState());
+
+    // Filter: flags, channel mask, the Output "Apply Filter" toggle, and which
+    // triangles are expanded - so the whole panel comes back as the user left it.
+    s.setValue("filter/saved", true);
+    for (const auto& f : filterFields()) s.setValue("filter/" + f.first, *f.second);
+    s.setValue("filter/channelMask", filter_.channelMask);
+    s.setValue("filter/applyOut", applyOutFilter_);
+    if (filterBtn_) s.setValue("filter/expOuter", filterBtn_->isChecked());
+    if (triVoice_)  s.setValue("filter/expVoice", triVoice_->isChecked());
+    if (triSys_)    s.setValue("filter/expSys", triSys_->isChecked());
+    if (triRt_)     s.setValue("filter/expRt", triRt_->isChecked());
 }
 
 void MainWindow::closeEvent(QCloseEvent* e)
@@ -347,13 +444,231 @@ void MainWindow::routeIn(const adios::Bytes& msg, uint64_t)
 
 void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
 {
+    // The Filter always gates the Input side; it gates the Output side only when
+    // its "Apply Filter" toggle is on (same settings, reused).
+    if (!passesInFilter(msg) && (!out || applyOutFilter_)) return;
     adios::Decoded d = adios::decode(msg);
-    if (d.isRealtime && hideRealtime_) return;
     QString line = QString("%1  %2   %3")
                        .arg(nowStamp())
                        .arg(d.label.c_str(), -34)
                        .arg(hexFull(msg));
     appendCapped(out ? monOut_ : monIn_, new QListWidgetItem(line));
+}
+
+// Every on/off flag in filter_, paired with a stable key, so save and restore
+// stay in sync from one list.
+QList<QPair<QString, bool*>> MainWindow::filterFields()
+{
+    return {
+        {"voice", &filter_.voice}, {"noteOnOff", &filter_.noteOnOff}, {"aftertouch", &filter_.aftertouch},
+        {"control", &filter_.control}, {"program", &filter_.program}, {"chanPressure", &filter_.chanPressure},
+        {"pitch", &filter_.pitch},
+        {"sysCommon", &filter_.sysCommon}, {"timeCode", &filter_.timeCode}, {"songPos", &filter_.songPos},
+        {"songSel", &filter_.songSel}, {"tuneReq", &filter_.tuneReq},
+        {"realTime", &filter_.realTime}, {"clock", &filter_.clock}, {"startStop", &filter_.startStop},
+        {"activeSense", &filter_.activeSense}, {"reset", &filter_.reset},
+        {"sysex", &filter_.sysex}, {"invalid", &filter_.invalid},
+    };
+}
+
+// Builds the collapsible Filter (a triangle header + a grid of checkboxes) and
+// inserts it above the Input monitor's list. Each checkbox writes straight into
+// filter_; passesInFilter() reads it for every incoming message.
+void MainWindow::buildInputFilter()
+{
+    filterBtn_   = new TriangleButton;   // outer disclosure triangle
+    filterPanel_ = new QWidget;
+    // Hug the content vertically so collapsing categories leaves no dead space -
+    // the monitor list (below, Expanding) takes back whatever the filter frees.
+    filterPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+
+    // Restore the saved filter; on the very first launch (nothing saved) start
+    // with everything collapsed and the default flags.
+    QSettings fs;
+    const bool haveFilter = fs.value("filter/saved", false).toBool();
+    bool expOuter = false, expVoice = false, expSys = false, expRt = false;
+    if (haveFilter) {
+        for (const auto& f : filterFields()) *f.second = fs.value("filter/" + f.first, *f.second).toBool();
+        filter_.channelMask = uint16_t(fs.value("filter/channelMask", filter_.channelMask).toUInt());
+        applyOutFilter_ = fs.value("filter/applyOut", applyOutFilter_).toBool();
+        expOuter = fs.value("filter/expOuter", true).toBool();
+        expVoice = fs.value("filter/expVoice", true).toBool();
+        expSys   = fs.value("filter/expSys", true).toBool();
+        expRt    = fs.value("filter/expRt", true).toBool();
+    }
+
+    auto cb = [this](const QString& text, bool checked, bool* field, bool sub = true) {
+        auto* c = new FilterCheckBox(text);
+        c->setSub(sub);                          // children are sub-filters (dimmer)
+        c->setChecked(checked);
+        connect(c, &QCheckBox::toggled, this, [field](bool v) { *field = v; });
+        return c;
+    };
+
+    auto* col = new QVBoxLayout(filterPanel_);
+    col->setContentsMargins(0, 4, 0, 6);
+    col->setSpacing(2);
+
+    // A collapsible category: [triangle(16)][master cb]; children are indented by
+    // exactly the 16 px triangle gutter, so every checkbox lines up in one column.
+    auto addCategory = [this, col](const QString& title, bool* master, bool checked, bool expanded,
+                                   QVBoxLayout* body, QList<QWidget*> kids) -> QToolButton* {
+        auto* tri = new TriangleButton; tri->setFixedWidth(16);
+        auto* mcb = new FilterCheckBox(title);
+        mcb->setChecked(checked);
+        auto* head = new QHBoxLayout; head->setContentsMargins(0, 0, 0, 0); head->setSpacing(0);
+        head->addWidget(tri); head->addWidget(mcb); head->addStretch();
+        col->addLayout(head);
+        auto* w = new QWidget; w->setLayout(body);
+        col->addWidget(w);
+        for (auto* k : kids) k->setEnabled(checked);
+        connect(mcb, &QCheckBox::toggled, this, [master, kids](bool v) { *master = v; for (auto* k : kids) k->setEnabled(v); });
+        connect(tri, &QToolButton::toggled, w, [w](bool on) { w->setVisible(on); });
+        tri->setChecked(expanded);
+        return tri;
+    };
+
+    // ---- Voice Messages: the six types on the left, Channels block on the
+    //      right (level with Note On/Off) ----
+    {
+        auto* body = new QVBoxLayout; body->setContentsMargins(16, 0, 0, 4); body->setSpacing(2);
+        auto* twoCol = new QHBoxLayout; twoCol->setContentsMargins(0, 0, 0, 0); twoCol->setSpacing(28);
+        body->addLayout(twoCol);
+
+        auto* left = new QVBoxLayout; left->setContentsMargins(0, 0, 0, 0); left->setSpacing(2);
+        QList<QWidget*> kids;
+        kids << cb("Note On/Off", filter_.noteOnOff, &filter_.noteOnOff)
+             << cb("Aftertouch (Poly)", filter_.aftertouch, &filter_.aftertouch)
+             << cb("Control", filter_.control, &filter_.control)
+             << cb("Program", filter_.program, &filter_.program)
+             << cb("Channel Pressure", filter_.chanPressure, &filter_.chanPressure)
+             << cb("Pitch Wheel", filter_.pitch, &filter_.pitch);
+        for (auto* k : kids) left->addWidget(k);
+        left->addStretch();
+
+        auto* right = new QVBoxLayout; right->setContentsMargins(0, 0, 0, 0); right->setSpacing(2);
+        auto* lblCh = new QLabel("Channels"); lblCh->setObjectName("filterSub");   // child of Voice
+        right->addWidget(lblCh);
+
+        auto* chBody = new QWidget;
+        auto* chRow = new QHBoxLayout(chBody); chRow->setContentsMargins(0, 2, 0, 0); chRow->setSpacing(10);
+        auto* grid = new QGridLayout; grid->setContentsMargins(0, 0, 0, 0); grid->setSpacing(3);
+        QList<QPushButton*> chBtns;
+        for (int i = 0; i < 16; ++i) {
+            auto* pb = new QPushButton(QString::number(i + 1));
+            pb->setObjectName("chanBtn"); pb->setCheckable(true); pb->setFixedSize(18, 18);
+            pb->setChecked(filter_.channelMask & (1u << i));
+            connect(pb, &QPushButton::toggled, this, [this, i](bool v) {
+                filter_.channelMask = uint16_t(v ? (filter_.channelMask | (1u << i))
+                                                 : (filter_.channelMask & ~(1u << i)));
+            });
+            chBtns << pb; grid->addWidget(pb, i / 4, i % 4);
+        }
+        auto* setAll = new QPushButton("Set all");   setAll->setObjectName("miniBtn"); setAll->setFixedHeight(18);
+        auto* clrAll = new QPushButton("Clear all"); clrAll->setObjectName("miniBtn"); clrAll->setFixedHeight(18);
+        connect(setAll, &QPushButton::clicked, this, [chBtns] { for (auto* pb : chBtns) pb->setChecked(true); });
+        connect(clrAll, &QPushButton::clicked, this, [chBtns] { for (auto* pb : chBtns) pb->setChecked(false); });
+        // spacing 3 like the grid rows so Set all lines up with 1-4, Clear all with 5-8
+        auto* btnCol = new QVBoxLayout; btnCol->setContentsMargins(0, 0, 0, 0); btnCol->setSpacing(3);
+        btnCol->addWidget(setAll); btnCol->addWidget(clrAll); btnCol->addStretch();
+        chRow->addLayout(grid); chRow->addLayout(btnCol); chRow->addStretch();
+        right->addWidget(chBody);
+        right->addStretch();
+
+        twoCol->addLayout(left);
+        twoCol->addLayout(right);
+        twoCol->addStretch();
+
+        kids << lblCh << setAll << clrAll;
+        for (auto* pb : chBtns) kids << pb;
+        triVoice_ = addCategory("Voice Messages", &filter_.voice, filter_.voice, expVoice, body, kids);
+    }
+
+    // ---- System Common ----
+    {
+        auto* body = new QVBoxLayout; body->setContentsMargins(16, 0, 0, 4); body->setSpacing(2);
+        QList<QWidget*> kids;
+        kids << cb("Time Code", filter_.timeCode, &filter_.timeCode)
+             << cb("Song Position Pointer", filter_.songPos, &filter_.songPos)
+             << cb("Song Select", filter_.songSel, &filter_.songSel)
+             << cb("Tune Request", filter_.tuneReq, &filter_.tuneReq);
+        for (auto* k : kids) body->addWidget(k);
+        triSys_ = addCategory("System Common", &filter_.sysCommon, filter_.sysCommon, expSys, body, kids);
+    }
+
+    // ---- Real Time (off by default) ----
+    {
+        auto* body = new QVBoxLayout; body->setContentsMargins(16, 0, 0, 4); body->setSpacing(2);
+        QList<QWidget*> kids;
+        kids << cb("Clock", filter_.clock, &filter_.clock)
+             << cb("Start/Stop/Continue", filter_.startStop, &filter_.startStop)
+             << cb("Active Sense", filter_.activeSense, &filter_.activeSense)
+             << cb("Reset", filter_.reset, &filter_.reset);
+        for (auto* k : kids) body->addWidget(k);
+        triRt_ = addCategory("Real Time", &filter_.realTime, filter_.realTime, expRt, body, kids);
+    }
+
+    // ---- standalone, aligned in the same checkbox column (16 px gutter) ----
+    auto standalone = [col](QCheckBox* c) {
+        auto* row = new QHBoxLayout; row->setContentsMargins(0, 0, 0, 0); row->setSpacing(0);
+        row->addSpacing(16); row->addWidget(c); row->addStretch();
+        col->addLayout(row);
+    };
+    standalone(cb("System Exclusive", filter_.sysex, &filter_.sysex, false));
+    standalone(cb("Invalid", filter_.invalid, &filter_.invalid, false));
+
+    // ---- outer collapse: triangle + "Filter" label, above the list ----
+    filterBtn_->setChecked(expOuter);
+    connect(filterBtn_, &QToolButton::toggled, this, [this](bool on) { filterPanel_->setVisible(on); });
+    filterPanel_->setVisible(filterBtn_->isChecked());
+
+    auto* outerHead = new QWidget;
+    auto* oh = new QHBoxLayout(outerHead); oh->setContentsMargins(0, 0, 0, 0); oh->setSpacing(4);
+    auto* flabel = new QLabel("Filter"); flabel->setObjectName("filterLabel");
+    oh->addWidget(filterBtn_); oh->addWidget(flabel); oh->addStretch();
+
+    auto* lay = qobject_cast<QVBoxLayout*>(ui_->inGroup->layout());
+    lay->insertWidget(0, outerHead);
+    lay->insertWidget(1, filterPanel_);
+
+    // The Output monitor gets an "Apply Filter" toggle, level with the Input's
+    // "Filter" header. On, the OUT side reuses the very same filter settings.
+    auto* applyOut = new FilterCheckBox("Apply Filter");
+    applyOut->setChecked(applyOutFilter_);
+    connect(applyOut, &QCheckBox::toggled, this, [this](bool v) { applyOutFilter_ = v; });
+    if (auto* ol = qobject_cast<QVBoxLayout*>(ui_->outGroup->layout()))
+        ol->insertWidget(0, applyOut, 0, Qt::AlignLeft);
+}
+
+// Does an incoming message pass the Input filter? Classified by MIDI status byte.
+bool MainWindow::passesInFilter(const adios::Bytes& m) const
+{
+    if (m.empty()) return true;
+    uint8_t st = m[0];
+    if (st < 0x80) return filter_.invalid;               // stray data byte, no status
+    auto chan = [&] { return (filter_.channelMask & (1u << (st & 0x0f))) != 0; };
+    switch (st & 0xf0) {
+    case 0x80: case 0x90: return filter_.voice && filter_.noteOnOff && chan();
+    case 0xA0:            return filter_.voice && filter_.aftertouch && chan();
+    case 0xB0:            return filter_.voice && filter_.control && chan();
+    case 0xC0:            return filter_.voice && filter_.program && chan();
+    case 0xD0:            return filter_.voice && filter_.chanPressure && chan();
+    case 0xE0:            return filter_.voice && filter_.pitch && chan();
+    case 0xF0:
+        switch (st) {
+        case 0xF0: case 0xF7: return filter_.sysex;
+        case 0xF1:           return filter_.sysCommon && filter_.timeCode;
+        case 0xF2:           return filter_.sysCommon && filter_.songPos;
+        case 0xF3:           return filter_.sysCommon && filter_.songSel;
+        case 0xF6:           return filter_.sysCommon && filter_.tuneReq;
+        case 0xF8:           return filter_.realTime && filter_.clock;
+        case 0xFA: case 0xFB: case 0xFC: return filter_.realTime && filter_.startStop;
+        case 0xFE:           return filter_.realTime && filter_.activeSense;
+        case 0xFF:           return filter_.realTime && filter_.reset;
+        default:             return filter_.invalid;     // F4/F5/F9/FD undefined
+        }
+    }
+    return filter_.invalid;
 }
 
 QString MainWindow::nowStamp()

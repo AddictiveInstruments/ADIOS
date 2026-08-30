@@ -8,6 +8,9 @@
 
 #pragma once
 #include <QElapsedTimer>
+#include <QList>
+#include <QPair>
+#include <QString>
 #include <QWidget>
 #include <cstdint>
 #include <mutex>
@@ -18,6 +21,7 @@
 class QComboBox;
 class QSpinBox;
 class QPushButton;
+class QToolButton;
 class QLineEdit;
 class QLabel;
 class QProgressBar;
@@ -55,6 +59,28 @@ private:
     void setConnected(bool on);
     QString nowStamp();
 
+    // Collapsible message filter above the Input monitor list.
+    void buildInputFilter();
+    bool passesInFilter(const adios::Bytes& msg) const;
+    QList<QPair<QString, bool*>> filterFields();   // named on/off flags, for save/restore
+
+    // What the Input monitor shows, by MIDI message type. Defaults mirror the
+    // old behaviour: everything except Real Time (clock/realtime hidden).
+    struct InFilter {
+        bool voice = true;
+        bool noteOnOff = true, aftertouch = true, control = true,
+             program = true, chanPressure = true, pitch = true;
+        uint16_t channelMask = 0xFFFF;   // one bit per MIDI channel 1..16
+        bool sysCommon = true, timeCode = true, songPos = true, songSel = true, tuneReq = true;
+        bool realTime = false, clock = false, startStop = false, activeSense = false, reset = false;
+        bool sysex = true, invalid = true;
+    } filter_;
+    QToolButton* filterBtn_ = nullptr;    // the triangle header
+    QWidget*     filterPanel_ = nullptr;  // the checkbox grid it shows/hides
+    QToolButton* triVoice_ = nullptr;     // category triangles, kept for save/restore
+    QToolButton* triSys_ = nullptr;
+    QToolButton* triRt_ = nullptr;
+
     Ui::MainWindow* ui_ = nullptr;   // the static layout, from MainWindow.ui
 
     // --- ports --- (pointers grabbed from ui_ after setupUi)
@@ -81,7 +107,7 @@ private:
     // --- monitor ---
     QListWidget* monIn_ = nullptr;
     QListWidget* monOut_ = nullptr;
-    bool         hideRealtime_ = true;   // filter clock/realtime (checkbox to return later)
+    bool         applyOutFilter_ = false;   // reuse the Input filter on the Output side
 
     adios::In   in_;
     adios::Out  out_;

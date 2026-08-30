@@ -89,7 +89,31 @@ QProgressBar {
 }
 QProgressBar::chunk { background: #4a7ab8; border-radius: 2px; }
 
-QCheckBox { color: #8a94a6; }
+QCheckBox { color: #8a94a6; spacing: 4px; }
+
+/* --- Input filter tree --- */
+QToolButton { background: transparent; border: none; }   /* the disclosure triangles */
+QLabel#filterLabel { color: #8a94a6; }   /* parent-level label */
+QLabel#filterSub   { color: #5a6172; }   /* sub-filter label (child), e.g. Channels */
+
+/* filter checkboxes are painted by FilterCheckBox (border + white tick, no fill) */
+
+/* channel matrix cells: green/red border + fill kept; number dims when inactive */
+QPushButton#chanBtn {
+    padding: 0; font-size: 9px;
+    border: 1px solid #e0666b; border-radius: 2px;
+    background: transparent; color: #5a6172;      /* inactive: no fill, just the red outline */
+}
+QPushButton#chanBtn:checked  { border-color: #55b56a; background: #23331f; color: #eef3ea; }
+QPushButton#chanBtn:disabled { border-color: #3a3f4a; color: #5a6172; background: transparent; }
+
+/* Set all / Clear all */
+QPushButton#miniBtn {
+    background: transparent; border: 1px solid #3d4757; border-radius: 2px;
+    padding: 0 6px; font-size: 10px; color: #8a94a6;
+}
+QPushButton#miniBtn:hover    { background: #232a35; color: #dfe4ec; }
+QPushButton#miniBtn:disabled { border-color: #2e3644; color: #5a6172; }
 
 /* Handles are invisible at rest - they show the window ground between blocks -
    and only light up under the mouse. Same 4 px thickness both ways. */
