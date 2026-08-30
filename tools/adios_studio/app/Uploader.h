@@ -47,7 +47,7 @@ public:
     bool busy() const { return busy_.load(); }
 
 signals:
-    void log(QString line, bool ok);         // upload status lines
+    void log(QString line, int level);       // upload status: 0 info, 1 success, 2 error
     void progress(int pct);
     void finished(bool ok);
     // Every message the uploader puts on the wire, so the window can echo it

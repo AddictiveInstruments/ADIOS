@@ -291,9 +291,12 @@ MainWindow::MainWindow()
 
     // ---- uploader wiring -------------------------------------------------
     uploader_ = new Uploader(&out_, &outGuard_, this);
-    connect(uploader_, &Uploader::log, this, [this](QString l, bool ok) {
-        auto* it = new QListWidgetItem((ok ? "  " : "! ") + l);
-        if (!ok) it->setForeground(infoColour(2));
+    connect(uploader_, &Uploader::log, this, [this](QString l, int level) {
+        // 0 info (normal), 1 success (green), 2 error (red). Only the error gets
+        // the "! " gutter; green is reserved for the final "upload complete".
+        auto* it = new QListWidgetItem((level == 2 ? "! " : "  ") + l);
+        if (level == 1)      it->setForeground(QColor(0x55, 0xb5, 0x6a));   // green
+        else if (level == 2) it->setForeground(infoColour(2));             // red
         appendCapped(uploadStatus_, it);
     });
     connect(uploader_, &Uploader::progress, this, [this](int p) { progress_->setValue(p); });

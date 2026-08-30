@@ -57,15 +57,15 @@ bool Uploader::enterBootloader()
         return (r.valid && r.cmd == ACK) ? r.text() : std::string();
     };
 
-    if (coreType() == "BSL") { emit log("already in bootloader", true); return true; }
+    if (coreType() == "BSL") { emit log("already in bootloader", 0); return true; }
 
     // The firmware reboots into its bootloader on QUERY 0x7f (not a top-level
     // command): it acks with arg 0x7f - the "wait, I'm rebooting" handshake -
     // then resets with the stay-resident flag set. See adios_midi.c case 0x7f.
-    emit log("requesting bootloader entry (query 0x7f)...", true);
+    emit log("requesting bootloader entry (query 0x7f)...", 0);
     Reply ack = exchange(query(deviceId_, 0x7f), 500);
     if (ack.valid && ack.cmd == ACK)
-        emit log("board acknowledged, rebooting...", true);
+        emit log("board acknowledged, rebooting...", 0);
 
     // The board resets straight into a RESIDENT bootloader (stay-resident flag),
     // so it comes up within a poll or two - 3 tries is plenty. A disconnected or
@@ -73,9 +73,9 @@ bool Uploader::enterBootloader()
     for (int i = 0; i < 3; ++i) {
         QThread::msleep(100);
         std::string ct = coreType();
-        if (ct == "BSL") { emit log("bootloader detected", true); return true; }
+        if (ct == "BSL") { emit log("bootloader detected", 0); return true; }
     }
-    emit log("no bootloader appeared - board absent or not answering", false);
+    emit log("no bootloader appeared - board absent or not answering", 2);
     return false;
 }
 
@@ -84,17 +84,20 @@ bool Uploader::run(const QString& hexPath)
     HexImage img;
     std::string err;
     if (!loadHex(hexPath.toStdString(), img, err)) {
-        emit log(QString("cannot read hex: %1").arg(QString::fromStdString(err)), false);
+        emit log(QString("cannot read hex: %1").arg(QString::fromStdString(err)), 2);
         return false;
     }
-    size_t totalBytes = 0;
-    for (auto& s : img.segments) totalBytes += s.data.size();
-    if (!totalBytes) { emit log("empty hex", false); return false; }
-    emit log(QString("%1 segment(s), %2 bytes").arg(img.segments.size()).arg(totalBytes), true);
+    const size_t BLOCK = 256;   // a multiple of 16, well under BSL_SYSEX_MAX
+    size_t totalBytes = 0, totalBlocks = 0;
+    for (auto& s : img.segments) {
+        totalBytes  += s.data.size();
+        totalBlocks += (s.data.size() + BLOCK - 1) / BLOCK;   // 256-byte write blocks, as sent
+    }
+    if (!totalBytes) { emit log("empty hex", 2); return false; }
+    emit log(QString("%1 blocks, %2 bytes").arg(totalBlocks).arg(totalBytes), 0);
 
     if (!enterBootloader()) return false;
 
-    const size_t BLOCK = 256;   // a multiple of 16, well under BSL_SYSEX_MAX
     size_t done = 0;
     for (const auto& seg : img.segments) {
         // Blocks must be 16-aligned in length; the loader's segments already
@@ -115,21 +118,21 @@ bool Uploader::run(const QString& hexPath)
                 if (r.valid && r.cmd == DISACK) {
                     emit log(QString("block 0x%1 rejected (error 0x%2)")
                                  .arg(addr, 8, 16, QChar('0')).arg(r.arg, 2, 16, QChar('0')),
-                             false);
+                             2);
                     return false;
                 }
                 ++tries;   // silence: retry
             } while (tries < MAX);
             if (!(r.valid && r.cmd == ACK)) {
                 emit log(QString("block 0x%1 no response after %2 tries")
-                             .arg(addr, 8, 16, QChar('0')).arg(MAX), false);
+                             .arg(addr, 8, 16, QChar('0')).arg(MAX), 2);
                 return false;
             }
             done += n;
             emit progress(int(done * 100 / totalBytes));
         }
     }
-    emit log("upload complete, leaving bootloader", true);
+    emit log("upload complete, leaving bootloader", 1);
     // Query 0x7f to a resident bootloader releases its halt state and jumps to
     // the freshly written application (adios_midi.c, BSL branch).
     sendMsg(query(deviceId_, 0x7f));
@@ -137,7 +140,7 @@ bool Uploader::run(const QString& hexPath)
     // to reset and start before anyone queries it (UploadHandler.cpp wait(3000)).
     // The window then adds its own 5 s (UploadWindow.cpp TIMER_DELAYED_PROGRESS_OFF)
     // before the post-upload re-read.
-    emit log("waiting for the board to reboot...", true);
+    emit log("waiting for the board to reboot...", 0);
     QThread::msleep(3000);
     return true;
 }
