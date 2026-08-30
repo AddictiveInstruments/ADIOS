@@ -1,5 +1,5 @@
 #include "MainWindow.h"
-#include "../core/sysex.h"
+#include "sysex.h"
 #include "../platform/midi_win.h"
 #include "../cli/upgrade.h"
 

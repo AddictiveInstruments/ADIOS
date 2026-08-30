@@ -20,8 +20,8 @@
 //    bootloader; stage 2 goes to the TOOL once it is running, because the old
 //    bootloader would refuse those addresses outright.
 
-#include "../core/sysex.h"
-#include "../core/hexfile.h"
+#include "sysex.h"
+#include "hexfile.h"
 #include "../platform/midi_win.h"
 #include "upgrade.h"
 

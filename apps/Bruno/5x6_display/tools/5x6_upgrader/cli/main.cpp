@@ -10,8 +10,8 @@
 // MACHINE (0x50 TR-505 / 0x62 TR-626), which selects the migration image, and
 // the OS name says whether this is a June 2025 core that needs upgrading.
 
-#include "../core/sysex.h"
-#include "../core/hexfile.h"
+#include "sysex.h"
+#include "hexfile.h"
 #include "../platform/midi_win.h"
 #include "upgrade.h"
 

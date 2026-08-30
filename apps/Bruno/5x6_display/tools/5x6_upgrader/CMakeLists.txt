@@ -28,12 +28,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 qt_standard_project_setup()
 
-# core/ knows no operating system and no toolkit - it is shared verbatim with
-# the console prototype, and it is what will survive if the window is ever
-# rewritten in something else.
+# The protocol encoder and the Intel-HEX loader live in tools/common at the
+# repository root - shared verbatim with ADIOS Studio and the console prototype,
+# they know no operating system and no toolkit. cli/upgrade.cpp is this tool's.
+set(COMMON ../../../../../tools/common)
 set(CORE
-    core/sysex.cpp
-    core/hexfile.cpp
+    ${COMMON}/sysex.cpp
+    ${COMMON}/hexfile.cpp
     cli/upgrade.cpp)
 
 # The transport is the only platform-specific file. winmm on Windows is what
@@ -74,6 +75,7 @@ endif()
 qt_add_resources(tr5x6_upgrader "style" PREFIX "/" FILES gui/style.qss)
 
 target_compile_definitions(tr5x6_upgrader PRIVATE _CRT_SECURE_NO_WARNINGS)
+target_include_directories(tr5x6_upgrader PRIVATE ${COMMON})
 target_link_libraries(tr5x6_upgrader PRIVATE Qt6::Widgets ${TRANSPORT_LIBS})
 
 # The firmware images travel BESIDE the executable rather than inside it: the

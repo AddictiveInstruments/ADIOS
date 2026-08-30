@@ -13,12 +13,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 qt_standard_project_setup()
 
-# The protocol encoder and the Intel-HEX loader are the upgrader's, reused
-# WITHOUT A COPY - they are OS-free and describe the ADIOS bootloader protocol
-# itself, so one copy must serve every tool that speaks it. The MIDI TRANSPORT
-# is NOT shared: the upgrader's is SysEx-only, and a monitor needs every
-# message, so ADIOS Studio carries its own richer transport under midi/.
-set(UPGRADER ../5x6_upgrader)
+# The protocol encoder and the Intel-HEX loader live in tools/common at the
+# repository root, shared WITHOUT A COPY by every tool that speaks the ADIOS
+# bootloader protocol - they are OS-free and describe the protocol itself. The
+# MIDI TRANSPORT is NOT shared: a monitor needs every message, so ADIOS Studio
+# carries its own richer transport under midi/.
+set(COMMON ../common)
 
 if(WIN32)
     set(MIDI midi/midi_win.cpp)
@@ -34,11 +34,12 @@ qt_add_executable(adios_studio MACOSX_BUNDLE WIN32
     app/Uploader.cpp   app/Uploader.h
     app/decode.cpp     app/decode.h
     ${MIDI} midi/midi.h
-    ${UPGRADER}/core/sysex.cpp
-    ${UPGRADER}/core/hexfile.cpp)
+    ${COMMON}/sysex.cpp
+    ${COMMON}/hexfile.cpp)
 
 # uic writes ui_MainWindow.h into the build tree; let the sources #include it.
-target_include_directories(adios_studio PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+# tools/common is on the include path so the shared headers resolve by name.
+target_include_directories(adios_studio PRIVATE ${CMAKE_CURRENT_BINARY_DIR} ${COMMON})
 
 qt_add_resources(adios_studio "style" PREFIX "/" FILES app/style.qss)
 

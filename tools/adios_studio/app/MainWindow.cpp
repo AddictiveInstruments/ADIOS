@@ -37,7 +37,7 @@
 #include "Uploader.h"
 #include "decode.h"
 #include "ui_MainWindow.h"
-#include "../../5x6_upgrader/core/sysex.h"
+#include "sysex.h"
 
 namespace {
 // A small square button painting an equilateral disclosure triangle - pointing

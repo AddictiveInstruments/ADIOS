@@ -1,5 +1,5 @@
 #pragma once
-#include "../core/sysex.h"
+#include "sysex.h"
 #include "../platform/midi_win.h"
 #include <string>
 

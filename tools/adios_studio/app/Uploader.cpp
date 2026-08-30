@@ -3,7 +3,7 @@
 #include <QThread>
 #include <chrono>
 
-#include "../../5x6_upgrader/core/hexfile.h"
+#include "hexfile.h"
 #include "../midi/midi.h"
 
 using namespace tr5x6;

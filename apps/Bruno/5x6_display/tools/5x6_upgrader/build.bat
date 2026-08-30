@@ -16,7 +16,8 @@ if errorlevel 1 (
 
 if not exist build mkdir build
 cl /nologo /EHsc /W3 /O2 /std:c++17 /D_CRT_SECURE_NO_WARNINGS ^
-   core\sysex.cpp core\hexfile.cpp platform\midi_win.cpp ^
+   /I ..\..\..\..\..\tools\common ^
+   ..\..\..\..\..\tools\common\sysex.cpp ..\..\..\..\..\tools\common\hexfile.cpp platform\midi_win.cpp ^
    cli\upgrade.cpp cli\main.cpp ^
    /Fe:build\5x6_upgrader.exe /Fo:build\ ^
    winmm.lib

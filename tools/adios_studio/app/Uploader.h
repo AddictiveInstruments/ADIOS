@@ -17,7 +17,7 @@
 #include <cstdint>
 #include <mutex>
 
-#include "../../5x6_upgrader/core/sysex.h"
+#include "sysex.h"
 
 namespace adios { class Out; }
 
