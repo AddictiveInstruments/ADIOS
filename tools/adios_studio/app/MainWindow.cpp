@@ -12,6 +12,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
@@ -85,6 +86,7 @@ class FilterCheckBox : public QCheckBox {
 public:
     using QCheckBox::QCheckBox;
     void setSub(bool s) { sub_ = s; update(); }   // child sub-filter -> dimmer text
+    void setNeutral(bool n) { neutral_ = n; update(); }  // off-state gray, not red
 protected:
     void paintEvent(QPaintEvent*) override {
         QPainter p(this);
@@ -93,7 +95,8 @@ protected:
         const double top = (height() - box) / 2.0;
         // Border shows the STATE (green on / red off); text colour shows the TREE
         // LEVEL (parent brighter, child dimmer) - not the checked state.
-        QColor border = isChecked() ? QColor(0x55, 0xb5, 0x6a) : QColor(0xe0, 0x66, 0x6b);
+        QColor border = neutral_ ? QColor(0x5a, 0x61, 0x72)                    // neutral: gray both states, no red/green
+                                 : (isChecked() ? QColor(0x55, 0xb5, 0x6a) : QColor(0xe0, 0x66, 0x6b));
         QColor txt    = sub_ ? QColor(0x5a, 0x61, 0x72) : QColor(0x8a, 0x94, 0xa6);
         if (!isEnabled()) { border = QColor(0x3a, 0x3f, 0x4a); txt = QColor(0x41, 0x46, 0x50); }
         p.setPen(QPen(border, 1.0));
@@ -116,6 +119,7 @@ protected:
     }
 private:
     bool sub_ = false;
+    bool neutral_ = false;
 };
 
 // Renders a monitor line, drawing the two hex chars of a RECREATED running-status
@@ -206,6 +210,8 @@ MainWindow::MainWindow()
     queryBtn_     = ui_->queryBtn;
     devInfo_      = ui_->devInfo;
     hexPath_      = ui_->hexPath;
+    hexPath_->lineEdit()->setPlaceholderText(".hex file");
+    hexPath_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);   // fill the row like the old field
     browseBtn_    = ui_->browseBtn;
     uploadBtn_    = ui_->uploadBtn;
     progress_     = ui_->progress;
@@ -213,6 +219,8 @@ MainWindow::MainWindow()
     term_         = ui_->term;
     sysexBox_     = ui_->sysexBox;
     sendBtn_      = ui_->sendBtn;
+    { auto* cop = new FilterCheckBox("Clear on Greeting"); cop->setNeutral(true);   // gray, no colored border
+      clearOnGreeting_ = cop; ui_->sendRow->insertWidget(0, cop); }
     monIn_        = ui_->monIn;
     monOut_       = ui_->monOut;
     monIn_->setItemDelegate(new MonitorDelegate(monIn_));
@@ -265,29 +273,32 @@ MainWindow::MainWindow()
 
     buildInputFilter();   // the collapsible Filter above the Input monitor list
 
-    // Right-click menus (select all / copy / clear) on every list.
-    auto wireMenu = [this](QListWidget* w) {
+    // Right-click menus (select all / copy / [clear]) on every list. Copy takes
+    // the whole selection (multi-line: Ctrl/Shift-click), not just the clicked
+    // row. Device Info and Upload Status are read-only mirrors: no Clear.
+    auto wireMenu = [this](QListWidget* w, bool allowClear) {
         w->setContextMenuPolicy(Qt::CustomContextMenu);
-        connect(w, &QWidget::customContextMenuRequested, this, [w](const QPoint& p) {
+        w->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        connect(w, &QWidget::customContextMenuRequested, this, [w, allowClear](const QPoint& p) {
             QMenu m;
             QAction* sa = m.addAction(tr("Select All"));
             QAction* co = m.addAction(tr("Copy"));
-            m.addSeparator();
-            QAction* cl = m.addAction(tr("Clear"));
+            QAction* cl = nullptr;
+            if (allowClear) { m.addSeparator(); cl = m.addAction(tr("Clear")); }
             QAction* a = m.exec(w->viewport()->mapToGlobal(p));
             if (a == sa) w->selectAll();
             else if (a == co) {
                 QString t;
                 for (auto* it : w->selectedItems()) t += it->text() + '\n';
                 if (!t.isEmpty()) QApplication::clipboard()->setText(t);
-            } else if (a == cl) w->clear();
+            } else if (cl && a == cl) w->clear();
         });
     };
-    wireMenu(monIn_);
-    wireMenu(monOut_);
-    wireMenu(term_);
-    wireMenu(devInfo_);
-    wireMenu(uploadStatus_);
+    wireMenu(monIn_,        true);
+    wireMenu(monOut_,       true);
+    wireMenu(term_,         true);
+    wireMenu(devInfo_,      false);   // read-only, no Clear
+    wireMenu(uploadStatus_, false);   // read-only, no Clear
 
     // ---- uploader wiring -------------------------------------------------
     uploader_ = new Uploader(&out_, &outGuard_, this);
@@ -304,13 +315,15 @@ MainWindow::MainWindow()
         monitorLine(true, adios::Bytes(b.begin(), b.end()));
     });
     connect(uploader_, &Uploader::infoClear, this, [this] { devInfo_->clear(); });
+    connect(uploader_, &Uploader::greetingRequested, this,
+            [this] { if (clearOnGreeting_->isChecked()) term_->clear(); });
     connect(uploader_, &Uploader::infoLine, this, [this](QString t, int c) {
         auto* it = new QListWidgetItem(t);
         it->setForeground(infoColour(c));
         appendCapped(devInfo_, it);
     });
     connect(uploader_, &Uploader::finished, this, [this](bool ok) {
-        uploadBtn_->setEnabled(connected_ && !hexPath_->text().isEmpty());
+        uploadBtn_->setEnabled(connected_ && !hexPath_->currentText().isEmpty());
         queryBtn_->setEnabled(connected_);
         // finished() is shared with the Ping/query worker; only an actual upload
         // runs the post-upload sequence.
@@ -340,13 +353,15 @@ MainWindow::MainWindow()
         // Do NOT disable the button here: disabling the focused widget makes Qt
         // hand focus to the next tab stop (the hex field), which then selects
         // all its text. The busy_ guard above already blocks a second Ping.
-        uploader_->queryInfo();
+        uploader_->queryInfo();   // a valid ping pulls the greeting; the terminal
+                                  // is cleared then (Clear on Greeting), not here
     });
     connect(browseBtn_,  &QPushButton::clicked, this, &MainWindow::chooseHex);
     connect(uploadBtn_,  &QPushButton::clicked, this, &MainWindow::doUpload);
     connect(sendBtn_,    &QPushButton::clicked, this, &MainWindow::sendSysex);
     connect(sysexBox_,   &QLineEdit::returnPressed, this, &MainWindow::sendSysex);
-    connect(hexPath_,    &QLineEdit::textChanged, this,
+    sysexBox_->installEventFilter(this);   // Up/Down walk the command history
+    connect(hexPath_,    &QComboBox::currentTextChanged, this,
             [this](const QString& t) { uploadBtn_->setEnabled(connected_ && !t.isEmpty()); });
 
     timer_ = new QTimer(this);
@@ -379,7 +394,9 @@ void MainWindow::restoreSettings()
     int i = inBox_->findText(s.value("inPort").toString());   if (i >= 0) inBox_->setCurrentIndex(i);
     int o = outBox_->findText(s.value("outPort").toString());  if (o >= 0) outBox_->setCurrentIndex(o);
     idBox_->setValue(s.value("deviceId", 0).toInt());
-    hexPath_->setText(s.value("hexFile").toString());
+    hexPath_->addItems(s.value("hexHistory").toStringList());
+    hexPath_->setCurrentText(s.value("hexFile").toString());
+    clearOnGreeting_->setChecked(s.value("clearOnGreeting", false).toBool());
     lastDir_ = s.value("browseDir").toString();
 }
 
@@ -389,7 +406,13 @@ void MainWindow::saveSettings()
     s.setValue("inPort",   inBox_->currentText());
     s.setValue("outPort",  outBox_->currentText());
     s.setValue("deviceId", idBox_->value());
-    s.setValue("hexFile",  hexPath_->text());
+    s.setValue("hexFile",  hexPath_->currentText());
+    {
+        QStringList hist;
+        for (int i = 0; i < hexPath_->count(); ++i) hist << hexPath_->itemText(i);
+        s.setValue("hexHistory", hist);
+    }
+    s.setValue("clearOnGreeting", clearOnGreeting_->isChecked());
     s.setValue("browseDir", lastDir_);
     s.setValue("rowsSplitState", ui_->rowsSplit->saveState());
     s.setValue("colsSplitState", ui_->colsSplit->saveState());
@@ -416,7 +439,7 @@ void MainWindow::closeEvent(QCloseEvent* e)
 void MainWindow::setConnected(bool on)
 {
     connected_ = on;
-    uploadBtn_->setEnabled(on && !hexPath_->text().isEmpty());
+    uploadBtn_->setEnabled(on && !hexPath_->currentText().isEmpty());
     sendBtn_->setEnabled(on);
     queryBtn_->setEnabled(on);
 }
@@ -456,7 +479,7 @@ void MainWindow::onMidiIn(const adios::Bytes& msg, uint64_t t_us)
     // That detour is what made a Ping miss the answer it had already received.
     // feedReply is mutex+condvar, safe to call from this thread.
     if (msg.size() >= 7 && msg[0] == 0xf0 && msg[1] == 0x00 &&
-        msg[2] == 0x22 && msg[3] == 0x15) {
+        msg[2] == 0x22 && msg[3] == 0x15 && msg[6] != 0x0d) {   // 0x0d = terminal debug string, NOT a query/upload reply
         tr5x6::Reply r = tr5x6::parse(msg.data(), msg.size());
         if (r.valid) uploader_->feedReply(r);
     }
@@ -485,11 +508,40 @@ void MainWindow::routeIn(const adios::Bytes& msg, uint64_t)
         (msg[7] == 0x40 || msg[7] == 0x00)) {
         QString text;
         for (size_t i = 8; i < msg.size() && msg[i] != 0xf7; ++i)
-            if (msg[i] < 0x80) text += QChar(msg[i]);
+            // printable + newline + CR: the OS debug packer pads the last packet
+            // with 0x00 (dropped here, else an invisible "blank line"); CR is kept
+            // because the format progress bar refreshes its line with it.
+            if (msg[i] == '\n' || msg[i] == '\r' || (msg[i] >= 0x20 && msg[i] < 0x80))
+                text += QChar(msg[i]);
+
+        // A carriage return means "redraw the current line": the firmware streams
+        // the format progress as "\r[|||   ] NN%". Overwrite the live bar line, or
+        // open one under the phase label the previous (plain) message printed.
+        if (text.contains('\r')) {
+            const QString bar = text.section('\r', -1);
+            if (bar.isEmpty()) return;
+            if (termBarOpen_ && term_->count())
+                term_->item(term_->count() - 1)->setText(bar);
+            else { appendCapped(term_, new QListWidgetItem(bar)); termBarOpen_ = true; }
+            return;
+        }
+        termBarOpen_ = false;   // any ordinary line closes the live bar
+
         const QStringList lines = text.split('\n');
         for (int k = 0; k < lines.size(); ++k) {
-            if (k == lines.size() - 1 && lines[k].isEmpty()) break;   // drop the final newline
+            if (lines[k].isEmpty()) continue;   // no gratuitous blank lines in the terminal
+            // don't repeat a line identical to the current bottom one: the core
+            // re-greets on every Ping and after a reboot.
+            if (term_->count() && term_->item(term_->count() - 1)->text() == lines[k]) continue;
             appendCapped(term_, new QListWidgetItem(lines[k]));
+            // A device_id change from the board ("device_id: M -> N"): we do NOT
+            // switch the host id silently - prompt the user to do it and re-Ping.
+            if (lines[k].startsWith("device_id: ") && lines[k].contains(" -> ")) {
+                const QString n = lines[k].section(" -> ", 1, 1).trimmed();
+                auto* hint = new QListWidgetItem("set Device ID to " + n + " and Ping");
+                hint->setForeground(infoColour(1));   // orange
+                appendCapped(term_, hint);
+            }
         }
     }
 }
@@ -701,6 +753,7 @@ void MainWindow::buildInputFilter()
     // The Output monitor gets an "Apply Filter" toggle, level with the Input's
     // "Filter" header. On, the OUT side reuses the very same filter settings.
     auto* applyOut = new FilterCheckBox("Apply Filter");
+    applyOut->setNeutral(true);           // gray border when off (this box only), not red
     applyOut->setChecked(applyOutFilter_);
     connect(applyOut, &QCheckBox::toggled, this, [this](bool v) { applyOutFilter_ = v; });
     if (auto* ol = qobject_cast<QVBoxLayout*>(ui_->outGroup->layout()))
@@ -766,7 +819,30 @@ void MainWindow::sendSysex()
     m.push_back(0xf7);
     sendRaw(m);
     appendCapped(term_, new QListWidgetItem("> " + cmd));   // echo the typed line
+    if (!cmd.isEmpty() && (cmdHistory_.isEmpty() || cmdHistory_.last() != cmd))
+        cmdHistory_.append(cmd);
+    histIdx_ = cmdHistory_.size();   // one past the end = the fresh empty line
     sysexBox_->clear();
+}
+
+bool MainWindow::eventFilter(QObject* o, QEvent* e)
+{
+    if (o == sysexBox_ && e->type() == QEvent::KeyPress) {
+        auto* ke = static_cast<QKeyEvent*>(e);
+        if (ke->key() == Qt::Key_Up) {          // older
+            if (!cmdHistory_.isEmpty()) {
+                if (histIdx_ > 0) --histIdx_;
+                sysexBox_->setText(cmdHistory_.value(histIdx_));
+            }
+            return true;
+        }
+        if (ke->key() == Qt::Key_Down) {        // newer, past the end = empty line
+            if (histIdx_ < cmdHistory_.size()) ++histIdx_;
+            sysexBox_->setText(histIdx_ < cmdHistory_.size() ? cmdHistory_.at(histIdx_) : QString());
+            return true;
+        }
+    }
+    return QWidget::eventFilter(o, e);
 }
 
 void MainWindow::chooseHex()
@@ -774,7 +850,10 @@ void MainWindow::chooseHex()
     QString f = QFileDialog::getOpenFileName(this, tr("Firmware .hex"), lastDir_,
                                              tr("Intel HEX (*.hex);;All files (*)"));
     if (!f.isEmpty()) {
-        hexPath_->setText(f);
+        int i = hexPath_->findText(f);
+        if (i >= 0) hexPath_->removeItem(i);   // an existing entry moves to the top
+        hexPath_->insertItem(0, f);
+        hexPath_->setCurrentIndex(0);
         lastDir_ = QFileInfo(f).absolutePath();
     }
 }
@@ -789,6 +868,6 @@ void MainWindow::doUpload()
     uploadBtn_->setEnabled(false);
     uploadStatus_->clear();
     appendCapped(uploadStatus_, new QListWidgetItem(
-        QString("== upload %1 ==").arg(QFileInfo(hexPath_->text()).fileName())));
-    uploader_->start(hexPath_->text());
+        QString("== upload %1 ==").arg(QFileInfo(hexPath_->currentText()).fileName())));
+    uploader_->start(hexPath_->currentText());
 }

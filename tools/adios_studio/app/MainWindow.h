@@ -11,6 +11,7 @@
 #include <QList>
 #include <QPair>
 #include <QString>
+#include <QStringList>
 #include <QWidget>
 #include <cstdint>
 #include <mutex>
@@ -39,6 +40,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent*) override;
+    bool eventFilter(QObject* o, QEvent* e) override;   // Up/Down history in the terminal input
 
 private slots:
     void connectPorts();   // auto: opens the selected In/Out, no Connect button
@@ -93,7 +95,7 @@ private:
     QListWidget* devInfo_ = nullptr;
 
     // --- upload ---
-    QLineEdit*    hexPath_ = nullptr;
+    QComboBox*    hexPath_ = nullptr;
     QPushButton*  browseBtn_ = nullptr;
     QPushButton*  uploadBtn_ = nullptr;
     QProgressBar* progress_ = nullptr;
@@ -103,6 +105,10 @@ private:
     QListWidget* term_ = nullptr;
     QLineEdit*   sysexBox_ = nullptr;
     QPushButton* sendBtn_ = nullptr;
+    QCheckBox*   clearOnGreeting_ = nullptr;   // "Clear on Greeting" toggle in the terminal
+    QStringList  cmdHistory_;        // terminal input history, walked with Up/Down
+    int          histIdx_ = 0;
+    bool         termBarOpen_ = false;   // a live "\r" progress bar owns the last line
 
     // --- monitor ---
     QListWidget* monIn_ = nullptr;

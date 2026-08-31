@@ -57,6 +57,9 @@ signals:
     // colour: 0 normal (app running), 1 orange (updater), 2 red (bootloader).
     void infoClear();
     void infoLine(QString text, int colour);
+    // Emitted on a VALID ping, right before the terminal-greeting pull goes out,
+    // so the window can clear the terminal ahead of the fresh greeting.
+    void greetingRequested();
 
 private:
     void         sendMsg(const tr5x6::Bytes& msg);   // send + echo to monitor

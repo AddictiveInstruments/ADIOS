@@ -195,6 +195,12 @@ void Uploader::queryInfo()
         const QString app2 = ask(QueryItem::AppName2);
         if (!app2.isEmpty()) emit infoLine(app2, 0);
 
+        // Ask a terminal-aware application to (re-)print its greeting + commands.
+        // The reply arrives as debug frames on the terminal; an application with
+        // no terminal simply DISACKs and nothing is shown. PULL, not push.
+        emit greetingRequested();          // lets the window clear the terminal first
+        sendMsg(termGreeting(deviceId_));
+
         busy_.store(false);
         emit finished(true);
     });

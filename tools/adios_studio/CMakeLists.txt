@@ -41,7 +41,7 @@ qt_add_executable(adios_studio MACOSX_BUNDLE WIN32
 # tools/common is on the include path so the shared headers resolve by name.
 target_include_directories(adios_studio PRIVATE ${CMAKE_CURRENT_BINARY_DIR} ${COMMON})
 
-qt_add_resources(adios_studio "style" PREFIX "/" FILES app/style.qss)
+qt_add_resources(adios_studio "style" PREFIX "/" FILES app/style.qss app/arrow_down.png app/arrow_up.png)
 
 if(APPLE)
     set_target_properties(adios_studio PROPERTIES

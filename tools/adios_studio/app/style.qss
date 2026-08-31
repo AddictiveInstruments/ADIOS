@@ -36,6 +36,25 @@ QComboBox QAbstractItemView {
     border: 1px solid #3d4757;
     selection-background-color: #4a7ab8;
 }
+QComboBox::down-arrow {           /* a real image: the CSS border-triangle renders as a block in Qt */
+    image: url(:/app/arrow_down.png);
+    width: 12px; height: 7px;
+}
+QComboBox QLineEdit {             /* editable combo: editor blends into the frame, no double border */
+    background: transparent; border: none; padding: 0;
+    selection-background-color: #4a7ab8;
+}
+
+/* Device ID spinner: the same little triangles as the combo, a touch smaller. */
+QSpinBox::up-button   { subcontrol-origin: border; subcontrol-position: top right;    background: transparent; border: none; width: 16px; }
+QSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; background: transparent; border: none; width: 16px; }
+QSpinBox::up-arrow    { image: url(:/app/arrow_up.png);   width: 9px; height: 5px; }
+QSpinBox::down-arrow  { image: url(:/app/arrow_down.png); width: 9px; height: 5px; }
+
+/* Right-click menus: subtle hover highlight on the item under the mouse. */
+QMenu { background: #1c212b; border: 1px solid #2a2f3a; }
+QMenu::item { padding: 4px 18px; }
+QMenu::item:selected { background: #2c4a6e; color: #f2f6fc; }
 
 QListWidget {
     background: #12151c;
