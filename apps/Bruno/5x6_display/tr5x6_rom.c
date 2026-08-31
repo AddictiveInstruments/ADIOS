@@ -589,6 +589,9 @@ static s32 EE_Poll(void)
 		ADIOS_I2C_BusClear(TR5X6_EE_PORT);
 	}
 	// Clocked clear and still refusing: not a write cycle, a missing chip.
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
+	ADIOS_MIDI_SendDebugMessage("EEPROM poll: no ACK after bus clear, missing chip?\n");
+#endif
 	return -1;
 }
 
@@ -627,7 +630,12 @@ static s32 EE_Write(u16 addr, u8 *buf, u16 len)
 		s32 status = ADIOS_I2C_Transfer(TR5X6_EE_PORT, ADIOS_I2C_WRITE, TR5X6_EE_IIC_ADDR, out, 2+n);
 		if( status == 0 ) status = ADIOS_I2C_TransferWait(TR5X6_EE_PORT);
 		ADIOS_I2C_TransferFinished(TR5X6_EE_PORT);
-		if( status != 0 ) return -1;
+		if( status != 0 ){
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
+			ADIOS_MIDI_SendDebugMessage("EEPROM write failed @0x%04x: status %d\n", addr, status);
+#endif
+			return -1;
+		}
 		addr += n; buf += n; len -= n;
 	}
 	return 0;
