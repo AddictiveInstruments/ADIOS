@@ -483,7 +483,7 @@ static s32 FlashPage_Burn(u8 page)
 	LL_FLASH_Unlock();
 	LL_FLASH_Status status;
 	if( (status=LL_FLASH_PageErase(LL_FLASH_BANK_1, TR5X6_FLASH_PAGE_BASE + page)) != FLASH_COMPLETE ) {
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 		uint32_t error=LL_FLASH_GetError();
 		ADIOS_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
 #endif
@@ -502,7 +502,7 @@ static s32 FlashPage_Burn(u8 page)
 				((uint64_t)datas[i+6] << 48) |
 				((uint64_t)datas[i+7] << 56);
 		if( (status=LL_FLASH_ProgramDoubleWord(addr, buff64)) != FLASH_COMPLETE ) {
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 			uint32_t error=LL_FLASH_GetError();
 			ADIOS_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
 #endif
@@ -638,7 +638,9 @@ static s32 EE_Write(u16 addr, u8 *buf, u16 len)
 // format-time report line, on screen and on the debug port
 static void Format_Report(const char *msg)
 {
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 	ADIOS_MIDI_SendDebugMessage("%s", msg);
+#endif
 	APP_LCD_Rectangle(90, 15+132, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 	APP_LCD_PrintFormattedString(92, 15+134, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", msg);
 }
@@ -698,7 +700,9 @@ s32 TR5X6_MEM_Format(void){
 			bad_sectors++;
 			if(first_bad_sector<0)first_bad_sector=sector;
 		}
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 		ADIOS_MIDI_SendDebugMessage(message);
+#endif
 		APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 		APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 		// sector count DERIVED, not the hand-written 512 it used to be: the
@@ -719,9 +723,11 @@ s32 TR5X6_MEM_Format(void){
 	else
 		sprintf(message, "ROM report: all %u sectors formatted",
 				(u32)((TR5X6_ROM_END_ADDR+1)/TR5X6_ROM_SECTOR_SIZE));
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 	if(tr5x6_rom_spi_err)
 		ADIOS_MIDI_SendDebugMessage("ROM report: %d SPI transfers refused!", tr5x6_rom_spi_err);
 	ADIOS_MIDI_SendDebugMessage(message);
+#endif
 	APP_LCD_Rectangle(90, 15+62, 300, 12, 0, 0, 2, APP_LCD_BLACK);
 	APP_LCD_PrintFormattedString(92, 15+64, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "%s", message);
 
@@ -1049,7 +1055,7 @@ s32 TR5X6_FLASH_SlotRead(tr5x6_flash_info_t* slot){
 #if 0
 /* ********* */
 s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_mem){
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 		//ADIOS_MIDI_SendDebugMessage("bank#%d slot#%d; %s and color 0x%04x\n", slot.bank, slot.slot, slot.name, slot.color);
 
 #endif
@@ -1069,7 +1075,7 @@ s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_
 	LL_FLASH_Status status;
 	if( (status=LL_FLASH_PageErase(LL_FLASH_BANK_1, TR5X6_FLASH_PAGE_BASE + page)) != FLASH_COMPLETE ) {
 		//LL_FLASH_ClearFlag(LL_FLASH_SR_CLEAR); // clear error flags, otherwise next program attempts will fail
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 		uint32_t error=LL_FLASH_GetError();
 		ADIOS_MIDI_SendDebugMessage("erase failed for page#%d: code %d err 0x%08x\n", page, status, error);
 #endif
@@ -1089,7 +1095,7 @@ s32 TR5X6_FLASH_MemBank_Write(u8 group, u8 pattern, tr5x6_flash_mem_Bank_t bank_
 				((uint64_t)datas[i+6] << 48) |
 				((uint64_t)datas[i+7] << 56);
 		if( (status=LL_FLASH_ProgramDoubleWord(addr, buff64)) != FLASH_COMPLETE ) {
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 			uint32_t error=LL_FLASH_GetError();
 			ADIOS_MIDI_SendDebugMessage("write failed for 0x%08x: code %d err 0x%08x\n", addr, status, error);
 #endif

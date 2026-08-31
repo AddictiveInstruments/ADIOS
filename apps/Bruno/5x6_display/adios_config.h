@@ -152,6 +152,9 @@
 #define ADIOS_DONT_USE_USB_MIDI
 # define ADIOS_SYS_DONT_INIT_RTC
 //# define ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+// This application's own debug (SPI errors, format progress...) is opt-in and
+// OFF by default. Uncomment to compile it in:
+//# define TR5X6_ENABLE_DEBUG_MESSAGE
 
 // This board's two MIDI links (ADIOS_UARTn is USART(n+1) on G0xx):
 //   UART0 = USART1, PB7 in  - the TR-505 host's MIDI output (RX only; its

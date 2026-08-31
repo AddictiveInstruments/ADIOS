@@ -279,6 +279,15 @@ void APP_Init(void)
 		APP_LCD_Lite(1);
 		// periodic screen task
 		xTaskCreate(TASK_SettingsMenu, "Settings_Menu", (TFT_TASK_STACK_SIZE)/4, NULL, PRIORITY_TASK_TFT_HANDLER, &xSettings);
+#if APP_LCD_MIRROR
+		// The capture command (MIRROR_HALT) is a SysEx, and the SysEx parser is
+		// otherwise only installed on the normal road below - so a settings-menu
+		// page could not be frozen, hence captured. Install just the SysEx path
+		// here too (NOT the direct RX callback: no bank-change side effects
+		// while editing settings). Costs nothing when capture is not compiled.
+		TR5X6_SYSEX_Init(0);
+		ADIOS_MIDI_SysExCallback_Init(APP_SYSEX_Parser);
+#endif
 
 	}else {
 		adios_lcd_bitmap_t logo_bmp = APP_LCD_BitmapInit((u8*)tr5x6_logo, 400, 56, 400, Is1BIT);
@@ -648,7 +657,9 @@ static void TASK_ROM_Periodic(void *pvParameters)
 		// sequences keep their timing. Non-zero means a transfer was refused
 		// and the latch kept a stale value - see TR5X6_ROM_Addr_Set.
 		if( tr5x6_rom_spi_err != spi_err_reported ) {
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 			ADIOS_MIDI_SendDebugMessage("SPI refused: %d", tr5x6_rom_spi_err);
+#endif
 			spi_err_reported = tr5x6_rom_spi_err;
 		}
 	}
@@ -1671,7 +1682,9 @@ void EXTI2_3_IRQHandler(void){
 }
 
 s32 NOTIFY_MIDI_TimeOut(adios_midi_port_t port){
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 	ADIOS_MIDI_SendDebugMessage("midi time out!\n");
+#endif
 	return 0;
 }
 
@@ -1871,6 +1884,19 @@ static void UnitSelect_Page(u8 unit_sel, u8 allow_exit)
 	if(allow_exit) Legend_Draw(x_offset+420, y_offset+12, "EXIT", "LAST");
 }
 
+// The 40 ms pace of the blocking choice pages (unit select, unit change). When
+// the scheduler runs - a re-format reached from the settings menu - it YIELDS,
+// so the low-priority dump task can drain the GDRAM while the page sits still;
+// a busy-wait here starves it and the capture times out. At first boot the
+// scheduler is not up yet, so it falls back to the busy-wait it always was.
+static void page_wait_40ms(void)
+{
+	if( xTaskGetSchedulerState() == taskSCHEDULER_RUNNING )
+		vTaskDelay(40 / portTICK_RATE_MS);
+	else
+		for(u16 d=0; d<40; d++) ADIOS_DELAY_Wait_uS(1000);
+}
+
 void Formatting_Page(void){
 	APP_LCD_BColourSet(APP_LCD_BLACK);
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
@@ -1910,7 +1936,7 @@ static u8 UnitChange_Confirm(u8 new_unit)
 {
 	UnitChange_Page(new_unit);
 	for(;;){
-		for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);
+		page_wait_40ms();
 		TR5X6_DECOD_BUTT_Handler();
 		if(tr5x6_decod_buttons.inst && tr5x6_decod_buttons_flags.inst){
 			tr5x6_decod_buttons_flags.inst = 0;
@@ -1943,7 +1969,7 @@ static u8 UnitSelect_Ask(u8 unit_sel, u8 allow_exit)
 	UnitSelect_Page(unit_sel, allow_exit);
 	u8 chosen = 0;
 	while(!chosen){
-		for(u16 d=0; d<40; d++)ADIOS_DELAY_Wait_uS(1000);	// the tasks' 40 ms pace
+		page_wait_40ms();
 		TR5X6_DECOD_BUTT_Handler();
 		if(tr5x6_decod_buttons.inc && tr5x6_decod_buttons_flags.inc){
 			unit_sel = (unit_sel==5) ? 6 : 5;

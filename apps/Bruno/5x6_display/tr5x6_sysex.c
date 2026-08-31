@@ -912,7 +912,7 @@ s32 TR5X6_SYSEX_Cmd_WriteInfoRequest(void)
 				tr5x6_xfer_state.STAT=XFER_ERROR;
 				xfer_time_out=-1;
 				tr5x6_xfer_state.FLAG_ERROR=1;
-	#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+	#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 				ADIOS_MIDI_SendDebugMessage("write failed for bank#%d data\n", slot.bank);
 	#endif
 				TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
@@ -927,7 +927,7 @@ s32 TR5X6_SYSEX_Cmd_WriteInfoRequest(void)
 				tr5x6_xfer_state.STAT=XFER_ERROR;
 				xfer_time_out=-1;
 				tr5x6_xfer_state.FLAG_ERROR=1;
-	#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+	#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 				ADIOS_MIDI_SendDebugMessage("write failed for bank#%d slot#%d data\n", slot.bank, slot.slot);
 	#endif
 				TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
@@ -1004,7 +1004,7 @@ s32 TR5X6_SYSEX_Cmd_WriteBlockRequest(void)
 						tr5x6_xfer_state.STAT=XFER_ERROR;
 						xfer_time_out=-1;
 						tr5x6_xfer_state.FLAG_ERROR=1;
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 						ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
 #endif
 						TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
@@ -1021,7 +1021,7 @@ s32 TR5X6_SYSEX_Cmd_WriteBlockRequest(void)
 							tr5x6_xfer_state.STAT=XFER_ERROR;
 							xfer_time_out=-1;
 							tr5x6_xfer_state.FLAG_ERROR=1;
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 							ADIOS_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", sysex_buffer[i], addr, status);
 #endif
 							TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
@@ -1065,7 +1065,7 @@ s32 TR5X6_SYSEX_Cmd_WriteBlockRequest(void)
 								tr5x6_xfer_state.STAT=XFER_ERROR;
 								xfer_time_out=-1;
 								tr5x6_xfer_state.FLAG_ERROR=1;
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 								ADIOS_MIDI_SendDebugMessage("erase failed for 0x%08x: code %d\n", addr, status);
 #endif
 								TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
@@ -1082,7 +1082,7 @@ s32 TR5X6_SYSEX_Cmd_WriteBlockRequest(void)
 							tr5x6_xfer_state.STAT=XFER_ERROR;
 							xfer_time_out=-1;
 							tr5x6_xfer_state.FLAG_ERROR=1;
-#ifndef ADIOS_MIDI_DISABLE_DEBUG_MESSAGE
+#ifdef TR5X6_ENABLE_DEBUG_MESSAGE
 							ADIOS_MIDI_SendDebugMessage("write failed for data 0x%02x @0x%08x: code %d\n", sysex_buffer[i], addr, status);
 #endif
 							TR5X6_SYSEX_Send_Ack(sysex_port, TR5X6_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_WRITE_FAILED);
