@@ -155,6 +155,8 @@
 // This application's own debug (SPI errors, format progress...) is opt-in and
 // OFF by default. Uncomment to compile it in:
 //# define TR5X6_ENABLE_DEBUG_MESSAGE
+// The debug-terminal command menu (tr5x6_terminal.c) - opt-in, off by default:
+# define TR5X6_TERMINAL_ENABLED
 
 // This board's two MIDI links (ADIOS_UARTn is USART(n+1) on G0xx):
 //   UART0 = USART1, PB7 in  - the TR-505 host's MIDI output (RX only; its

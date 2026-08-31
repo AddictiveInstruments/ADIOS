@@ -22,6 +22,7 @@
 #include "tr5x6_rom.h"
 #include "tr5x6_sysex.h"
 #include "tr5x6_pict.h"
+#include "tr5x6_terminal.h"
 
 #include <FreeRTOS.h>
 #include <portmacro.h>
@@ -309,6 +310,9 @@ void APP_Init(void)
 
 		// install timeout callback function
 		ADIOS_MIDI_TimeOutCallback_Init(NOTIFY_MIDI_TimeOut);
+
+		// debug terminal (opt-in, normal road only): no-op unless TR5X6_TERMINAL_ENABLED
+		TR5X6_TERMINAL_Init();
 
 		// TFT
 
@@ -653,6 +657,27 @@ static void TASK_ROM_Periodic(void *pvParameters)
 		// check for requested write
 		TR5X6_SYSEX_Cmd_WriteInfoRequest();
 		TR5X6_SYSEX_Cmd_WriteBlockRequest();
+		TR5X6_ROM_DeviceIDStorePending();     // deferred device-ID store (terminal)
+		TR5X6_ROM_BankChangeStorePending();   // deferred bank-change store (terminal)
+
+		// deferred format from the terminal: cut the UI tasks (keep MIDI, it
+		// carries the progress bars), point the unit, run the format, reboot -
+		// the same ending as the on-screen and first-boot format roads.
+		{
+			s8 fu = TR5X6_ROM_FormatPendingUnit();
+			if( fu >= 0 ){
+				if( xTFTRefresh ) vTaskSuspend(xTFTRefresh);
+				if( xSettings )   vTaskSuspend(xSettings);
+				ADIOS_MIDI_DebugPortSet(TR5X6_ROM_FormatPendingPort());
+				TR5X6_ROM_FormatTerminalSet(1);
+				tr5x6_unit = (fu==6) ? &tr5x6_unit_626 : &tr5x6_unit_505;
+				APP_LCD_Clear();
+				Formatting_Page();
+				ADIOS_MIDI_SendDebugMessage("\nformat done - rebooting\n");
+				for(u16 d=0; d<1500; d++) ADIOS_DELAY_Wait_uS(1000);   // let it flush
+				ADIOS_SYS_Reset();
+			}
+		}
 		// dbg scaffolding: reported OUT of the critical path, so the ROM
 		// sequences keep their timing. Non-zero means a transfer was refused
 		// and the latch kept a stale value - see TR5X6_ROM_Addr_Set.

@@ -248,17 +248,33 @@ extern tr5x6_rom_status TR5X6_ROM_Sector_Erase(uint32_t sector, uint32_t Timeout
 extern s32 TR5X6_FLASH_SlotRead(tr5x6_flash_info_t* slot);
 extern s32 TR5X6_FLASH_BankRead(tr5x6_flash_info_t* slot);
 extern s32 TR5X6_MEM_Format(void);
+/* deferred format from the debug terminal: the terminal records the target unit
+   (5 or 6) and the port to report on; TASK_ROM_Periodic runs it and reboots.
+   FormatTerminalSet(1) routes the progress bars to that port. */
+extern s32 TR5X6_ROM_FormatRequest(u8 unit, adios_midi_port_t port);
+extern s8  TR5X6_ROM_FormatPendingUnit(void);   /* 5 / 6, or -1 if none pending */
+extern adios_midi_port_t TR5X6_ROM_FormatPendingPort(void);
+extern void TR5X6_ROM_FormatTerminalSet(u8 on);
 extern s32 TR5X6_FLASH_Slot_Write(tr5x6_flash_info_t slot);
 extern s32 TR5X6_FLASH_Bank_Write(tr5x6_flash_info_t slot);
 extern s32 TR5X6_ROM_BankStore(u8 bank);
 /* persists the SysEx device ID in the last page's system fields, so that
    ADIOS finds it at the next power-up - and so does the bootloader */
 extern s32 TR5X6_ROM_DeviceIDStore(u8 device_id);
+/* deferred variant for callers off the ROM bus (the debug terminal): Request
+   only records the value; TASK_ROM_Periodic calls ...StorePending() to perform
+   the actual store on its own cycle */
+extern s32 TR5X6_ROM_DeviceIDStoreRequest(u8 device_id);
+extern s32 TR5X6_ROM_DeviceIDStorePending(void);
 extern u8 TR5X6_ROM_BankRecall(void);
 /* the live copy of the MIDI bank change settings, recalled once at boot;
    Store writes its current content */
 extern tr5x6_bc_t tr5x6_bc;
 extern s32  TR5X6_ROM_BankChangeStore(void);
+/* deferred variant for the debug terminal (off the ROM bus), same pattern as
+   the device ID: Request flags it, TASK_ROM_Periodic runs ...StorePending() */
+extern s32  TR5X6_ROM_BankChangeStoreRequest(void);
+extern s32  TR5X6_ROM_BankChangeStorePending(void);
 extern void TR5X6_ROM_BankChangeRecall(void);
 /* which machine this board was formatted for, from wherever this revision
    keeps it - read BEFORE tr5x6_unit exists, so it depends on nothing */

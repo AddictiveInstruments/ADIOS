@@ -643,6 +643,43 @@ static s32 EE_Write(u16 addr, u8 *buf, u16 len)
 
 #endif
 
+// ---- format progress mirrored to the debug terminal as ASCII bars ----------
+// A terminal-initiated format sets format_terminal; the on-screen format leaves
+// it 0 and these emit nothing. The bar refreshes in place - the firmware sends
+// "\r[|||   ] NN%" and ADIOS Studio's terminal overwrites its current line on
+// the carriage return. Only redrawn when the integer percent changes, so a
+// 512-sector pass costs at most ~100 short SysEx messages, not 512.
+#define FMT_BAR_W 48
+static u8  format_terminal = 0;
+static s16 format_term_pct = -1;
+
+static void Format_TermLabel(const char *label)
+{
+	if( !format_terminal ) return;
+	ADIOS_MIDI_SendDebugMessage("\n%s\n", label);
+	format_term_pct = -1;          // the next bar starts on a fresh line
+}
+
+static void Format_TermBar(u16 percent)
+{
+	if( !format_terminal ) return;
+	if( percent > 100 ) percent = 100;
+	if( (s16)percent == format_term_pct ) return;
+	format_term_pct = percent;
+	char bar[FMT_BAR_W + 12];
+	u16 fill = (u16)((u32)FMT_BAR_W * percent / 100);
+	int i = 0;
+	bar[i++] = '\r';
+	bar[i++] = '[';
+	for( u16 k=0; k<FMT_BAR_W; k++ ) bar[i++] = (k < fill) ? '|' : ' ';
+	bar[i++] = ']';
+	i += sprintf(&bar[i], "%3u%%", percent);
+	ADIOS_MIDI_SendDebugMessage("%s", bar);
+}
+
+void TR5X6_ROM_FormatTerminalSet(u8 on){ format_terminal = on; }
+
+
 // format-time report line, on screen and on the debug port
 static void Format_Report(const char *msg)
 {
@@ -662,6 +699,7 @@ static void Format_Progress(adios_lcd_bitmap_t bmp, u8 *arr, u16 arr_size, u16 y
 	memset(arr, 0x00, arr_size);
 	APP_LCD_BitmapPrintFormattedString(bmp, 1.0, 150, 2, 0, APP_LCD_STRING_ALIGN_CENTER, -32, "%u%s", percent, "%");
 	APP_LCD_PrintProgress(bmp, 0x00ff0000, 90, y, 300, 16, 300*percent/100);
+	Format_TermBar(percent);   // same bar, on the debug terminal
 }
 
 
@@ -678,6 +716,7 @@ s32 TR5X6_MEM_Format(void){
 	APP_LCD_FontInit((u8*)GLCD_FONT_9BITRPR, Is1BIT);
 	APP_LCD_Rectangle(89, 14+80, 302, 18, 1, APP_LCD_WHITE, 0, 0);
 
+	Format_TermLabel("Formatting Sounds Datas...");
 	u16 bad_sectors=0;
 	s32 first_bad_sector=-1;
 	for(int sector=0; sector<((TR5X6_ROM_END_ADDR+1)/TR5X6_ROM_SECTOR_SIZE);sector++){
@@ -741,6 +780,7 @@ s32 TR5X6_MEM_Format(void){
 
 	APP_LCD_PrintString(92, 15+120, 0, APP_LCD_STRING_ALIGN_LEFT, -32, "Formatting   Names and Colors Datas...");
 	APP_LCD_Rectangle(89, 14+150, 302, 18, 1, APP_LCD_WHITE, 0, 0);
+	Format_TermLabel("Formatting Names and Colors Datas...");
 	// Flash formatting
 	tr5x6_flash_info_t slot;
 #if APP_HARD_REV == 1
@@ -928,6 +968,25 @@ s32 TR5X6_ROM_DeviceIDStore(u8 device_id){
 	return TR5X6_ROM_SysPageWrite();
 }
 
+// Deferred device-ID store. The debug terminal runs in a task that does NOT own
+// the ROM bus, so it only REQUESTS the write here; TASK_ROM_Periodic performs it
+// on its own cycle (same pattern as the block-write requests). Avoids the 25/08
+// wedge of touching flash/EEPROM from a preempting context.
+static volatile s32 pending_dev_id = -1;
+
+s32 TR5X6_ROM_DeviceIDStoreRequest(u8 device_id){
+	pending_dev_id = device_id & 0x7f;
+	return 0;
+}
+
+s32 TR5X6_ROM_DeviceIDStorePending(void){
+	if( pending_dev_id < 0 )
+		return 0;
+	u8 id = (u8)pending_dev_id;
+	pending_dev_id = -1;
+	return TR5X6_ROM_DeviceIDStore(id);
+}
+
 s32 TR5X6_ROM_BankChangeStore(void){
 #if APP_HARD_REV == 1
 	TR5X6_ROM_SysPageRead();
@@ -940,6 +999,40 @@ s32 TR5X6_ROM_BankChangeStore(void){
 	return EE_Write(TR5X6_EE_BC_ADDR, b, 2);
 #endif
 }
+
+// Deferred bank-change store, same reasoning as the device ID: the terminal
+// changes tr5x6_bc in RAM (one 16-bit store) then only flags the persist here;
+// TASK_ROM_Periodic writes the current tr5x6_bc on its own cycle. One flag,
+// not a value - the store always reads the live word, so several quick field
+// edits collapse into a single write.
+static volatile u8 pending_bc_store = 0;
+
+s32 TR5X6_ROM_BankChangeStoreRequest(void){
+	pending_bc_store = 1;
+	return 0;
+}
+
+s32 TR5X6_ROM_BankChangeStorePending(void){
+	if( !pending_bc_store )
+		return 0;
+	pending_bc_store = 0;
+	return TR5X6_ROM_BankChangeStore();
+}
+
+// Deferred format request from the debug terminal. The terminal only records
+// the chosen unit and the port to report on; TASK_ROM_Periodic suspends the UI
+// tasks and runs the (long, bus-owning) format, then reboots - never from the
+// callback. FormatTerminalSet() (above) arms the terminal progress bars.
+static s8 pending_format_unit = -1;
+static adios_midi_port_t pending_format_port = DEFAULT;
+
+s32 TR5X6_ROM_FormatRequest(u8 unit, adios_midi_port_t port){
+	pending_format_port = port;
+	pending_format_unit = (s8)unit;
+	return 0;
+}
+s8  TR5X6_ROM_FormatPendingUnit(void){ return pending_format_unit; }
+adios_midi_port_t TR5X6_ROM_FormatPendingPort(void){ return pending_format_port; }
 
 // Anything that is not a legal value reads back as the default - 0xFF above
 // all, which is what a board formatted before these three bytes existed has

@@ -22,7 +22,8 @@ THUMB_SOURCE    = app.c \
 				tr5x6_decod.c \
 				tr5x6_rom.c \
 				tr5x6_sysex.c\
-				tr5x6_pict.c
+				tr5x6_pict.c \
+				tr5x6_terminal.c
 
 # (following source stubs not relevant for Cortex M3 derivatives)
 THUMB_AS_SOURCE =
