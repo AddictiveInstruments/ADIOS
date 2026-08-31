@@ -1,11 +1,16 @@
 #include "MainWindow.h"
 #include <QApplication>
 #include <QFile>
+#include <QStyleFactory>
 #include <QtGlobal>
 
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
+    // Force the Fusion style on EVERY platform. It honours the stylesheet
+    // identically; the native macOS style ignores QSS background/colour on
+    // QPushButton, so the channel-filter buttons lost their green fill there.
+    app.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
     app.setApplicationName(QStringLiteral("ADIOS Studio"));
     app.setOrganizationName(QStringLiteral("Addictive Instruments"));
     // so QSettings has a home for the remembered ports, id and hex file
