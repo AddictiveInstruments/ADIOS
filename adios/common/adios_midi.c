@@ -149,6 +149,8 @@ static s32 (*direct_tx_callback_func)(adios_midi_port_t port, adios_midi_package
 static s32 (*sysex_callback_func)(adios_midi_port_t port, u8 sysex_byte);
 static s32 (*timeout_callback_func)(adios_midi_port_t port);
 static s32 (*debug_command_callback_func)(adios_midi_port_t port, char c);
+static s32 (*query_callback_func)(adios_midi_port_t port, u8 query);
+static s32 (*greeting_callback_func)(adios_midi_port_t port);
 static s32 (*filebrowser_command_callback_func)(adios_midi_port_t port, char c);
 
 static sysex_state_t sysex_state;
@@ -229,6 +231,7 @@ static s32 ADIOS_MIDI_SYSEX_Cmd(adios_midi_port_t port, adios_midi_sysex_cmd_sta
 static s32 ADIOS_MIDI_SYSEX_Cmd_Query(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
 static s32 ADIOS_MIDI_SYSEX_Cmd_Debug(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
 static s32 ADIOS_MIDI_SYSEX_Cmd_Ping(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
+static s32 ADIOS_MIDI_SYSEX_TermGreeting(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in);
 static s32 ADIOS_MIDI_SYSEX_SendAck(adios_midi_port_t port, u8 ack_code, u8 ack_arg);
 static s32 ADIOS_MIDI_SYSEX_SendAckStr(adios_midi_port_t port, char *str);
 static s32 ADIOS_MIDI_TimeOut(adios_midi_port_t port);
@@ -257,6 +260,8 @@ s32 ADIOS_MIDI_Init(u32 mode)
 	sysex_callback_func = NULL;
 	timeout_callback_func = NULL;
 	debug_command_callback_func = NULL;
+	query_callback_func = NULL;
+	greeting_callback_func = NULL;
 	filebrowser_command_callback_func = NULL;
 
 	// initialize interfaces
@@ -1835,6 +1840,9 @@ static s32 ADIOS_MIDI_SYSEX_Cmd(adios_midi_port_t port, adios_midi_sysex_cmd_sta
 	case 0x00:
 		ADIOS_MIDI_SYSEX_Cmd_Query(port, cmd_state, midi_in);
 		break;
+	case ADIOS_MIDI_SYSEX_TERM_GREETING:
+		ADIOS_MIDI_SYSEX_TermGreeting(port, cmd_state, midi_in);
+		break;
 	case 0x0d:
 		ADIOS_MIDI_SYSEX_Cmd_Debug(port, cmd_state, midi_in);
 		break;
@@ -1977,6 +1985,11 @@ static s32 ADIOS_MIDI_SYSEX_Cmd_Query(adios_midi_port_t port, adios_midi_sysex_c
 			// unknown query
 			ADIOS_MIDI_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_UNKNOWN_QUERY);
 		}
+
+		// notify the application that a host queried us (per query item; the
+		// handler decides what, if anything, to do - e.g. re-greet a terminal).
+		if( query_callback_func != NULL )
+			query_callback_func(port, query_req);
 	}
 
 	return 0; // no error
@@ -2082,6 +2095,31 @@ static s32 ADIOS_MIDI_SYSEX_Cmd_Ping(adios_midi_port_t port, adios_midi_sysex_cm
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// Command 0C: Terminal greeting. A host that carries a debug terminal (e.g.
+// ADIOS Studio) sends this to PULL the application's greeting and command list
+// on demand - the core never volunteers it. With no handler installed the core
+// answers DISACK, so the host learns this application has no terminal.
+/////////////////////////////////////////////////////////////////////////////
+static s32 ADIOS_MIDI_SYSEX_TermGreeting(adios_midi_port_t port, adios_midi_sysex_cmd_state_t cmd_state, u8 midi_in)
+{
+	// nothing to do until the whole (argument-less) command has arrived
+	if( cmd_state != ADIOS_MIDI_SYSEX_CMD_STATE_END )
+		return 0;
+
+	if( greeting_callback_func == NULL ) {
+		// no terminal in this application
+		ADIOS_MIDI_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_DISACK, ADIOS_MIDI_SYSEX_DISACK_INVALID_COMMAND);
+		return 0;
+	}
+
+	// the handler prints greeting + commands on this port, then we acknowledge
+	greeting_callback_func(port);
+	ADIOS_MIDI_SYSEX_SendAck(port, ADIOS_MIDI_SYSEX_ACK, 0x00);
+
+	return 0; // no error
+}
+
+/////////////////////////////////////////////////////////////////////////////
 // This function sends a SysEx acknowledge to notify the user about the received command
 // expects acknowledge code (e.g. 0x0f for good, 0x0e for error) and additional argument
 /////////////////////////////////////////////////////////////////////////////
@@ -2162,6 +2200,34 @@ static s32 ADIOS_MIDI_SYSEX_SendAckStr(adios_midi_port_t port, char *str)
 s32 ADIOS_MIDI_DebugCommandCallback_Init(s32 (*callback_debug_command)(adios_midi_port_t port, char c))
 {
 	debug_command_callback_func = callback_debug_command;
+
+	return 0; // no error
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Installs a callback executed each time a host QUERY (device info) is
+//! answered - e.g. so a debug terminal can re-greet a connecting host. The
+//! callback receives the port and the query sub-command; NULL disables it.
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 ADIOS_MIDI_QueryCallback_Init(s32 (*callback_query)(adios_midi_port_t port, u8 query))
+{
+	query_callback_func = callback_query;
+
+	return 0; // no error
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+//! Installs the callback executed when a host sends TERM_GREETING (0x0c): the
+//! application prints its terminal greeting and command list on the given port.
+//! NULL (the default) makes the core answer DISACK - "no terminal here".
+//! \return < 0 on errors
+/////////////////////////////////////////////////////////////////////////////
+s32 ADIOS_MIDI_TermGreetingCallback_Init(s32 (*callback_greeting)(adios_midi_port_t port))
+{
+	greeting_callback_func = callback_greeting;
 
 	return 0; // no error
 }

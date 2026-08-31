@@ -34,6 +34,7 @@ enum : uint8_t {
     CMD_READ_MEM       = 0x01,
     CMD_WRITE_MEM      = 0x02,
     CMD_ENTRY_OVERRIDE = 0x03,
+    TERM_GREETING      = 0x0c,   // OS: pull the app's terminal greeting + commands
     CMD_PING           = 0x0f,
     CMD_RESET          = 0x7f,   // "release halt state" / restart request
 };
@@ -108,6 +109,10 @@ Bytes writeMem(uint8_t device_id, uint32_t addr, const uint8_t* data, size_t len
 
 // F0 00 22 15 32 <id> 00 <sub> F7
 Bytes query(uint8_t device_id, uint8_t sub);
+
+// F0 00 22 15 32 <id> 0C F7 - asks a terminal-aware application to (re-)print
+// its greeting and command list. DISACK back means "no terminal here".
+Bytes termGreeting(uint8_t device_id);
 
 // F0 00 22 15 <target> <id> 0F F7 - and NOTHING between the 0x0f and the F7:
 // one stray byte and the board stays silent (adios_midi.c:2058, anti-loop).

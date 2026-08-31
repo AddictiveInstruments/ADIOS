@@ -45,6 +45,7 @@
 /////////////////////////////////////////////////////////////////////////////
 
 // MIDI commands and acknowledge reply codes
+#define ADIOS_MIDI_SYSEX_TERM_GREETING 0x0c   // host pulls the app's terminal greeting + command list
 #define ADIOS_MIDI_SYSEX_DEBUG    0x0d
 #define ADIOS_MIDI_SYSEX_DISACK   0x0e
 #define ADIOS_MIDI_SYSEX_ACK      0x0f
@@ -379,6 +380,8 @@ extern u8  ADIOS_MIDI_DeviceIDGet(void);
 extern s32 ADIOS_MIDI_SysExCallback_Init(s32 (*callback_sysex)(adios_midi_port_t port, u8 sysex_byte));
 
 extern s32 ADIOS_MIDI_DebugCommandCallback_Init(s32 (*callback_debug_command)(adios_midi_port_t port, char c));
+extern s32 ADIOS_MIDI_QueryCallback_Init(s32 (*callback_query)(adios_midi_port_t port, u8 query));
+extern s32 ADIOS_MIDI_TermGreetingCallback_Init(s32 (*callback_greeting)(adios_midi_port_t port));
 extern s32 ADIOS_MIDI_FilebrowserCommandCallback_Init(s32 (*callback_filebrowser_command)(adios_midi_port_t port, char c));
 
 extern s32 ADIOS_MIDI_TimeOutCallback_Init(s32 (*callback_timeout)(adios_midi_port_t port));

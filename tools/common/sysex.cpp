@@ -85,10 +85,17 @@ Bytes ping(Target t, uint8_t device_id)
     return msg;
 }
 
+Bytes termGreeting(uint8_t device_id)
+{
+    Bytes msg = header(Target::Os, device_id, TERM_GREETING);
+    msg.push_back(0xf7);
+    return msg;
+}
+
 Bytes reset(uint8_t device_id)
 {
     // 0x7f is a QUERY SUB-COMMAND, not a command of its own: the dispatcher
-    // knows only 0x00, 0x0d, 0x0e and 0x0f, and anything else earns an
+    // knows only 0x00, 0x0c, 0x0d, 0x0e and 0x0f, and anything else earns an
     // INVALID_COMMAND disacknowledge (adios_midi.c:1834-1851, and the same
     // shape in the June 2025 tree). Sent as a bare command it does nothing
     // but make the board complain - which is exactly what it did.
