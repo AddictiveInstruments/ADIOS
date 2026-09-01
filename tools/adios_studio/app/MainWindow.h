@@ -66,6 +66,7 @@ private:
     // View menu (menu bar built in the ctor). Each monitor line keeps its three
     // parts so the column toggles can rebuild what is already on screen.
     void buildMenus();
+    void openController();             // Tools > Controller: open (or raise) its own window
     void resetLayout();               // Reset Layout: re-check every View toggle + default splitters
     void syncMonSplit();              // hide the monitor row entirely when both monitors are off
     struct MonCols { bool stamp = true, decode = true, raw = true; };
@@ -77,6 +78,8 @@ private:
     QAction* inShowAct_ = nullptr;    // the two monitor "Show" toggles, read by syncMonSplit
     QAction* outShowAct_ = nullptr;
     int      monRowH_ = 0;            // monitor-row height removed while both are hidden
+    QWidget* controllerWin_ = nullptr;  // Tools > Controller, an independent window
+    int      kbChannel_ = 0;            // keyboard MIDI TX channel (0..15)
     QString nowStamp();
 
     // Collapsible message filter above the Input monitor list.

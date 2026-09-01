@@ -134,6 +134,20 @@ QPushButton#chanBtn {
 QPushButton#chanBtn:checked  { border-color: #55b56a; background: #23331f; color: #eef3ea; }
 QPushButton#chanBtn:disabled { border-color: #3a3f4a; color: #5a6172; background: transparent; }
 
+/* Left Hand: wheel captions in the normal label colour (like "Channel:"),
+   value read-outs in the accent, monospace */
+QLabel#wheelLbl { color: #dfe4ec; }
+QLabel#wheelVal { color: #5a8ac8; font-family: "Consolas", "Menlo", monospace; }
+
+/* keyboard TX-channel cells: single-select, normal accent (blue) instead of green/red */
+QPushButton#kbChan {
+    padding: 0; font-size: 9px;
+    border: 1px solid #3d4757; border-radius: 2px;
+    background: transparent; color: #8a94a6;
+}
+QPushButton#kbChan:hover   { border-color: #5a8ac8; }
+QPushButton#kbChan:checked { border-color: #5a8ac8; background: #4a7ab8; color: #f2f6fc; }
+
 /* Set all / Clear all */
 QPushButton#miniBtn {
     background: transparent; border: 1px solid #3d4757; border-radius: 2px;

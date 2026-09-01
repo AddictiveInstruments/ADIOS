@@ -15,9 +15,23 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QButtonGroup>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMouseEvent>
+#include <QResizeEvent>
+#include <QScrollBar>
+#include <QVector>
+#include <QWheelEvent>
+#include <functional>
 #include <QPainter>
+#include <QPainterPath>
+#include <QLinearGradient>
+#include <QImage>
+#include <QVariantAnimation>
+#include <QEasingCurve>
+#include <QPointer>
+#include <cmath>
 #include <QRadioButton>
 #include <QProgressBar>
 #include <QPushButton>
@@ -197,6 +211,231 @@ QString hexFull(const adios::Bytes& m)
     }
     return s;
 }
+
+static QString noteName(int m)
+{
+    static const char* N[] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+    return QString("%1%2").arg(N[m % 12]).arg(m / 12 - 1);
+}
+
+// A resizable on-screen MIDI keyboard: keys are a FIXED width, so a wider window
+// shows MORE keys, never wider ones. Custom-painted, no Q_OBJECT - it reports
+// notes through two std::function callbacks the owner sets.
+class PianoKeyboard : public QWidget {
+public:
+    std::function<void(int note, int vel)> onNoteOn;
+    std::function<void(int note)>          onNoteOff;
+    std::function<void()>                  onView;   // fires when the visible slice changes
+    static constexpr int KW = 24, BW = 15;
+    explicit PianoKeyboard(QWidget* parent = nullptr) : QWidget(parent) {
+        setMinimumHeight(72);
+        for (int m = 0; m <= 127; ++m) if (!isBlack(m)) allWhite_.push_back(m);   // the WHOLE range
+        center_ = qMax(0, allWhite_.indexOf(60));                                 // start on middle C
+    }
+    int  totalWhite()   const { return int(allWhite_.size()); }
+    int  visibleWhite() const { return qBound(1, width() / KW, int(allWhite_.size())); }
+    int  fullWidth()    const { return int(allWhite_.size()) * KW; }              // width that shows all keys
+    int  scroll()       const { return scroll_; }
+    int  maxScroll()    const { return qMax(0, int(allWhite_.size()) - visibleWhite()); }
+    void setScroll(int s) {
+        s = qBound(0, s, maxScroll());
+        if (s == scroll_) return;
+        scroll_ = s; center_ = scroll_ + visibleWhite() / 2;   // remember where we are
+        update(); if (onView) onView();
+    }
+protected:
+    void resizeEvent(QResizeEvent*) override {
+        // Keep the CENTER fixed: widening/narrowing reveals/hides keys on BOTH sides.
+        scroll_ = qBound(0, center_ - visibleWhite() / 2, maxScroll());
+        if (onView) onView();
+    }
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this); p.setRenderHint(QPainter::Antialiasing, true);
+        const int vis = visibleWhite(), h = height(), bh = h * 62 / 100, n = int(allWhite_.size());
+        for (int i = 0; i < vis && scroll_ + i < n; ++i) {          // white keys
+            const int m = allWhite_[scroll_ + i];
+            const QRect r(i * KW, 0, KW, h);
+            p.setPen(QColor(0xaa, 0xb4, 0xc2));
+            p.setBrush(m == cur_ ? QColor(0x4a, 0x7a, 0xb8) : QColor(0xe9, 0xed, 0xf3));
+            p.drawRoundedRect(QRectF(r).adjusted(0.5, -3, -0.5, -0.5), 3, 3);      // top clipped -> bottom rounded
+            if (m % 12 == 0) {                                                     // label each C
+                p.setPen(QColor(0x5a, 0x61, 0x72));
+                p.drawText(r.adjusted(0, 0, 0, -3), Qt::AlignHCenter | Qt::AlignBottom, noteName(m));
+            }
+        }
+        for (int i = 0; i + 1 < vis && scroll_ + i + 1 < n; ++i) {  // black keys, between visible whites
+            const int bm = allWhite_[scroll_ + i] + 1;
+            if (!isBlack(bm)) continue;
+            const QRect r((i + 1) * KW - BW / 2, 0, BW, bh);
+            p.setPen(QColor(0x0c, 0x11, 0x18));
+            p.setBrush(bm == cur_ ? QColor(0x4a, 0x7a, 0xb8) : QColor(0x20, 0x25, 0x2f));
+            p.drawRoundedRect(QRectF(r).adjusted(0.5, -3, -0.5, -0.5), 3, 3);
+        }
+    }
+    void mousePressEvent(QMouseEvent* e) override { press(noteAt(e->pos()), e->pos().y()); }
+    void mouseMoveEvent(QMouseEvent* e) override  { if (e->buttons() & Qt::LeftButton) press(noteAt(e->pos()), e->pos().y()); }
+    void mouseReleaseEvent(QMouseEvent*) override { release(); }
+    void wheelEvent(QWheelEvent* e) override { setScroll(scroll_ - e->angleDelta().y() / 120); e->accept(); }
+private:
+    static bool isBlack(int m) { int n = m % 12; return n==1 || n==3 || n==6 || n==8 || n==10; }
+    int noteAt(QPoint pt) const {
+        const int vis = visibleWhite(), h = height(), bh = h * 62 / 100, n = int(allWhite_.size());
+        for (int i = 0; i + 1 < vis && scroll_ + i + 1 < n; ++i) {   // blacks first (on top)
+            const int bm = allWhite_[scroll_ + i] + 1;
+            if (isBlack(bm) && QRect((i + 1) * KW - BW / 2, 0, BW, bh).contains(pt)) return bm;
+        }
+        for (int i = 0; i < vis && scroll_ + i < n; ++i)
+            if (QRect(i * KW, 0, KW, h).contains(pt)) return allWhite_[scroll_ + i];
+        return -1;
+    }
+    // Velocity from WHERE on the key it was pressed: lower = louder. A few-pixel
+    // band at the bottom reaches 127 easily; the top never yields 0 (vel 0 = Note Off).
+    int velFromY(int note, int y) const {
+        const int h = height(), bh = h * 62 / 100;
+        const int kh = isBlack(note) ? bh : h;
+        const double f = qBound(0.0, double(y) / qMax(1, kh - 6), 1.0);
+        return 1 + qRound(f * 126);   // 1..127
+    }
+    void press(int note, int y) { if (note < 0 || note == cur_) return; release(); cur_ = note; if (onNoteOn) onNoteOn(note, velFromY(note, y)); update(); }
+    void release() { if (cur_ < 0) return; const int n = cur_; cur_ = -1; if (onNoteOff) onNoteOff(n); update(); }
+    QVector<int> allWhite_;
+    int scroll_ = 0, center_ = 0, cur_ = -1;
+};
+
+// A pitch-bend / modulation wheel: the black cylinder validated in the mock-up,
+// drawn with QPainter and dragged vertically. Pitch springs back to centre
+// (8192); Mod has no spring and rests at the bottom (0). Every move (and every
+// spring step) reports the raw MIDI value through onChange. Ridges are optional -
+// a future View toggle in the Controller flips them with setRidges().
+class Wheel : public QWidget {
+public:
+    enum Type { Pitch, Mod };
+    std::function<void(int)> onChange;
+    explicit Wheel(Type t, QWidget* parent = nullptr) : QWidget(parent), type_(t) {
+        setFixedSize(TW, H);
+        val_ = (type_ == Pitch) ? 8192 : 0;
+        buildHighlight();
+    }
+    int  value() const { return val_; }
+    void setRidges(bool on) { ridges_ = on; update(); }
+    static constexpr int TW = 38;   // total widget width (narrow body + tick margins)
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        constexpr double PI = 3.14159265358979323846;
+        const double cx = OX + W / 2.0, cy = H / 2.0, R = H / 2.0 - 3.0,
+                     RX = W / 2.0 - 3.0, MAXRY = W / 2.0 - 3.0;   // margin scaled with width -> same ellipse proportion
+        const double STEP = PI / 22.0, SPAN = PI / 2.0 * 0.82, EDGE = PI / 2.0 - 0.03;
+        const double roll = (type_ == Pitch) ? (val_ - 8192) / 8192.0 * SPAN
+                                             : (val_ / 127.0 - 0.5) * 2.0 * SPAN;
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        const QPainterPath path = bodyPath();
+        p.save();
+        p.setClipPath(path);
+        p.fillRect(QRectF(OX, 0, W, H), QColor(0x0c, 0x0d, 0x11));
+        if (ridges_)
+            for (int k = -40; k <= 40; ++k) {                 // surface ridges, bunching toward the ends
+                const double a = (k + 0.5) * STEP + roll;
+                if (a <= -EDGE || a >= EDGE) continue;
+                const double y = cy - R * std::sin(a), c = std::cos(a);
+                p.setPen(QPen(QColor(255, 255, 255, int(255 * 0.08 * c)), 1));
+                p.drawLine(QLineF(OX + 2, y - 0.5, OX + W - 2, y - 0.5));
+                p.setPen(QPen(QColor(0, 0, 0, int(255 * 0.42 * c)), 1));
+                p.drawLine(QLineF(OX + 2, y + 0.5, OX + W - 2, y + 0.5));
+            }
+        QLinearGradient hg(OX, 0, OX + W, 0);                 // cross-cylinder shading: dark sides only
+        hg.setColorAt(0.0, QColor(0, 0, 0, 217));  hg.setColorAt(0.24, QColor(0, 0, 0, 20));
+        hg.setColorAt(0.5, QColor(0, 0, 0, 0));    hg.setColorAt(0.76, QColor(0, 0, 0, 20));
+        hg.setColorAt(1.0, QColor(0, 0, 0, 217));
+        p.fillRect(QRectF(OX, 0, W, H), hg);
+        p.drawImage(QPointF(OX, 0), highlight_);              // sine-windowed vertical reflet
+        QLinearGradient vg(0, 0, 0, H);                       // extra darkening at the two ends
+        vg.setColorAt(0.0, QColor(0, 0, 0, 230)); vg.setColorAt(0.11, QColor(0, 0, 0, 0));
+        vg.setColorAt(0.89, QColor(0, 0, 0, 0));  vg.setColorAt(1.0, QColor(0, 0, 0, 230));
+        p.fillRect(QRectF(OX, 0, W, H), vg);
+        const double ym = cy - R * std::sin(roll), ry = std::max(1.0, MAXRY * std::cos(roll));
+        QLinearGradient mg(0, ym - ry, 0, ym + ry);           // opaque marker, reflet at the bottom
+        mg.setColorAt(0.0, QColor(0x06, 0x06, 0x09)); mg.setColorAt(0.5, QColor(0x0c, 0x0d, 0x0f));
+        mg.setColorAt(0.78, QColor(0x2b, 0x2d, 0x31)); mg.setColorAt(1.0, QColor(0x45, 0x48, 0x4d));
+        p.setPen(Qt::NoPen); p.setBrush(mg);
+        p.drawEllipse(QPointF(cx, ym), RX, ry);
+        p.setBrush(Qt::NoBrush); p.setPen(QPen(QColor(0, 0, 0, 153), 1));
+        p.drawEllipse(QPointF(cx, ym), RX, ry);
+        p.restore();
+        p.setBrush(Qt::NoBrush); p.setPen(QPen(QColor(0, 0, 0), 1));
+        p.drawPath(path);
+        p.setRenderHint(QPainter::Antialiasing, false);       // crisp 1px reference ticks
+        p.setPen(Qt::NoPen); p.setBrush(QColor(0x8a, 0x94, 0xa6));
+        auto tick = [&](double y, double len) {
+            p.drawRect(QRectF(OX - 1 - len, y - 0.5, len, 1));
+            p.drawRect(QRectF(OX + W + 1, y - 0.5, len, 1));
+        };
+        if (type_ == Pitch) { tick(cy, 6); tick(CH + 2, 4); tick(H - CH - 2, 4); }   // long tick = rest
+        else                { tick(H - CH - 2, 6); tick(cy, 4); tick(CH + 2, 4); }   // mod rests low
+    }
+    void mousePressEvent(QMouseEvent* e) override { pressed_ = true; stopSpring(); fromY(e->position().y()); }
+    void mouseMoveEvent(QMouseEvent* e) override  { if (pressed_) fromY(e->position().y()); }
+    void mouseReleaseEvent(QMouseEvent*) override { if (!pressed_) return; pressed_ = false; if (type_ == Pitch) startSpring(); }
+
+private:
+    static constexpr int H = 126, W = 22, OX = 8, CH = 8;   // width cut ~1/3 (33->22), ends scaled to match
+
+    QPainterPath bodyPath() const {                           // straight sides, full-width elliptical ends
+        const double rx = W / 2.0 - 0.5, ry = CH, cxw = OX + W / 2.0;
+        const QRectF topR(cxw - rx, 0.5, 2 * rx, 2 * ry);
+        const QRectF botR(cxw - rx, H - 0.5 - 2 * ry, 2 * rx, 2 * ry);
+        QPainterPath p;
+        p.arcMoveTo(topR, 180);
+        p.arcTo(topR, 180, -180);                             // left -> top -> right
+        p.lineTo(cxw + rx, H - 0.5 - ry);
+        p.arcTo(botR, 0, -180);                               // right -> bottom -> left
+        p.closeSubpath();
+        return p;
+    }
+    void buildHighlight() {                                   // built once: it does not move as the wheel rolls
+        constexpr double PI = 3.14159265358979323846;
+        highlight_ = QImage(W, H, QImage::Format_ARGB32_Premultiplied);
+        highlight_.fill(Qt::transparent);
+        QPainter g(&highlight_);
+        QLinearGradient band(0, 0, W, 0);
+        band.setColorAt(0.0, QColor(255, 255, 255, 0)); band.setColorAt(0.5, QColor(255, 255, 255, 43));
+        band.setColorAt(1.0, QColor(255, 255, 255, 0));
+        g.fillRect(QRectF(0, 0, W, H), band);
+        g.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+        QLinearGradient vmask(0, 0, 0, H);
+        for (int i = 0; i <= 24; ++i) {
+            const double q = i / 24.0;
+            vmask.setColorAt(q, QColor(0, 0, 0, int(std::lround(255 * std::sin(PI * q)))));
+        }
+        g.fillRect(QRectF(0, 0, W, H), vmask);
+    }
+    void fromY(double y) {
+        double t = (y - 9.0) / (H - 18.0);
+        t = std::max(0.0, std::min(1.0, t));
+        val_ = (type_ == Pitch) ? int(std::lround((1 - t) * 16383)) : int(std::lround((1 - t) * 127));
+        update();
+        if (onChange) onChange(val_);
+    }
+    void startSpring() {                                      // ease back to centre over 180 ms
+        stopSpring();
+        auto* a = new QVariantAnimation(this);
+        a->setStartValue(val_); a->setEndValue(8192);
+        a->setDuration(180); a->setEasingCurve(QEasingCurve::OutQuad);
+        connect(a, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) {
+            val_ = v.toInt(); update(); if (onChange) onChange(val_);
+        });
+        a->start(QAbstractAnimation::DeleteWhenStopped);
+        spring_ = a;
+    }
+    void stopSpring() { if (spring_) { spring_->stop(); spring_ = nullptr; } }
+
+    Type type_;
+    int  val_ = 8192;
+    bool ridges_ = true, pressed_ = false;
+    QImage highlight_;
+    QPointer<QVariantAnimation> spring_;
+};
 
 void appendCapped(QListWidget* w, QListWidgetItem* it)
 {
@@ -393,6 +632,11 @@ MainWindow::MainWindow()
     }
     connectPorts();
 
+    // Bring the Controller back if it was open when the app last closed, at its
+    // remembered size and position. Deferred so it appears after the main window.
+    if (QSettings().value("ctrlOpen", false).toBool())
+        QTimer::singleShot(0, this, [this] { openController(); });
+
     // Auto-ping at startup: read the device and pull its terminal greeting, just
     // like the Ping button, once the event loop is running and the ports have
     // settled. Silent (no-op) when nothing is connected or a job is already busy.
@@ -451,6 +695,11 @@ void MainWindow::saveSettings()
     s.setValue("monSplitState",  ui_->monSplit->saveState());
     s.setValue("winGeometry",    saveGeometry());   // position + size of the main window
     for (QAction* a : viewToggles_) s.setValue("view/" + a->objectName(), a->isChecked());
+
+    // Controller window: remember whether it was open and its size/position, so it
+    // returns exactly as left on the next launch.
+    s.setValue("ctrlOpen", controllerWin_ && controllerWin_->isVisible());
+    if (controllerWin_) s.setValue("ctrlGeometry", controllerWin_->saveGeometry());
 
     // Filter: flags, channel mask, the Output "Apply Filter" toggle, and which
     // triangles are expanded - so the whole panel comes back as the user left it.
@@ -638,7 +887,7 @@ void MainWindow::buildMenus()
 
     // Tools: structure only for now (Controller + Screen Capture), wired later.
     QMenu* mTools = menuBar_->addMenu(tr("Tools"));
-    mTools->addAction(tr("Controller"))->setEnabled(false);
+    connect(mTools->addAction(tr("Controller")), &QAction::triggered, this, &MainWindow::openController);
     QMenu* mCap = mTools->addMenu(tr("Screen Capture"));
     mCap->addAction(tr("5x6 Display"))->setEnabled(false);
     mCap->addAction(tr("Dr Display"))->setEnabled(false);
@@ -704,6 +953,147 @@ void MainWindow::buildMenus()
     addCols(outSub, &outCols_, monOut_, false, "out.");
 
     ui_->root->setMenuBar(menuBar_);
+}
+
+// Tools > Controller: an independent top-level window (its own frame, styled by
+// the app-wide sheet). Built on first use, then just raised on later opens.
+void MainWindow::openController()
+{
+    if (!controllerWin_) {
+        // Parentless top-level: an INDEPENDENT window (own z-order, can sit BEHIND
+        // the main window when it regains focus). WA_QuitOnClose=false so closing
+        // the main window still quits the app even while this one is open.
+        controllerWin_ = new QWidget(nullptr);
+        controllerWin_->setAttribute(Qt::WA_QuitOnClose, false);
+        controllerWin_->setWindowTitle(tr("Controller"));
+        // Come back at the size/position it had last time; first ever open matches
+        // the main window. (Width is still capped below to where all keys show.)
+        const QByteArray cg = QSettings().value("ctrlGeometry").toByteArray();
+        if (!cg.isEmpty()) controllerWin_->restoreGeometry(cg);
+        else               controllerWin_->resize(size());
+
+        auto* col = new QVBoxLayout(controllerWin_);
+        col->setContentsMargins(12, 12, 12, 12);   // like the main window's root layout
+        col->setSpacing(0);
+        col->addStretch(1);                    // empty room above, for later controls
+
+        auto* grp = new QGroupBox(tr("MIDI Keyboard"));
+        auto* gl  = new QVBoxLayout(grp); gl->setContentsMargins(0, 0, 0, 0); gl->setSpacing(0);   // QSS gives the 15px padding
+        const int TOP_GAP = 6;   // gap under the Channel row (mirrored in Left Hand under Bend/Mod)
+
+        // "Channel:" + 16 single-select cells (blue), the keyboard's TX channel. Same
+        // 18x18 and spacing 3 as the filter's channel matrix, but a single row.
+        auto* chRow = new QHBoxLayout; chRow->setContentsMargins(0, 0, 0, 0); chRow->setSpacing(3);
+        chRow->addWidget(new QLabel(tr("Channel:")));
+        chRow->addSpacing(6);
+        auto* chGroup = new QButtonGroup(controllerWin_);
+        for (int i = 0; i < 16; ++i) {
+            auto* b = new QPushButton(QString::number(i + 1));
+            b->setObjectName("kbChan");
+            b->setCheckable(true);
+            b->setFixedSize(18, 18);
+            b->setChecked(i == 0);
+            chGroup->addButton(b, i);
+            chRow->addWidget(b);
+        }
+        chRow->addStretch();
+        auto* noNoteOff = new FilterCheckBox(tr("No Note Off"));   // on: release sends Note On vel 0 (running status)
+        noNoteOff->setNeutral(true);                               // same gray box + white tick as "Apply Filter"
+        chRow->addWidget(noNoteOff);
+        connect(chGroup, &QButtonGroup::idToggled, this, [this](int id, bool on) { if (on) kbChannel_ = id; });
+        gl->addLayout(chRow);
+        gl->addSpacing(TOP_GAP);
+
+        auto* keybed = new QWidget; keybed->setFixedHeight(4);   // thin accent strip above the keys
+        keybed->setStyleSheet("background:#4a7ab8; border-radius:2px;");
+        gl->addWidget(keybed);
+        gl->addSpacing(2);
+
+        auto* kb = new PianoKeyboard;
+        kb->setFixedHeight(120);
+        gl->addWidget(kb);
+
+        gl->addSpacing(10);                    // gap: the scrollbar sits away from the keys
+
+        // Scrollbar in a fixed-height row so hiding it (all keys fit) keeps its space:
+        // the keys never move, it just disappears.
+        auto* sbRow = new QWidget; sbRow->setFixedHeight(14);
+        auto* sbLay = new QVBoxLayout(sbRow); sbLay->setContentsMargins(0, 0, 0, 0); sbLay->setSpacing(0);
+        auto* sb = new QScrollBar(Qt::Horizontal);
+        sbLay->addWidget(sb);
+        gl->addWidget(sbRow);
+
+        connect(sb, &QScrollBar::valueChanged, kb, [kb](int v) { kb->setScroll(v); });
+        kb->onView = [kb, sb] {
+            QSignalBlocker block(sb);
+            sb->setRange(0, kb->maxScroll());
+            sb->setPageStep(kb->visibleWhite());
+            sb->setValue(kb->scroll());
+            sb->setVisible(kb->maxScroll() > 0);   // all keys fit -> no scrollbar (row keeps its height)
+        };
+        kb->onNoteOn  = [this](int n, int vel) { sendRaw({ uint8_t(0x90 | kbChannel_), uint8_t(n), uint8_t(vel) }); };
+        kb->onNoteOff = [this, noNoteOff](int n) {
+            const uint8_t status = noNoteOff->isChecked() ? uint8_t(0x90 | kbChannel_)    // Note On vel 0
+                                                          : uint8_t(0x80 | kbChannel_);   // real Note Off
+            sendRaw({ status, uint8_t(n), uint8_t(0) });
+        };
+
+        // --- Left Hand: pitch-bend + modulation wheels, to the LEFT of the keyboard.
+        // Its three rows line up with the keyboard group beside it: the Bend/Mod
+        // captions on the Channel row, the wheels on the blue strip + keys (same 126
+        // px), and the value read-outs on the scrollbar row. Same row heights and
+        // spacings, same group chrome -> everything aligns.
+        const int WHEEL_GAP = 6;   // keep the two wheels close, not spread out
+        auto* lhGrp = new QGroupBox(tr("Left Hand"));
+        lhGrp->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+        auto* lgl = new QVBoxLayout(lhGrp); lgl->setContentsMargins(0, 0, 0, 0); lgl->setSpacing(0);
+        auto mkCentered = [](const QString& t, const char* obj, int h) {
+            auto* l = new QLabel(t); l->setObjectName(obj);
+            l->setAlignment(Qt::AlignCenter); l->setFixedSize(Wheel::TW, h); return l;
+        };
+        auto* labRow = new QHBoxLayout; labRow->setContentsMargins(0, 0, 0, 0); labRow->setSpacing(WHEEL_GAP);
+        labRow->addWidget(mkCentered(tr("Bend"), "wheelLbl", 18));   // 18 = the Channel row height
+        labRow->addWidget(mkCentered(tr("Mod"),  "wheelLbl", 18));
+        lgl->addLayout(labRow);
+        lgl->addSpacing(TOP_GAP);
+        auto* whRow = new QHBoxLayout; whRow->setContentsMargins(0, 0, 0, 0); whRow->setSpacing(WHEEL_GAP);
+        auto* pitch = new Wheel(Wheel::Pitch);   // 49 x 126, top aligns with the blue strip
+        auto* mod   = new Wheel(Wheel::Mod);
+        whRow->addWidget(pitch); whRow->addWidget(mod);
+        lgl->addLayout(whRow);
+        lgl->addSpacing(10);
+        auto* valRow = new QHBoxLayout; valRow->setContentsMargins(0, 0, 0, 0); valRow->setSpacing(WHEEL_GAP);
+        auto* vBend = mkCentered(QStringLiteral("0"), "wheelVal", 14);   // 14 = the scrollbar row height
+        auto* vMod  = mkCentered(QStringLiteral("0"), "wheelVal", 14);
+        valRow->addWidget(vBend); valRow->addWidget(vMod);
+        lgl->addLayout(valRow);
+
+        pitch->onChange = [this, vBend](int v) {
+            const int s = v - 8192;   // 0 at rest, signed offset otherwise
+            vBend->setText(QString(s > 0 ? "+" : "") + QString::number(s));
+            sendRaw({ uint8_t(0xE0 | kbChannel_), uint8_t(v & 0x7f), uint8_t((v >> 7) & 0x7f) });
+        };
+        mod->onChange = [this, vMod](int v) {
+            vMod->setText(QString::number(v));
+            sendRaw({ uint8_t(0xB0 | kbChannel_), uint8_t(1), uint8_t(v & 0x7f) });   // CC 1
+        };
+
+        auto* handsRow = new QHBoxLayout; handsRow->setContentsMargins(0, 0, 0, 0); handsRow->setSpacing(10);
+        handsRow->addWidget(lhGrp);
+        handsRow->addWidget(grp, 1);   // the keyboard group takes the slack
+        col->addLayout(handsRow);
+
+        // Cap the width where EVERY key shows: once laid out, the window/keyboard
+        // width difference IS the exact chrome (margins + group padding + border),
+        // so no magic number can drift if the stylesheet changes.
+        QWidget* win = controllerWin_;
+        QTimer::singleShot(0, win, [win, kb] {
+            if (kb->width() > 0) win->setMaximumWidth(kb->fullWidth() + win->width() - kb->width());
+        });
+    }
+    controllerWin_->show();
+    controllerWin_->raise();
+    controllerWin_->activateWindow();
 }
 
 // Reset Layout: re-check every View toggle (show all panels, columns and the
