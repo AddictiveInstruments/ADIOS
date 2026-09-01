@@ -331,7 +331,7 @@ public:
     }
     int  value() const { return val_; }
     void setRidges(bool on) { ridges_ = on; update(); }
-    void set7bit(bool on) { bit7_ = on; quantizeIf(); update(); if (onChange) onChange(val_); }   // Pitch: coarse 7-bit (LSB 0)
+    void set7bit(bool on) { bit7_ = on; quantizeIf(); update(); }   // Pitch: coarse 7-bit (LSB 0); no MIDI on mode change
     static constexpr int TW = 38;   // total widget width (narrow body + tick margins)
 
 protected:
@@ -717,8 +717,11 @@ void MainWindow::saveSettings()
     s.setValue("ctrlOpen", controllerWin_ && controllerWin_->isVisible());
     if (controllerWin_) {
         s.setValue("ctrlGeometry", controllerWin_->saveGeometry());
-        for (QAction* a : controllerWin_->findChildren<QAction*>())   // View toggles, keyed by objectName
+        for (QAction* a : controllerWin_->findChildren<QAction*>())    // View toggles, keyed by objectName
             if (!a->objectName().isEmpty()) s.setValue("ctrl/" + a->objectName(), a->isChecked());
+        for (QCheckBox* c : controllerWin_->findChildren<QCheckBox*>())  // No Note Off
+            if (!c->objectName().isEmpty()) s.setValue("ctrl/" + c->objectName(), c->isChecked());
+        s.setValue("ctrl/channel", kbChannel_);
     }
 
     // Filter: flags, channel mask, the Output "Apply Filter" toggle, and which
@@ -1018,6 +1021,7 @@ void MainWindow::openController()
         }
         chRow->addStretch();
         auto* noNoteOff = new FilterCheckBox(tr("No Note Off"));   // on: release sends Note On vel 0 (running status)
+        noNoteOff->setObjectName("noNoteOff");                     // persisted with the View toggles
         noNoteOff->setNeutral(true);                               // same gray box + white tick as "Apply Filter"
         chRow->addWidget(noNoteOff);
         connect(chGroup, &QButtonGroup::idToggled, this, [this](int id, bool on) { if (on) kbChannel_ = id; });
@@ -1107,33 +1111,49 @@ void MainWindow::openController()
         // Menu bar: Layout (empty for now) and View. A plain QWidget has no native
         // menu bar, so the layout hosts it - same trick as the main window.
         auto* mb = new QMenuBar(controllerWin_);
-        mb->addMenu(tr("Layout"));                       // empty placeholder (presets, later)
+        auto* layoutMenu = mb->addMenu(tr("Layout"));
         auto* view = mb->addMenu(tr("View"));
         auto* lh = new StayOpenMenu(tr("Left Hand"), view); view->addMenu(lh);   // StayOpen: toggles don't close it
         auto addToggle = [](QMenu* m, const QString& t, const char* obj, bool on) {
             auto* a = m->addAction(t); a->setObjectName(obj); a->setCheckable(true); a->setChecked(on); return a;
         };
-        connect(addToggle(lh, tr("Show"), "lhShow", true), &QAction::toggled, lhGrp, &QWidget::setVisible);
-        connect(addToggle(lh, tr("Stripped"), "lhStripped", true), &QAction::toggled, this,
-                [pitch, mod](bool on) { pitch->setRidges(on); mod->setRidges(on); });
+        auto* aShow = addToggle(lh, tr("Show"), "lhShow", true);
+        connect(aShow, &QAction::toggled, lhGrp, &QWidget::setVisible);
+        auto* aStripped = addToggle(lh, tr("Stripped"), "lhStripped", true);
+        connect(aStripped, &QAction::toggled, this, [pitch, mod](bool on) { pitch->setRidges(on); mod->setRidges(on); });
         auto* bendM = new StayOpenMenu(tr("Bend"), lh); lh->addMenu(bendM);
-        connect(addToggle(bendM, tr("Show"), "bendShow", true), &QAction::toggled, this,
-                [lblBend, pitch, vBend](bool on) { lblBend->setVisible(on); pitch->setVisible(on); vBend->setVisible(on); });
-        connect(addToggle(bendM, tr("7 bits"), "bend7bit", false), &QAction::toggled, pitch,
-                [pitch](bool on) { pitch->set7bit(on); });
+        auto* aBendShow = addToggle(bendM, tr("Show"), "bendShow", true);
+        connect(aBendShow, &QAction::toggled, this, [lblBend, pitch, vBend](bool on) { lblBend->setVisible(on); pitch->setVisible(on); vBend->setVisible(on); });
+        auto* aBend7 = addToggle(bendM, tr("7 bits"), "bend7bit", false);
+        connect(aBend7, &QAction::toggled, pitch, [pitch](bool on) { pitch->set7bit(on); });
         auto* modM = new StayOpenMenu(tr("Mod"), lh); lh->addMenu(modM);
-        connect(addToggle(modM, tr("Show"), "modShow", true), &QAction::toggled, this,
-                [lblMod, mod, vMod](bool on) { lblMod->setVisible(on); mod->setVisible(on); vMod->setVisible(on); });
+        auto* aModShow = addToggle(modM, tr("Show"), "modShow", true);
+        connect(aModShow, &QAction::toggled, this, [lblMod, mod, vMod](bool on) { lblMod->setVisible(on); mod->setVisible(on); vMod->setVisible(on); });
+
+        // Layout > Reset Layout: every View toggle back to default + default size.
+        connect(layoutMenu->addAction(tr("Reset Layout")), &QAction::triggered, this,
+                [this, aShow, aStripped, aBendShow, aBend7, aModShow] {
+                    aShow->setChecked(true); aStripped->setChecked(true); aBendShow->setChecked(true);
+                    aBend7->setChecked(false); aModShow->setChecked(true);
+                    controllerWin_->resize(size());
+                });
         col->setMenuBar(mb);
 
-        // Restore the toggles saved at the last close (fires each handler -> the
-        // panels come back hidden/shown, stripped, 7-bit exactly as left).
+        // Restore what was saved at the last close: View toggles, No Note Off, and
+        // the channel. Setting each fires its handler -> the panels/state come back
+        // exactly as left.
         QSettings cs;
         for (QAction* a : controllerWin_->findChildren<QAction*>()) {
             if (a->objectName().isEmpty()) continue;
             const QVariant v = cs.value("ctrl/" + a->objectName());
             if (v.isValid() && v.toBool() != a->isChecked()) a->setChecked(v.toBool());
         }
+        for (QCheckBox* c : controllerWin_->findChildren<QCheckBox*>()) {
+            if (c->objectName().isEmpty()) continue;
+            const QVariant v = cs.value("ctrl/" + c->objectName());
+            if (v.isValid()) c->setChecked(v.toBool());
+        }
+        if (auto* b = chGroup->button(cs.value("ctrl/channel", 0).toInt())) b->setChecked(true);
 
         // Cap the width where EVERY key shows: once laid out, the window/keyboard
         // width difference IS the exact chrome (margins + group padding + border),
