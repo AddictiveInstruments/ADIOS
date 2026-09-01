@@ -137,6 +137,19 @@ private:
     bool neutral_ = false;
 };
 
+// A QMenu that STAYS OPEN when a checkable item is clicked, so several toggles can
+// be flipped in one go. Submenus and plain items behave normally.
+class StayOpenMenu : public QMenu {
+public:
+    using QMenu::QMenu;
+protected:
+    void mouseReleaseEvent(QMouseEvent* e) override {
+        QAction* a = activeAction();
+        if (a && a->isEnabled() && a->isCheckable()) { a->trigger(); return; }   // toggle, don't close
+        QMenu::mouseReleaseEvent(e);
+    }
+};
+
 // Per-monitor-item data roles. UserRole/+1 drive the delegate (dim the recreated
 // running-status byte); +2..+4 keep the three column parts so the View column
 // toggles can rebuild a line already on screen; +5 marks a running-status repeat
@@ -318,6 +331,7 @@ public:
     }
     int  value() const { return val_; }
     void setRidges(bool on) { ridges_ = on; update(); }
+    void set7bit(bool on) { bit7_ = on; quantizeIf(); update(); if (onChange) onChange(val_); }   // Pitch: coarse 7-bit (LSB 0)
     static constexpr int TW = 38;   // total widget width (narrow body + tick margins)
 
 protected:
@@ -410,10 +424,12 @@ private:
         }
         g.fillRect(QRectF(0, 0, W, H), vmask);
     }
+    void quantizeIf() { if (bit7_ && type_ == Pitch) val_ = qBound(0, qRound(val_ / 128.0), 127) * 128; }   // snap to MSB grid
     void fromY(double y) {
         double t = (y - 9.0) / (H - 18.0);
         t = std::max(0.0, std::min(1.0, t));
         val_ = (type_ == Pitch) ? int(std::lround((1 - t) * 16383)) : int(std::lround((1 - t) * 127));
+        quantizeIf();
         update();
         if (onChange) onChange(val_);
     }
@@ -423,7 +439,7 @@ private:
         a->setStartValue(val_); a->setEndValue(8192);
         a->setDuration(180); a->setEasingCurve(QEasingCurve::OutQuad);
         connect(a, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) {
-            val_ = v.toInt(); update(); if (onChange) onChange(val_);
+            val_ = v.toInt(); quantizeIf(); update(); if (onChange) onChange(val_);
         });
         a->start(QAbstractAnimation::DeleteWhenStopped);
         spring_ = a;
@@ -432,7 +448,7 @@ private:
 
     Type type_;
     int  val_ = 8192;
-    bool ridges_ = true, pressed_ = false;
+    bool ridges_ = true, pressed_ = false, bit7_ = false;
     QImage highlight_;
     QPointer<QVariantAnimation> spring_;
 };
@@ -699,7 +715,11 @@ void MainWindow::saveSettings()
     // Controller window: remember whether it was open and its size/position, so it
     // returns exactly as left on the next launch.
     s.setValue("ctrlOpen", controllerWin_ && controllerWin_->isVisible());
-    if (controllerWin_) s.setValue("ctrlGeometry", controllerWin_->saveGeometry());
+    if (controllerWin_) {
+        s.setValue("ctrlGeometry", controllerWin_->saveGeometry());
+        for (QAction* a : controllerWin_->findChildren<QAction*>())   // View toggles, keyed by objectName
+            if (!a->objectName().isEmpty()) s.setValue("ctrl/" + a->objectName(), a->isChecked());
+    }
 
     // Filter: flags, channel mask, the Output "Apply Filter" toggle, and which
     // triangles are expanded - so the whole panel comes back as the user left it.
@@ -1052,8 +1072,9 @@ void MainWindow::openController()
             l->setAlignment(Qt::AlignCenter); l->setFixedSize(Wheel::TW, h); return l;
         };
         auto* labRow = new QHBoxLayout; labRow->setContentsMargins(0, 0, 0, 0); labRow->setSpacing(WHEEL_GAP);
-        labRow->addWidget(mkCentered(tr("Bend"), "wheelLbl", 18));   // 18 = the Channel row height
-        labRow->addWidget(mkCentered(tr("Mod"),  "wheelLbl", 18));
+        auto* lblBend = mkCentered(tr("Bend"), "wheelLbl", 18);      // 18 = the Channel row height
+        auto* lblMod  = mkCentered(tr("Mod"),  "wheelLbl", 18);
+        labRow->addWidget(lblBend); labRow->addWidget(lblMod);
         lgl->addLayout(labRow);
         lgl->addSpacing(TOP_GAP);
         auto* whRow = new QHBoxLayout; whRow->setContentsMargins(0, 0, 0, 0); whRow->setSpacing(WHEEL_GAP);
@@ -1082,6 +1103,37 @@ void MainWindow::openController()
         handsRow->addWidget(lhGrp);
         handsRow->addWidget(grp, 1);   // the keyboard group takes the slack
         col->addLayout(handsRow);
+
+        // Menu bar: Layout (empty for now) and View. A plain QWidget has no native
+        // menu bar, so the layout hosts it - same trick as the main window.
+        auto* mb = new QMenuBar(controllerWin_);
+        mb->addMenu(tr("Layout"));                       // empty placeholder (presets, later)
+        auto* view = mb->addMenu(tr("View"));
+        auto* lh = new StayOpenMenu(tr("Left Hand"), view); view->addMenu(lh);   // StayOpen: toggles don't close it
+        auto addToggle = [](QMenu* m, const QString& t, const char* obj, bool on) {
+            auto* a = m->addAction(t); a->setObjectName(obj); a->setCheckable(true); a->setChecked(on); return a;
+        };
+        connect(addToggle(lh, tr("Show"), "lhShow", true), &QAction::toggled, lhGrp, &QWidget::setVisible);
+        connect(addToggle(lh, tr("Stripped"), "lhStripped", true), &QAction::toggled, this,
+                [pitch, mod](bool on) { pitch->setRidges(on); mod->setRidges(on); });
+        auto* bendM = new StayOpenMenu(tr("Bend"), lh); lh->addMenu(bendM);
+        connect(addToggle(bendM, tr("Show"), "bendShow", true), &QAction::toggled, this,
+                [lblBend, pitch, vBend](bool on) { lblBend->setVisible(on); pitch->setVisible(on); vBend->setVisible(on); });
+        connect(addToggle(bendM, tr("7 bits"), "bend7bit", false), &QAction::toggled, pitch,
+                [pitch](bool on) { pitch->set7bit(on); });
+        auto* modM = new StayOpenMenu(tr("Mod"), lh); lh->addMenu(modM);
+        connect(addToggle(modM, tr("Show"), "modShow", true), &QAction::toggled, this,
+                [lblMod, mod, vMod](bool on) { lblMod->setVisible(on); mod->setVisible(on); vMod->setVisible(on); });
+        col->setMenuBar(mb);
+
+        // Restore the toggles saved at the last close (fires each handler -> the
+        // panels come back hidden/shown, stripped, 7-bit exactly as left).
+        QSettings cs;
+        for (QAction* a : controllerWin_->findChildren<QAction*>()) {
+            if (a->objectName().isEmpty()) continue;
+            const QVariant v = cs.value("ctrl/" + a->objectName());
+            if (v.isValid() && v.toBool() != a->isChecked()) a->setChecked(v.toBool());
+        }
 
         // Cap the width where EVERY key shows: once laid out, the window/keyboard
         // width difference IS the exact chrome (margins + group padding + border),
