@@ -51,10 +51,18 @@ QSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom r
 QSpinBox::up-arrow    { image: url(:/app/arrow_up.png);   width: 9px; height: 5px; }
 QSpinBox::down-arrow  { image: url(:/app/arrow_down.png); width: 9px; height: 5px; }
 
-/* Right-click menus: subtle hover highlight on the item under the mouse. */
+/* Menu bar (Tools / View) reserved at the top of the window. */
+QMenuBar { background: #161a22; border-bottom: 1px solid #2a2f3a; }
+QMenuBar::item { background: transparent; padding: 5px 10px; color: #b9c1cf; }
+QMenuBar::item:selected { background: #2c4a6e; color: #f2f6fc; }
+QMenuBar::item:pressed  { background: #2c4a6e; color: #f2f6fc; }
+
+/* Right-click menus AND the menu-bar drop-downs: subtle hover highlight. */
 QMenu { background: #1c212b; border: 1px solid #2a2f3a; }
 QMenu::item { padding: 4px 18px; }
 QMenu::item:selected { background: #2c4a6e; color: #f2f6fc; }
+QMenu::separator { height: 1px; background: #2a2f3a; margin: 4px 8px; }
+QMenu::indicator { width: 13px; height: 13px; }
 
 QListWidget {
     background: #12151c;

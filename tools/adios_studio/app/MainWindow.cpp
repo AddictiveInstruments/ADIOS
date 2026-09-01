@@ -16,6 +16,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
+#include <QMenuBar>
 #include <QPainter>
 #include <QRadioButton>
 #include <QProgressBar>
@@ -120,6 +121,19 @@ protected:
 private:
     bool sub_ = false;
     bool neutral_ = false;
+};
+
+// Per-monitor-item data roles. UserRole/+1 drive the delegate (dim the recreated
+// running-status byte); +2..+4 keep the three column parts so the View column
+// toggles can rebuild a line already on screen; +5 marks a running-status repeat
+// even while Raw Data is hidden (so re-showing it dims the right byte again).
+enum {
+    Role_Dim    = Qt::UserRole,      // bool: draw the status byte dimmer NOW
+    Role_HexPos = Qt::UserRole + 1,  // int:  its offset in the current text
+    Role_Stamp  = Qt::UserRole + 2,  // QString: timestamp column
+    Role_Label  = Qt::UserRole + 3,  // QString: decoded column
+    Role_Hex    = Qt::UserRole + 4,  // QString: raw-data column
+    Role_Run    = Qt::UserRole + 5,  // bool: this line repeats running status
 };
 
 // Renders a monitor line, drawing the two hex chars of a RECREATED running-status
@@ -272,6 +286,7 @@ MainWindow::MainWindow()
             if (QSplitterHandle* h = sp->handle(i)) h->setAttribute(Qt::WA_Hover, true);
 
     buildInputFilter();   // the collapsible Filter above the Input monitor list
+    buildMenus();         // Tools / View menu bar, reserved at the top of root
 
     // Right-click menus (select all / copy / [clear]) on every list. Copy takes
     // the whole selection (multi-line: Ctrl/Shift-click), not just the clicked
@@ -377,6 +392,16 @@ MainWindow::MainWindow()
         restoreSettings();
     }
     connectPorts();
+
+    // Auto-ping at startup: read the device and pull its terminal greeting, just
+    // like the Ping button, once the event loop is running and the ports have
+    // settled. Silent (no-op) when nothing is connected or a job is already busy.
+    QTimer::singleShot(300, this, [this] {
+        if (connected_ && !uploader_->busy()) {
+            uploader_->setDeviceId(uint8_t(idBox_->value()));
+            uploader_->queryInfo();
+        }
+    });
 }
 
 MainWindow::~MainWindow()
@@ -398,6 +423,13 @@ void MainWindow::restoreSettings()
     hexPath_->setCurrentText(s.value("hexFile").toString());
     clearOnGreeting_->setChecked(s.value("clearOnGreeting", false).toBool());
     lastDir_ = s.value("browseDir").toString();
+    // View toggles first - each may hide a panel and resize the window - THEN the
+    // saved geometry, so the remembered size (not the toggle's resize) is final.
+    for (QAction* a : viewToggles_) {
+        const QVariant v = s.value("view/" + a->objectName());
+        if (v.isValid()) a->setChecked(v.toBool());
+    }
+    if (s.contains("winGeometry")) restoreGeometry(s.value("winGeometry").toByteArray());
 }
 
 void MainWindow::saveSettings()
@@ -417,6 +449,8 @@ void MainWindow::saveSettings()
     s.setValue("rowsSplitState", ui_->rowsSplit->saveState());
     s.setValue("colsSplitState", ui_->colsSplit->saveState());
     s.setValue("monSplitState",  ui_->monSplit->saveState());
+    s.setValue("winGeometry",    saveGeometry());   // position + size of the main window
+    for (QAction* a : viewToggles_) s.setValue("view/" + a->objectName(), a->isChecked());
 
     // Filter: flags, channel mask, the Output "Apply Filter" toggle, and which
     // triangles are expanded - so the whole panel comes back as the user left it.
@@ -564,14 +598,146 @@ void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
     }
 
     adios::Decoded d = adios::decode(msg);
-    const QString hex = hexFull(msg);
-    const QString line = QString("%1   %2  %3").arg(nowStamp()).arg(d.label.c_str(), -38).arg(hex);
-    auto* it = new QListWidgetItem(line);
-    if (running) {
-        it->setData(Qt::UserRole, true);
-        it->setData(Qt::UserRole + 1, int(line.length() - hex.length()));   // status byte offset
-    }
+    auto* it = new QListWidgetItem;
+    it->setData(Role_Stamp, nowStamp());
+    it->setData(Role_Label, QString::fromStdString(d.label));
+    it->setData(Role_Hex,   hexFull(msg));
+    it->setData(Role_Run,   running);
+    rebuildMonRow(it, out ? outCols_ : inCols_);
     appendCapped(out ? monOut_ : monIn_, it);
+}
+
+// Rebuild one monitor line's visible text from its stored parts and the current
+// column choices; keeps the timestamp/decoded/raw layout of the original line
+// and re-places the running-status dim only while Raw Data is shown.
+void MainWindow::rebuildMonRow(QListWidgetItem* it, const MonCols& c)
+{
+    const QString stamp = it->data(Role_Stamp).toString();
+    const QString label = it->data(Role_Label).toString();
+    const QString hex   = it->data(Role_Hex).toString();
+    QString line;
+    if (c.stamp)  line = stamp;
+    if (c.decode) { if (!line.isEmpty()) line += QStringLiteral("   ");
+                    line += c.raw ? label.leftJustified(38) : label; }
+    if (c.raw)    { if (!line.isEmpty()) line += QStringLiteral("  "); line += hex; }
+    it->setText(line);
+    const bool dim = c.raw && it->data(Role_Run).toBool();
+    it->setData(Role_Dim, dim);
+    it->setData(Role_HexPos, dim ? int(line.length() - hex.length()) : -1);
+}
+
+void MainWindow::rerenderMonitor(QListWidget* list, const MonCols& c)
+{
+    for (int i = 0; i < list->count(); ++i) rebuildMonRow(list->item(i), c);
+}
+
+// Menu bar, reserved at the top of the root layout (a QWidget has no native one).
+void MainWindow::buildMenus()
+{
+    menuBar_ = new QMenuBar(this);
+
+    // Tools: structure only for now (Controller + Screen Capture), wired later.
+    QMenu* mTools = menuBar_->addMenu(tr("Tools"));
+    mTools->addAction(tr("Controller"))->setEnabled(false);
+    QMenu* mCap = mTools->addMenu(tr("Screen Capture"));
+    mCap->addAction(tr("5x6 Display"))->setEnabled(false);
+    mCap->addAction(tr("Dr Display"))->setEnabled(false);
+
+    // View: reset the splitters, show/hide either monitor and its columns.
+    QMenu* mView = menuBar_->addMenu(tr("View"));
+    mView->addAction(tr("Reset Layout"), this, &MainWindow::resetLayout);
+    mView->addSeparator();
+
+    // A monitor's sub-menu: an optional Filter toggle, then the three columns.
+    // The column toggles rebuild what is already on screen, not just new lines.
+    auto addCols = [this](QMenu* sub, MonCols* cols, QListWidget* list, bool withFilter, const QString& prefix) {
+        if (withFilter) {
+            QAction* f = sub->addAction(tr("Filter"));
+            f->setObjectName(prefix + "filter");   // QSettings key for persistence
+            f->setCheckable(true); f->setChecked(true);
+            connect(f, &QAction::toggled, this, [this](bool v) {
+                filterHead_->setVisible(v);                              // triangle + "Filter" label
+                filterPanel_->setVisible(v && filterBtn_->isChecked());  // panel only if expanded
+                applyFilterBox_->setVisible(v);                          // Output's Apply Filter follows
+            });
+            viewToggles_ << f;
+            sub->addSeparator();
+        }
+        struct Col { const char* name; bool MonCols::* field; };
+        const Col cols3[] = { {"TimeStamp", &MonCols::stamp},
+                              {"Decoding",  &MonCols::decode},
+                              {"Raw Data",  &MonCols::raw} };
+        for (const Col& e : cols3) {
+            QAction* a = sub->addAction(tr(e.name));
+            a->setObjectName(prefix + e.name);
+            a->setCheckable(true); a->setChecked(cols->*e.field);
+            auto field = e.field;
+            connect(a, &QAction::toggled, this, [this, cols, list, field](bool v) {
+                cols->*field = v;
+                rerenderMonitor(list, *cols);
+            });
+            viewToggles_ << a;
+        }
+    };
+
+    // The panel show/hide lives on a "Show" item INSIDE the sub-menu: a checkable
+    // action that also owns a sub-menu opens it on click instead of toggling, so
+    // the parent cannot be the switch (Qt limitation).
+    QMenu* inSub = mView->addMenu(tr("Input Monitor"));
+    QAction* inShow = inSub->addAction(tr("Show"));
+    inShow->setCheckable(true); inShow->setChecked(true);
+    inShow->setObjectName("in.show");
+    inShowAct_ = inShow;
+    connect(inShow, &QAction::toggled, this, [this](bool v) { ui_->inGroup->setVisible(v); syncMonSplit(); });
+    viewToggles_ << inShow;
+    inSub->addSeparator();
+    addCols(inSub, &inCols_, monIn_, true, "in.");
+
+    QMenu* outSub = mView->addMenu(tr("Output Monitor"));
+    QAction* outShow = outSub->addAction(tr("Show"));
+    outShow->setObjectName("out.show");
+    outShow->setCheckable(true); outShow->setChecked(true);
+    outShowAct_ = outShow;
+    connect(outShow, &QAction::toggled, this, [this](bool v) { ui_->outGroup->setVisible(v); syncMonSplit(); });
+    viewToggles_ << outShow;
+    outSub->addSeparator();
+    addCols(outSub, &outCols_, monOut_, false, "out.");
+
+    ui_->root->setMenuBar(menuBar_);
+}
+
+// Reset Layout: re-check every View toggle (show all panels, columns and the
+// filter) and put the three splitters back to the first-launch defaults.
+void MainWindow::resetLayout()
+{
+    for (QAction* a : viewToggles_) a->setChecked(true);
+    syncMonSplit();
+    resize(960, 860);                                   // default main-window size
+    // Big second value = "give it the rest": QSplitter clamps to what is left,
+    // so these hold regardless of the (just-changed) window height.
+    ui_->rowsSplit->setSizes({220, 1 << 20});
+    ui_->colsSplit->setSizes({300, 1 << 20});
+    ui_->monSplit->setSizes({1 << 20, 1 << 20});        // equal halves
+}
+
+// The monitor row shows while either monitor is enabled. Hiding BOTH removes the
+// row and SHRINKS THE WINDOW by its height, so Device Info + Terminal keep their
+// current size (the window gets smaller, they do not grow); bringing a monitor
+// back grows the window again. Read the "Show" toggles, not isVisible(): a child
+// of a hidden parent reports invisible, which would wedge the re-show.
+void MainWindow::syncMonSplit()
+{
+    const bool any = (inShowAct_  && inShowAct_->isChecked())
+                  || (outShowAct_ && outShowAct_->isChecked());
+    if (any != ui_->monSplit->isHidden()) return;   // already in the wanted state
+    if (!any) {
+        monRowH_ = ui_->monSplit->height() + ui_->rowsSplit->handleWidth();
+        ui_->monSplit->setVisible(false);
+        resize(width(), qMax(minimumSizeHint().height(), height() - monRowH_));
+    } else {
+        ui_->monSplit->setVisible(true);
+        resize(width(), height() + monRowH_);
+    }
 }
 
 // Every on/off flag in filter_, paired with a stable key, so save and restore
@@ -741,7 +907,8 @@ void MainWindow::buildInputFilter()
     connect(filterBtn_, &QToolButton::toggled, this, [this](bool on) { filterPanel_->setVisible(on); });
     filterPanel_->setVisible(filterBtn_->isChecked());
 
-    auto* outerHead = new QWidget;
+    filterHead_ = new QWidget;
+    QWidget* outerHead = filterHead_;
     auto* oh = new QHBoxLayout(outerHead); oh->setContentsMargins(0, 0, 0, 0); oh->setSpacing(4);
     auto* flabel = new QLabel("Filter"); flabel->setObjectName("filterLabel");
     oh->addWidget(filterBtn_); oh->addWidget(flabel); oh->addStretch();
@@ -753,6 +920,7 @@ void MainWindow::buildInputFilter()
     // The Output monitor gets an "Apply Filter" toggle, level with the Input's
     // "Filter" header. On, the OUT side reuses the very same filter settings.
     auto* applyOut = new FilterCheckBox("Apply Filter");
+    applyFilterBox_ = applyOut;           // View's Filter toggle hides it with the filter
     applyOut->setNeutral(true);           // gray border when off (this box only), not red
     applyOut->setChecked(applyOutFilter_);
     connect(applyOut, &QCheckBox::toggled, this, [this](bool v) { applyOutFilter_ = v; });

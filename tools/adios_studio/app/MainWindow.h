@@ -27,7 +27,10 @@ class QLineEdit;
 class QLabel;
 class QProgressBar;
 class QCheckBox;
+class QAction;
 class QListWidget;
+class QListWidgetItem;
+class QMenuBar;
 class QTimer;
 class Uploader;
 namespace Ui { class MainWindow; }
@@ -59,6 +62,21 @@ private:
     void monitorLine(bool out, const adios::Bytes& msg);
     bool sendRaw(const adios::Bytes& msg);                   // GUI thread, echoes to monitor
     void setConnected(bool on);
+
+    // View menu (menu bar built in the ctor). Each monitor line keeps its three
+    // parts so the column toggles can rebuild what is already on screen.
+    void buildMenus();
+    void resetLayout();               // Reset Layout: re-check every View toggle + default splitters
+    void syncMonSplit();              // hide the monitor row entirely when both monitors are off
+    struct MonCols { bool stamp = true, decode = true, raw = true; };
+    void rebuildMonRow(QListWidgetItem* it, const MonCols& c);
+    void rerenderMonitor(QListWidget* list, const MonCols& c);
+    MonCols inCols_, outCols_;
+    QMenuBar* menuBar_ = nullptr;
+    QList<QAction*> viewToggles_;     // every checkable View action, for Reset Layout
+    QAction* inShowAct_ = nullptr;    // the two monitor "Show" toggles, read by syncMonSplit
+    QAction* outShowAct_ = nullptr;
+    int      monRowH_ = 0;            // monitor-row height removed while both are hidden
     QString nowStamp();
 
     // Collapsible message filter above the Input monitor list.
@@ -78,7 +96,9 @@ private:
         bool sysex = true, invalid = true;
     } filter_;
     QToolButton* filterBtn_ = nullptr;    // the triangle header
+    QWidget*     filterHead_ = nullptr;   // triangle + "Filter" label row (View hides it whole)
     QWidget*     filterPanel_ = nullptr;  // the checkbox grid it shows/hides
+    QCheckBox*   applyFilterBox_ = nullptr;  // "Apply Filter" (Output); hidden with the Filter
     QToolButton* triVoice_ = nullptr;     // category triangles, kept for save/restore
     QToolButton* triSys_ = nullptr;
     QToolButton* triRt_ = nullptr;
