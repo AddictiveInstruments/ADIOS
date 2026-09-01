@@ -5,6 +5,11 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QContextMenuEvent>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFont>
+#include <QFormLayout>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontMetrics>
@@ -20,7 +25,9 @@
 #include <QMenuBar>
 #include <QMouseEvent>
 #include <QResizeEvent>
+#include <QScrollArea>
 #include <QScrollBar>
+#include <QSet>
 #include <QVector>
 #include <QWheelEvent>
 #include <functional>
@@ -452,6 +459,433 @@ private:
     QImage highlight_;
     QPointer<QVariantAnimation> spring_;
 };
+
+class CcPanel;
+
+// One control on the Control Change surface. Phase 2: a potentiometer knob that
+// can be dropped (right-click the panel), dragged around (edit mode, snapped to
+// the grid) and removed (right-click it). Parameters and MIDI come next.
+class CcControl : public QWidget {
+public:
+    explicit CcControl(CcPanel* panel);
+    QString name;                                 // shown on top; empty -> "CC<n>"
+    int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0;
+    bool absolute = false;                         // false: value maps to MIDI 0..127; true: value IS the MIDI value (7-bit)
+    int midiOf(int v) const {                      // displayed value -> 7-bit MIDI
+        if (absolute) return qBound(0, v - rmin, 127);         // transpose: MIDI = value - min
+        if (rmax == rmin) return 0;
+        return qBound(0, qRound(double(v - rmin) / (rmax - rmin) * 127.0), 127);
+    }
+protected:
+    void paintEvent(QPaintEvent*) override;
+    void mousePressEvent(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
+    void mouseReleaseEvent(QMouseEvent*) override;
+    void contextMenuEvent(QContextMenuEvent* e) override;
+private:
+    int cornerAt(QPoint pt) const;                // 0=TL 1=TR 2=BL 3=BR, -1 = body
+    void editProperties();                        // right-click > Properties... modal dialog
+    CcPanel* panel_;
+    QPoint   grab_;                               // move: cursor offset inside the widget
+    QPoint   rzAnchor_;                           // resize: the fixed (opposite) corner, parent coords
+    bool     dragging_ = false, resizing_ = false, rzRight_ = false, rzBottom_ = false, valuing_ = false;
+    int      dragStartY_ = 0, dragStartVal_ = 0;  // locked: vertical drag adjusts the value
+    QPoint   dragPrev_;                            // last snapped drag target (incremental group move)
+};
+
+// The Control Change surface: a dark canvas hosting CcControls, with an optional
+// snap grid shown while editing. Right-click empty space adds a knob; the panel
+// grows (scrollbars) rather than clip a control pushed past the visible area.
+class CcPanel : public QWidget {
+public:
+    explicit CcPanel(QWidget* parent = nullptr) : QWidget(parent) { setFocusPolicy(Qt::StrongFocus); }
+    void setLocked(bool on) { locked_ = on; update(); for (CcControl* c : controls_) c->update(); }
+    void setGrid(bool on)   { gridOn_ = on; update(); }
+    void setGridStep(int s) { gridStep_ = qMax(2, s); update(); }
+    bool locked() const { return locked_; }
+    std::function<void(bool)> onLockChange;       // menu Lock/Unlock routes through the header checkbox
+    std::function<void(int, int)> onCc;           // (cc, 7-bit value) -> owner sends MIDI on the keyboard channel
+    void emitCc(int cc, int midi) { if (onCc) onCc(cc, midi); }
+    bool isSelected(CcControl* c) const { return sel_.contains(c); }
+    void clearSelection() { const auto old = sel_; sel_.clear(); for (CcControl* c : old) c->update(); }
+    void selectOnly(CcControl* c) {
+        const auto old = sel_; sel_.clear(); if (c) sel_.append(c);
+        for (CcControl* o : old) if (!sel_.contains(o)) o->update();
+        if (c) c->update();
+    }
+    void toggleSelection(CcControl* c) { if (!c) return; if (sel_.removeAll(c) == 0) sel_.append(c); c->update(); }
+    void selectInRect(const QRect& r) {
+        const auto old = sel_; sel_.clear();
+        for (CcControl* c : controls_) if (r.intersects(c->geometry())) sel_.append(c);
+        for (CcControl* c : old) if (!sel_.contains(c)) c->update();
+        for (CcControl* c : sel_) if (!old.contains(c)) c->update();
+    }
+    void deleteSelected() {
+        if (locked_ || sel_.isEmpty()) return;
+        for (CcControl* c : sel_) { controls_.removeAll(c); c->hide(); c->setParent(nullptr); c->deleteLater(); }
+        sel_.clear(); refreshExtent(); update();
+    }
+    int  snap1(int v) const { return gridOn_ ? qRound(double(v) / gridStep_) * gridStep_ : v; }
+    QPoint snap(QPoint p) const { return QPoint(snap1(p.x()), snap1(p.y())); }
+    void addKnob(QPoint at) {
+        auto* c = new CcControl(this);
+        controls_.append(c);
+        const QPoint pos = snap(at - QPoint(c->width() / 2, c->height() / 2));
+        c->move(qMax(0, pos.x()), qMax(0, pos.y()));
+        c->show(); selectOnly(c); refreshExtent();
+    }
+    void forget(CcControl* c) { controls_.removeAll(c); sel_.removeAll(c); }
+    QPoint moveSelectionBy(QPoint d) {            // drag one selected control -> the whole group follows
+        for (CcControl* c : sel_) { d.setX(qMax(d.x(), -c->x())); d.setY(qMax(d.y(), -c->y())); }  // keep all >= 0
+        for (CcControl* c : sel_) c->move(c->pos() + d);
+        refreshExtent();
+        return d;                                 // actual (clamped) delta -> caller advances its reference
+    }
+    void duplicateSelection() { duplicateSelection(gridStep_, gridStep_); }   // menu: one grid cell down-right
+    void duplicateSelection(int dx, int dy) {     // duplicate EVERY selected control (fresh CC), select the copies
+        if (locked_ || sel_.isEmpty()) return;
+        QSet<int> used;
+        for (CcControl* c : controls_) used.insert(c->cc);
+        const auto src = sel_;
+        QList<CcControl*> fresh;
+        for (CcControl* s : src) {
+            auto* c = new CcControl(this);
+            c->name = s->name; c->rmin = s->rmin; c->rmax = s->rmax; c->def = s->def; c->val = s->val; c->absolute = s->absolute;
+            int n = qBound(0, s->cc, 127);
+            while (n < 127 && used.contains(n)) ++n;
+            used.insert(n); c->cc = n;
+            c->resize(s->size());
+            controls_.append(c);
+            const QPoint pos = snap(s->pos() + QPoint(dx, dy));
+            c->move(qMax(0, pos.x()), qMax(0, pos.y()));
+            c->show();
+            fresh.append(c);
+        }
+        refreshExtent();
+        clearSelection(); sel_ = fresh; for (CcControl* c : fresh) c->update();
+    }
+    void copySelected() {
+        clips_.clear();
+        for (CcControl* c : sel_) {
+            Clip cl; cl.name = c->name; cl.cc = c->cc; cl.rmin = c->rmin; cl.rmax = c->rmax;
+            cl.def = c->def; cl.val = c->val; cl.absolute = c->absolute; cl.size = c->size(); cl.pos = c->pos();
+            clips_.append(cl);
+        }
+    }
+    void pasteClipboard() {
+        if (clips_.isEmpty() || locked_) return;
+        QSet<int> used;                                        // CCs already taken (existing + this batch)
+        for (CcControl* c : controls_) used.insert(c->cc);
+        QList<CcControl*> fresh;
+        for (Clip& cl : clips_) {
+            auto* c = new CcControl(this);
+            c->name = cl.name; c->rmin = cl.rmin; c->rmax = cl.rmax; c->def = cl.def; c->val = cl.val; c->absolute = cl.absolute;
+            int n = qBound(0, cl.cc, 127);
+            while (n < 127 && used.contains(n)) ++n;           // next free CC
+            used.insert(n); c->cc = n; cl.cc = n;              // remember -> repeated pastes keep climbing
+            if (cl.size.isValid()) c->resize(cl.size);
+            controls_.append(c);
+            const QPoint pos = snap(cl.pos + QPoint(gridStep_, gridStep_));
+            c->move(qMax(0, pos.x()), qMax(0, pos.y()));
+            c->show();
+            cl.pos = c->pos();                                 // cascade position too
+            fresh.append(c);
+        }
+        refreshExtent();
+        clearSelection(); sel_ = fresh; for (CcControl* c : fresh) c->update();
+    }
+    int nextFreeCc(int from) const {
+        for (int n = qBound(0, from, 127); n <= 127; ++n) {
+            bool used = false;
+            for (CcControl* c : controls_) if (c->cc == n) { used = true; break; }
+            if (!used) return n;
+        }
+        return 127;
+    }
+    void refreshExtent() {                        // min size = bounding box -> scrollbars when it overflows
+        QRect box(0, 0, 1, 1);
+        for (CcControl* c : controls_) box = box.united(c->geometry());
+        setMinimumSize(box.right() + 8, box.bottom() + 8);
+    }
+    // --- undo/redo of construction: snapshot the whole surface; a gesture (drag,
+    // resize, alt-dup) coalesces into ONE entry; a no-op change pushes nothing. ---
+    void beginGesture() { if (gestureDepth_++ == 0) pending_ = snapshot(); }
+    void endGesture() {
+        if (gestureDepth_ == 0) return;
+        if (--gestureDepth_ == 0 && snapshot() != pending_) {
+            undo_.append(pending_); if (undo_.size() > 64) undo_.removeFirst(); redo_.clear();
+        }
+    }
+    void undo() { if (undo_.isEmpty()) return; redo_.append(snapshot()); restore(undo_.takeLast()); }
+    void redo() { if (redo_.isEmpty()) return; undo_.append(snapshot()); restore(redo_.takeLast()); }
+protected:
+    void mousePressEvent(QMouseEvent* e) override {
+        setFocus(Qt::MouseFocusReason);
+        if (locked_ || e->button() != Qt::LeftButton) return;
+        if (!(e->modifiers() & Qt::ControlModifier)) clearSelection();
+        band_ = true; bandOrigin_ = e->pos(); bandRect_ = QRect(bandOrigin_, bandOrigin_); update();   // start marquee
+    }
+    void mouseMoveEvent(QMouseEvent* e) override {
+        if (!band_) return;
+        bandRect_ = QRect(bandOrigin_, e->pos()).normalized();
+        selectInRect(bandRect_);
+        update();
+    }
+    void mouseReleaseEvent(QMouseEvent*) override { if (band_) { band_ = false; update(); } }
+    void keyPressEvent(QKeyEvent* e) override {
+        if (!locked_ && e->matches(QKeySequence::Copy))       { copySelected(); e->accept(); }
+        else if (!locked_ && e->matches(QKeySequence::Paste)) { beginGesture(); pasteClipboard(); endGesture(); e->accept(); }
+        else if (!locked_ && e->matches(QKeySequence::Undo))  { undo(); e->accept(); }
+        else if (!locked_ && e->matches(QKeySequence::Redo))  { redo(); e->accept(); }
+        else if (!locked_ && (e->key() == Qt::Key_Delete || e->key() == Qt::Key_Backspace)) { beginGesture(); deleteSelected(); endGesture(); e->accept(); }
+        else QWidget::keyPressEvent(e);
+    }
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.fillRect(rect(), QColor(0x12, 0x15, 0x1c));        // inset canvas ground
+        if (!locked_ && gridOn_) {                            // snap grid, edit mode only
+            p.setPen(QColor(0x2c, 0x32, 0x3e));
+            for (int y = gridStep_; y < height(); y += gridStep_)
+                for (int x = gridStep_; x < width(); x += gridStep_)
+                    p.drawPoint(x, y);
+        }
+        if (band_) {                                          // rubber-band marquee
+            p.setPen(QPen(QColor(0x5a, 0x8a, 0xc8), 1));
+            p.setBrush(QColor(0x5a, 0x8a, 0xc8, 40));
+            p.drawRect(bandRect_);
+        }
+    }
+    void contextMenuEvent(QContextMenuEvent* e) override {
+        QMenu m(this);
+        QAction* add = locked_ ? nullptr : m.addAction(QStringLiteral("Add Knob"));
+        if (add) m.addSeparator();
+        QAction* lk = m.addAction(locked_ ? QStringLiteral("Unlock") : QStringLiteral("Lock"));
+        QAction* chosen = m.exec(e->globalPos());
+        if (add && chosen == add) { beginGesture(); addKnob(e->pos()); endGesture(); }
+        else if (chosen == lk && onLockChange) onLockChange(!locked_);
+    }
+private:
+    struct Clip { QString name; int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0; bool absolute = false; QSize size; QPoint pos; };
+    struct Desc { QString name; int cc, rmin, rmax, def, val; bool absolute; int x, y, w, h;
+        bool operator==(const Desc& o) const {
+            return name == o.name && cc == o.cc && rmin == o.rmin && rmax == o.rmax && def == o.def && val == o.val
+                && absolute == o.absolute && x == o.x && y == o.y && w == o.w && h == o.h; } };
+    QVector<Desc> snapshot() const {
+        QVector<Desc> st;
+        for (CcControl* c : controls_)
+            st.append({ c->name, c->cc, c->rmin, c->rmax, c->def, c->val, c->absolute, c->x(), c->y(), c->width(), c->height() });
+        return st;
+    }
+    void restore(const QVector<Desc>& st) {
+        for (CcControl* c : controls_) { c->hide(); c->setParent(nullptr); c->deleteLater(); }
+        controls_.clear(); sel_.clear();
+        for (const Desc& d : st) {
+            auto* c = new CcControl(this);
+            c->name = d.name; c->cc = d.cc; c->rmin = d.rmin; c->rmax = d.rmax; c->def = d.def; c->val = d.val; c->absolute = d.absolute;
+            c->resize(d.w, d.h); c->move(d.x, d.y); c->show();
+            controls_.append(c);
+        }
+        refreshExtent(); update();
+    }
+    bool locked_ = false, gridOn_ = true;
+    int  gridStep_ = 16;
+    QList<CcControl*> controls_, sel_;
+    QList<Clip> clips_;
+    bool   band_ = false;
+    QPoint bandOrigin_;
+    QRect  bandRect_;
+    QVector<QVector<Desc>> undo_, redo_;          // stacks of snapshots
+    QVector<Desc>          pending_;              // the gesture's pre-state
+    int    gestureDepth_ = 0;
+};
+
+CcControl::CcControl(CcPanel* panel) : QWidget(panel), panel_(panel) {
+    resize(64, 80);                                             // default 4x5 grid cells
+    setMouseTracking(true);
+    setStyleSheet(QStringLiteral("background: transparent;"));   // beat the global QWidget bg -> panel shows through
+}
+
+int CcControl::cornerAt(QPoint pt) const
+{
+    const int hs = 10, w = width(), h = height();
+    const bool l = pt.x() < hs, r = pt.x() >= w - hs, tp = pt.y() < hs, bt = pt.y() >= h - hs;
+    if (l && tp) return 0;
+    if (r && tp) return 1;
+    if (l && bt) return 2;
+    if (r && bt) return 3;
+    return -1;
+}
+void CcControl::paintEvent(QPaintEvent*)
+{
+    constexpr double PI = 3.14159265358979323846;
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    const bool edit = !panel_->locked();
+    const double W = width(), H = height();
+    if (edit) {                                            // movable/resizable tile; transparent once locked
+        const bool sel = panel_->isSelected(this);            // selection = lighter (accent) border, 1px
+        p.setPen(QPen(sel ? QColor(0x5a, 0x8a, 0xc8) : QColor(0x3d, 0x47, 0x57), 1));
+        p.setBrush(QColor(0x1a, 0x1f, 0x28, sel ? 180 : 140));
+        p.drawRoundedRect(QRectF(0.5, 0.5, W - 1, H - 1), 4, 4);
+    }
+    const double nameH = H * 0.20, topGap = H * 0.06, valueH = H * 0.18;
+    QFont f = p.font(); f.setPixelSize(qMax(8, int(H * 0.14))); p.setFont(f);
+    p.setPen(QColor(0xdf, 0xe4, 0xec));                    // name on top (else CC<n>)
+    p.drawText(QRectF(2, 2, W - 4, nameH), Qt::AlignHCenter | Qt::AlignVCenter,
+               name.isEmpty() ? QStringLiteral("CC%1").arg(cc) : name);
+    p.setPen(QColor(0x8a, 0x94, 0xa6));                    // value below
+    p.drawText(QRectF(2, H - valueH - 2, W - 4, valueH), Qt::AlignHCenter | Qt::AlignVCenter, QString::number(val));
+    const double cx = W / 2.0;                             // dial dropped below the name (gap from it)
+    const double R = qMin(W - 8, H - nameH - topGap - valueH) / 2.0, br = R * 0.72;
+    const double cy = nameH + topGap + R;
+    const double t     = (rmax > rmin) ? qBound(0.0, double(val - rmin) / (rmax - rmin), 1.0) : 0.0;
+    const double tZero = (rmax > rmin) ? qBound(0.0, double(0   - rmin) / (rmax - rmin), 1.0) : 0.0;
+    const QRectF arcR(cx - R, cy - R, 2 * R, 2 * R);
+    const double aw = qMax(2.0, R * 0.16);
+    QPen tp(QColor(0x3a, 0x41, 0x4e), aw); tp.setCapStyle(Qt::RoundCap);
+    p.setPen(tp); p.drawArc(arcR, 225 * 16, -270 * 16);                    // track (7:30 -> over top -> 4:30)
+    QPen vp(QColor(0x5a, 0x8a, 0xc8), aw); vp.setCapStyle(Qt::FlatCap);    // value fill: ALWAYS from zero, flat at zero end
+    p.setPen(vp); p.drawArc(arcR, int((225 - 270 * tZero) * 16), int(-270 * (t - tZero) * 16));
+    if (t != tZero) {                                                     // rounded tip on the MOVING end only
+        const double av = (-135 + t * 270) * PI / 180.0;
+        p.setPen(Qt::NoPen); p.setBrush(QColor(0x5a, 0x8a, 0xc8));
+        p.drawEllipse(QPointF(cx + R * std::sin(av), cy - R * std::cos(av)), aw / 2, aw / 2);
+    }
+    const double azero = (-135 + tZero * 270) * PI / 180.0;               // small zero mark on the ring
+    p.setPen(QPen(QColor(0xe9, 0xed, 0xf3), qMax(1.0, aw * 0.3)));
+    p.drawLine(QPointF(cx + (R - aw * 0.5) * std::sin(azero), cy - (R - aw * 0.5) * std::cos(azero)),
+               QPointF(cx + (R + aw * 0.5) * std::sin(azero), cy - (R + aw * 0.5) * std::cos(azero)));
+    QLinearGradient dg(cx, cy - br, cx, cy + br);
+    dg.setColorAt(0, QColor(0x30, 0x37, 0x45)); dg.setColorAt(1, QColor(0x1a, 0x1f, 0x28));
+    p.setPen(QPen(QColor(0x0c, 0x0d, 0x11), 1)); p.setBrush(dg);
+    p.drawEllipse(QPointF(cx, cy), br, br);                                // knob body
+    const double a = (-135 + t * 270) * PI / 180.0;                        // 0 = up, +cw
+    p.setPen(QPen(QColor(0xdf, 0xe4, 0xec), qMax(1.5, R * 0.11)));
+    p.drawLine(QPointF(cx + br * 0.45 * std::sin(a), cy - br * 0.45 * std::cos(a)),
+               QPointF(cx + (br - 1) * std::sin(a), cy - (br - 1) * std::cos(a)));   // pointer
+    if (edit) {                                            // four corner resize handles
+        p.setPen(Qt::NoPen); p.setBrush(QColor(0x5a, 0x8a, 0xc8));
+        const int hs = 6, w = width(), h = height();
+        p.drawRect(0, 0, hs, hs); p.drawRect(w - hs, 0, hs, hs);
+        p.drawRect(0, h - hs, hs, hs); p.drawRect(w - hs, h - hs, hs, hs);
+    }
+}
+void CcControl::mousePressEvent(QMouseEvent* e)
+{
+    if (e->button() != Qt::LeftButton) return;
+    if (panel_->locked()) {                             // locked: vertical drag sets the value + sends MIDI
+        valuing_ = true; dragStartY_ = e->pos().y(); dragStartVal_ = val; return;
+    }
+    panel_->setFocus(Qt::MouseFocusReason);             // so Copy/Paste/Delete reach the panel
+    panel_->beginGesture();                             // one undo entry per edit gesture (committed on release)
+    if (e->modifiers() & Qt::AltModifier) {             // Alt+drag = duplicate in place, then drag the copies
+        if (!panel_->isSelected(this)) panel_->selectOnly(this);
+        panel_->duplicateSelection(0, 0);
+        dragging_ = true; grab_ = e->pos(); dragPrev_ = pos();
+        return;
+    }
+    if (e->modifiers() & Qt::ControlModifier) panel_->toggleSelection(this);
+    else if (!panel_->isSelected(this)) panel_->selectOnly(this);
+    const int corner = cornerAt(e->pos());
+    if (corner >= 0) {                                   // resize from a corner; the OPPOSITE corner stays put
+        resizing_ = true;
+        rzRight_  = (corner == 0 || corner == 2);
+        rzBottom_ = (corner == 0 || corner == 1);
+        rzAnchor_ = pos() + QPoint(rzRight_ ? width() : 0, rzBottom_ ? height() : 0);
+    } else { dragging_ = true; grab_ = e->pos(); dragPrev_ = pos(); raise(); }
+}
+void CcControl::mouseMoveEvent(QMouseEvent* e)
+{
+    if (panel_->locked()) {                              // locked: value drag (up = more) or hover hint
+        if (!valuing_) { setCursor(Qt::SizeVerCursor); return; }
+        const double span = (rmax != rmin) ? qAbs(rmax - rmin) : 1;
+        const int lo = qMin(rmin, rmax), hi = qMax(rmin, rmax);
+        const int nv = qBound(lo, dragStartVal_ + qRound((dragStartY_ - e->pos().y()) * span / 150.0), hi);
+        if (nv != val) { val = nv; update(); panel_->emitCc(cc, midiOf(val)); }
+        return;
+    }
+    if (!dragging_ && !resizing_) {                      // hover: move cursor on the body, resize on a corner
+        const int c = cornerAt(e->pos());
+        setCursor(c < 0 ? Qt::SizeAllCursor
+                        : (c == 0 || c == 3) ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor);
+        return;
+    }
+    if (resizing_) {                                    // keep 4:5, width snapped to the grid
+        const QPoint cur = mapToParent(e->pos());
+        const double want = qMax(double(qAbs(cur.x() - rzAnchor_.x())),
+                                 double(qAbs(cur.y() - rzAnchor_.y())) * 4.0 / 5.0);
+        const int w = qMax(48, panel_->snap1(qRound(want)));
+        const int h = qRound(w * 5.0 / 4.0);
+        setGeometry(qMax(0, rzRight_ ? rzAnchor_.x() - w : rzAnchor_.x()),
+                    qMax(0, rzBottom_ ? rzAnchor_.y() - h : rzAnchor_.y()), w, h);
+        panel_->refreshExtent();
+        return;
+    }
+    const QPoint target = panel_->snap(mapToParent(e->pos()) - grab_);   // move the whole selection together
+    dragPrev_ += panel_->moveSelectionBy(target - dragPrev_);            // incremental: works whether or not 'this' is in the group
+}
+void CcControl::mouseReleaseEvent(QMouseEvent*) { dragging_ = resizing_ = valuing_ = false; panel_->endGesture(); }
+void CcControl::contextMenuEvent(QContextMenuEvent* e)
+{
+    if (panel_->locked()) return;
+    panel_->setFocus(Qt::MouseFocusReason);             // keep key focus so Ctrl+Z works after a menu action
+    if (!panel_->isSelected(this)) panel_->selectOnly(this);
+    QMenu m(this);
+    QAction* props = m.addAction(QStringLiteral("Properties..."));
+    QAction* dup   = m.addAction(QStringLiteral("Duplicate"));
+    m.addSeparator();
+    QAction* rem   = m.addAction(QStringLiteral("Remove"));
+    QAction* chosen = m.exec(e->globalPos());
+    if (chosen == props) editProperties();
+    else if (chosen == dup) { panel_->beginGesture(); panel_->duplicateSelection(); panel_->endGesture(); }
+    else if (chosen == rem) { panel_->beginGesture(); panel_->forget(this); hide(); setParent(nullptr); panel_->refreshExtent(); deleteLater(); panel_->endGesture(); }
+    e->accept();
+}
+void CcControl::editProperties()
+{
+    QDialog d(this);
+    d.setWindowTitle(QStringLiteral("Knob properties"));
+    auto* form = new QFormLayout(&d);
+    auto* typeBox = new QComboBox; typeBox->addItem(QStringLiteral("Knob"));   // future: Slider, Button...
+    auto* modeBox = new QComboBox; modeBox->addItem(QStringLiteral("Relative")); modeBox->addItem(QStringLiteral("Absolute"));
+    modeBox->setCurrentIndex(absolute ? 1 : 0);
+    auto* nameEd = new QLineEdit(name);
+    auto* ccSp = new QSpinBox;  ccSp->setRange(0, 127);  ccSp->setValue(cc);
+    auto* minSp = new QSpinBox; minSp->setRange(-16384, 16383); minSp->setValue(rmin);
+    auto* maxSp = new QSpinBox; maxSp->setRange(-16384, 16383); maxSp->setValue(rmax);
+    auto* defSp = new QSpinBox; defSp->setRange(-16384, 16383); defSp->setValue(def);
+    // Absolute keeps max-min <= 127 (a 7-bit MIDI window, may sit anywhere incl. negative):
+    // pushing one bound past the span drags the other; a smaller span stays allowed.
+    auto capFromMin = [minSp, maxSp, modeBox] { if (modeBox->currentIndex() == 1 && maxSp->value() - minSp->value() > 127) maxSp->setValue(minSp->value() + 127); };
+    auto capFromMax = [minSp, maxSp, modeBox] { if (modeBox->currentIndex() == 1 && maxSp->value() - minSp->value() > 127) minSp->setValue(maxSp->value() - 127); };
+    connect(minSp, &QSpinBox::valueChanged, &d, [capFromMin](int) { capFromMin(); });
+    connect(maxSp, &QSpinBox::valueChanged, &d, [capFromMax](int) { capFromMax(); });
+    connect(modeBox, &QComboBox::currentIndexChanged, &d, [capFromMin](int) { capFromMin(); });
+    form->addRow(QStringLiteral("Type"),    typeBox);
+    form->addRow(QStringLiteral("Mode"),    modeBox);
+    form->addRow(QStringLiteral("Name"),    nameEd);
+    form->addRow(QStringLiteral("CC #"),    ccSp);
+    form->addRow(QStringLiteral("Min"),     minSp);
+    form->addRow(QStringLiteral("Max"),     maxSp);
+    form->addRow(QStringLiteral("Default"), defSp);
+    auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    form->addRow(bb);
+    connect(bb, &QDialogButtonBox::accepted, &d, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    if (d.exec() == QDialog::Accepted) {
+        panel_->beginGesture();
+        absolute = (modeBox->currentIndex() == 1);
+        name = nameEd->text().trimmed();
+        cc = ccSp->value();
+        rmin = minSp->value(); rmax = maxSp->value();
+        if (rmax < rmin) qSwap(rmin, rmax);
+        if (absolute && rmax - rmin > 127) rmax = rmin + 127;   // 7-bit window
+        def = qBound(rmin, defSp->value(), rmax);
+        val = def;                                 // reset to the default on edit
+        update();
+        panel_->endGesture();
+    }
+}
 
 void appendCapped(QListWidget* w, QListWidgetItem* it)
 {
@@ -998,7 +1432,27 @@ void MainWindow::openController()
         auto* col = new QVBoxLayout(controllerWin_);
         col->setContentsMargins(12, 12, 12, 12);   // like the main window's root layout
         col->setSpacing(0);
-        col->addStretch(1);                    // empty room above, for later controls
+        // --- Control Change: a canvas of CC controls ABOVE the keyboard, taking the
+        // leftover height. Locked/Grid live in the group header (outside the panel);
+        // the panel sits in a scroll area so an object left outside the visible zone
+        // after a resize brings scrollbars rather than being clipped away.
+        auto* ccGrp = new QGroupBox(tr("Control Change"));
+        auto* ccl = new QVBoxLayout(ccGrp); ccl->setContentsMargins(0, 0, 0, 0); ccl->setSpacing(8);
+        auto* ccHead = new QHBoxLayout; ccHead->setContentsMargins(0, 0, 0, 0); ccHead->setSpacing(14);
+        auto* ccLocked = new FilterCheckBox(tr("Locked")); ccLocked->setObjectName("ccLocked"); ccLocked->setNeutral(true);
+        auto* ccGrid = new FilterCheckBox(tr("Grid")); ccGrid->setObjectName("ccGrid"); ccGrid->setNeutral(true); ccGrid->setChecked(true);
+        ccHead->addWidget(ccLocked); ccHead->addWidget(ccGrid); ccHead->addStretch();
+        ccl->addLayout(ccHead);
+        auto* ccPanel = new CcPanel;
+        auto* ccScroll = new QScrollArea; ccScroll->setWidget(ccPanel); ccScroll->setWidgetResizable(true);
+        ccScroll->setFrameShape(QFrame::NoFrame);
+        ccl->addWidget(ccScroll, 1);
+        connect(ccLocked, &QCheckBox::toggled, ccPanel, &CcPanel::setLocked);
+        connect(ccGrid,   &QCheckBox::toggled, ccPanel, &CcPanel::setGrid);
+        ccPanel->onLockChange = [ccLocked](bool on) { ccLocked->setChecked(on); };   // panel menu <-> header case
+        ccPanel->onCc = [this](int cc, int v) { sendRaw({ uint8_t(0xB0 | kbChannel_), uint8_t(cc & 0x7f), uint8_t(v & 0x7f) }); };
+        col->addWidget(ccGrp, 1);              // fills the room above the keyboard
+        col->addSpacing(10);
 
         auto* grp = new QGroupBox(tr("MIDI Keyboard"));
         auto* gl  = new QVBoxLayout(grp); gl->setContentsMargins(0, 0, 0, 0); gl->setSpacing(0);   // QSS gives the 15px padding
