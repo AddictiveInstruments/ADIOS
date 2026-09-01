@@ -61,6 +61,7 @@ QMenuBar::item:pressed  { background: #2c4a6e; color: #f2f6fc; }
 QMenu { background: #1c212b; border: 1px solid #2a2f3a; }
 QMenu::item { padding: 4px 18px; }
 QMenu::item:selected { background: #2c4a6e; color: #f2f6fc; }
+QMenu::item:disabled { color: #5a6172; }   /* grayed: the global QWidget color would otherwise keep it bright */
 QMenu::separator { height: 1px; background: #2a2f3a; margin: 4px 8px; }
 QMenu::indicator { width: 13px; height: 13px; }
 

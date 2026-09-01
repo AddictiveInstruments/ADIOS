@@ -79,6 +79,7 @@ private:
     QAction* outShowAct_ = nullptr;
     int      monRowH_ = 0;            // monitor-row height removed while both are hidden
     QWidget* controllerWin_ = nullptr;  // Tools > Controller, an independent window
+    QWidget* ccSurface_ = nullptr;      // the Control Change CcPanel (saved on close)
     int      kbChannel_ = 0;            // keyboard MIDI TX channel (0..15)
     QString nowStamp();
 
