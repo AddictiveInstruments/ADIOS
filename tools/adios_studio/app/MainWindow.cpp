@@ -474,8 +474,22 @@ public:
     QString name;                                 // shown on top; empty -> "CC<n>"
     int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0;
     bool absolute = false;                         // false: value maps to MIDI 0..127; true: value IS the MIDI value (7-bit)
-    double aspectHW() const { return kind == Fader ? 8.0 / 3.0 : 5.0 / 4.0; }   // height/width kept while resizing
+    // The knob resizes FREELY (width and height independent); the fader still keeps
+    // a ratio. 0 = free.
+    double aspectHW() const { return kind == Fader ? 8.0 / 3.0 : 0.0; }
     int    minW()     const { return kind == Fader ? 24 : 48; }
+    int    minH()     const { return kind == Fader ? 64 : 48; }   // 48 = both label bands + a drawable dial
+    // Everything the size must NOT change is frozen in PIXELS at the reference tile
+    // 64x80 (what a fresh knob gets): the labels, their distance to the top and the
+    // bottom edge, and every stroke width. Resizing plays on the DIAMETERS only.
+    static constexpr int    LBL_PX  = 11;     // label font
+    static constexpr double NAME_H  = 16.0;   // name band, under the top edge
+    static constexpr double TOP_GAP = 4.8;    // name band -> dial
+    static constexpr double VAL_H   = 14.4;   // value band, over the bottom edge
+    static constexpr double RING_W  = 3.6;    // ring stroke
+    static constexpr double PTR_W   = 2.5;    // pointer stroke
+    static constexpr double ZERO_W  = 1.1;    // zero mark stroke
+    static constexpr double RING_GAP = 6.27;  // ring radius -> body radius: a CONSTANT gap, not a ratio
     int midiOf(int v) const {                      // displayed value -> 7-bit MIDI
         if (absolute) return qBound(0, v - rmin, 127);         // transpose: MIDI = value - min
         if (rmax == rmin) return 0;
@@ -786,8 +800,8 @@ void CcControl::paintEvent(QPaintEvent*)
         p.setBrush(QColor(0x1a, 0x1f, 0x28, sel ? 180 : 140));
         p.drawRoundedRect(QRectF(0.5, 0.5, W - 1, H - 1), 4, 4);
     }
-    const double nameH = H * 0.20, topGap = H * 0.06, valueH = H * 0.18;
-    QFont f = p.font(); f.setPixelSize(qMax(8, int(H * 0.14))); p.setFont(f);
+    const double nameH = NAME_H, topGap = TOP_GAP, valueH = VAL_H;   // fixed bands -> fixed insets
+    QFont f = p.font(); f.setPixelSize(LBL_PX); p.setFont(f);        // fixed label size
     p.setPen(QColor(0xdf, 0xe4, 0xec));                    // name on top (else CC<n>)
     p.drawText(QRectF(2, 2, W - 4, nameH), Qt::AlignHCenter | Qt::AlignVCenter,
                name.isEmpty() ? QStringLiteral("CC%1").arg(cc) : name);
@@ -798,10 +812,11 @@ void CcControl::paintEvent(QPaintEvent*)
     const double regTop = nameH + topGap, regBot = H - valueH;            // control area between the labels
     if (kind == Knob) {
         const double cx = W / 2.0;
-        const double R = qMin(W - 8, regBot - regTop) / 2.0, br = R * 0.72;
-        const double cy = regTop + R;
+        const double R  = qMax(6.0, qMin(W - 8, regBot - regTop) / 2.0);   // the ring diameter follows the tile
+        const double br = qMax(3.0, R - RING_GAP);         // the body follows it, keeping the gap unchanged
+        const double cy = (regTop + regBot) / 2.0;         // centred: width and height are independent now
         const QRectF arcR(cx - R, cy - R, 2 * R, 2 * R);
-        const double aw = qMax(2.0, R * 0.16);
+        const double aw = RING_W;
         QPen tp(QColor(0x3a, 0x41, 0x4e), aw); tp.setCapStyle(Qt::RoundCap);
         p.setPen(tp); p.drawArc(arcR, 225 * 16, -270 * 16);                    // track (7:30 -> over top -> 4:30)
         QPen vp(QColor(0x5a, 0x8a, 0xc8), aw); vp.setCapStyle(Qt::FlatCap);    // value fill: ALWAYS from zero
@@ -812,7 +827,7 @@ void CcControl::paintEvent(QPaintEvent*)
             p.drawEllipse(QPointF(cx + R * std::sin(av), cy - R * std::cos(av)), aw / 2, aw / 2);
         }
         const double azero = (-135 + tZero * 270) * PI / 180.0;               // zero mark on the ring
-        p.setPen(QPen(QColor(0xe9, 0xed, 0xf3), qMax(1.0, aw * 0.3)));
+        p.setPen(QPen(QColor(0xe9, 0xed, 0xf3), ZERO_W));
         p.drawLine(QPointF(cx + (R - aw * 0.5) * std::sin(azero), cy - (R - aw * 0.5) * std::cos(azero)),
                    QPointF(cx + (R + aw * 0.5) * std::sin(azero), cy - (R + aw * 0.5) * std::cos(azero)));
         QLinearGradient dg(cx, cy - br, cx, cy + br);
@@ -820,7 +835,7 @@ void CcControl::paintEvent(QPaintEvent*)
         p.setPen(QPen(QColor(0x0c, 0x0d, 0x11), 1)); p.setBrush(dg);
         p.drawEllipse(QPointF(cx, cy), br, br);                                // knob body
         const double a = (-135 + t * 270) * PI / 180.0;
-        p.setPen(QPen(QColor(0xdf, 0xe4, 0xec), qMax(1.5, R * 0.11)));
+        p.setPen(QPen(QColor(0xdf, 0xe4, 0xec), PTR_W));
         p.drawLine(QPointF(cx + br * 0.45 * std::sin(a), cy - br * 0.45 * std::cos(a)),
                    QPointF(cx + (br - 1) * std::sin(a), cy - (br - 1) * std::cos(a)));   // pointer
     } else {                                                                  // Fader (vertical slider)
@@ -892,13 +907,19 @@ void CcControl::mouseMoveEvent(QMouseEvent* e)
                         : (c == 0 || c == 3) ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor);
         return;
     }
-    if (resizing_) {                                    // keep the kind's aspect, width snapped to the grid
+    if (resizing_) {                                    // corner drag, snapped to the grid
         const QPoint cur = mapToParent(e->pos());
         const double asp = aspectHW();
-        const double want = qMax(double(qAbs(cur.x() - rzAnchor_.x())),
-                                 double(qAbs(cur.y() - rzAnchor_.y())) / asp);
-        const int w = qMax(minW(), panel_->snap1(qRound(want)));
-        const int h = qRound(w * asp);
+        int w, h;
+        if (asp > 0.0) {                                // fixed ratio: one drag drives both sides
+            const double want = qMax(double(qAbs(cur.x() - rzAnchor_.x())),
+                                     double(qAbs(cur.y() - rzAnchor_.y())) / asp);
+            w = qMax(minW(), panel_->snap1(qRound(want)));
+            h = qRound(w * asp);
+        } else {                                        // free: each side follows its own axis
+            w = qMax(minW(), panel_->snap1(qAbs(cur.x() - rzAnchor_.x())));
+            h = qMax(minH(), panel_->snap1(qAbs(cur.y() - rzAnchor_.y())));
+        }
         setGeometry(qMax(0, rzRight_ ? rzAnchor_.x() - w : rzAnchor_.x()),
                     qMax(0, rzBottom_ ? rzAnchor_.y() - h : rzAnchor_.y()), w, h);
         panel_->refreshExtent();
