@@ -69,7 +69,7 @@ private:
     void openController();             // Tools > Controller: open (or raise) its own window
     void resetLayout();               // Reset Layout: re-check every View toggle + default splitters
     void syncMonSplit();              // hide the monitor row entirely when both monitors are off
-    struct MonCols { bool stamp = true, decode = true, raw = true; };
+    struct MonCols { bool stamp = true, decode = true, raw = true; bool nrpn = false; };   // nrpn: one line per run
     void rebuildMonRow(QListWidgetItem* it, const MonCols& c);
     void rerenderMonitor(QListWidget* list, const MonCols& c);
     MonCols inCols_, outCols_;
@@ -170,6 +170,15 @@ private:
     bool         applyOutFilter_ = false;   // reuse the Input filter on the Output side
     uint8_t      lastStatusIn_ = 0;         // running-status tracking, per direction
     uint8_t      lastStatusOut_ = 0;
+    // Decode NRPN: the CC#99/98/6[/38] run of an NRPN collapses into ONE monitor
+    // line. The run in progress, per direction.
+    struct NrpnRun {
+        int ch = -1, msb = -1, lsb = -1, value = 0;
+        QString raw;                    // the raw column: the messages of the run, "|"-separated
+        QList<int> runOffsets;          // where, in raw, a RECREATED status byte sits (running status)
+        QListWidgetItem* item = nullptr;
+    };
+    NrpnRun      nrpnIn_, nrpnOut_;
 
     adios::In   in_;
     adios::Out  out_;

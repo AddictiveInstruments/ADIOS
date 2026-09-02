@@ -13,6 +13,8 @@
 #include <QFont>
 #include <QFormLayout>
 #include <QFile>
+#include <algorithm>
+#include <memory>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -171,12 +173,14 @@ protected:
 // toggles can rebuild a line already on screen; +5 marks a running-status repeat
 // even while Raw Data is hidden (so re-showing it dims the right byte again).
 enum {
-    Role_Dim    = Qt::UserRole,      // bool: draw the status byte dimmer NOW
-    Role_HexPos = Qt::UserRole + 1,  // int:  its offset in the current text
+    Role_Dim    = Qt::UserRole,      // bool: draw dimmed status byte(s) NOW
+    Role_HexPos = Qt::UserRole + 1,  // QVariantList<int>: their offsets in the current text
     Role_Stamp  = Qt::UserRole + 2,  // QString: timestamp column
     Role_Label  = Qt::UserRole + 3,  // QString: decoded column
     Role_Hex    = Qt::UserRole + 4,  // QString: raw-data column
     Role_Run    = Qt::UserRole + 5,  // bool: this line repeats running status
+    Role_RunPos = Qt::UserRole + 6,  // QVariantList<int>: a merged line (NRPN) - offsets IN THE RAW
+                                     // COLUMN of the status bytes that were recreated
 };
 
 // Renders a monitor line, drawing the two hex chars of a RECREATED running-status
@@ -208,14 +212,21 @@ public:
                         Qt::AlignVCenter | Qt::AlignLeft, s);
             x += fm.horizontalAdvance(s);
         };
-        const int pos = idx.data(Qt::UserRole + 1).toInt();
-        if (idx.data(Qt::UserRole).toBool() && pos >= 0 && pos + 2 <= text.size()) {
-            seg(text.left(pos), base);
+        QList<int> dims;                                   // every recreated status byte on the line
+        if (idx.data(Qt::UserRole).toBool())
+            for (const QVariant& v : idx.data(Qt::UserRole + 1).toList()) {
+                const int pos = v.toInt();
+                if (pos >= 0 && pos + 2 <= text.size()) dims << pos;
+            }
+        std::sort(dims.begin(), dims.end());
+        int at = 0;
+        for (int pos : dims) {
+            if (pos < at) continue;
+            seg(text.mid(at, pos - at), base);
             seg(text.mid(pos, 2), dim);
-            seg(text.mid(pos + 2), base);
-        } else {
-            seg(text, base);
+            at = pos + 2;
         }
+        seg(text.mid(at), base);
         p->restore();
     }
 };
@@ -511,6 +522,11 @@ public:
     QString name;                                 // shown on top; empty -> "CC<n>"
     int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0;
     int id = 0;                                    // stable identity, never reused: what a snapshot refers to
+    // Address: a plain CC (cc), or an NRPN parameter 0..16383 (nrpnNum) - some synths
+    // mix both. A 14-bit NRPN value sends CC#38 with its low seven bits as well.
+    bool nrpn = false;
+    int  nrpnNum = 0;
+    bool wide = false;
     bool absolute = false;                         // false: value maps to MIDI 0..127; true: value IS the MIDI value (7-bit)
     // --- Slider Switch: detents, what each one is called and what it sends -----
     int     positions = 4;                         // 2..8
@@ -612,11 +628,14 @@ public:
     struct SwLayout { double sx, top, bot, cyTop, cyBot; };
     SwLayout swLayout() const;                 // groove position and travel, for the current size
     double   detentY(int i, const SwLayout& l) const;
-    int midiOf(int v) const {                      // displayed value -> 7-bit MIDI
-        if (absolute) return qBound(0, v - rmin, 127);         // transpose: MIDI = value - min
+    int midiOf(int v, int span = 127) const {      // displayed value -> MIDI, 7 or 14 bits wide
+        if (absolute) return qBound(0, v - rmin, span);        // transpose: MIDI = value - min
         if (rmax == rmin) return 0;
-        return qBound(0, qRound(double(v - rmin) / (rmax - rmin) * 127.0), 127);
+        return qBound(0, qRound(double(v - rmin) / (rmax - rmin) * span), span);
     }
+    int  valueSpan() const { return (nrpn && wide) ? 16383 : 127; }
+    bool blocked() const;                          // its number is reserved right now (Bank / NRPN)
+    void sendValue();                              // the ONE way a control puts its value on the wire
 protected:
     void paintEvent(QPaintEvent*) override;
     void mousePressEvent(QMouseEvent* e) override;
@@ -650,6 +669,13 @@ public:
     std::function<void(bool)> onLockChange;       // menu Lock/Unlock routes through the header checkbox
     std::function<void(int, int)> onCc;           // (cc, 7-bit value) -> owner sends MIDI on the keyboard channel
     void emitCc(int cc, int midi) { if (onCc) onCc(cc, midi); }
+    std::function<void(int, int, bool)> onNrpn;   // (parameter, value, 14-bit) -> owner sends CC#99/98/6[/38]
+    void emitNrpn(int param, int v, bool wide) { if (onNrpn) onNrpn(param, v, wide); }
+    bool bankMsbArmed() const { return bankMsb_; }
+    bool bankLsbArmed() const { return bankLsb_; }
+    void setBankArmed(bool msb, bool lsb) { bankMsb_ = msb; bankLsb_ = lsb; refreshAll(); }
+    bool nrpnPresent() const { for (CcControl* c : controls_) if (c->nrpn) return true; return false; }
+    void refreshAll() { for (CcControl* c : controls_) c->update(); }
     bool isSelected(CcControl* c) const { return sel_.contains(c); }
     void clearSelection() { const auto old = sel_; sel_.clear(); for (CcControl* c : old) c->update(); notifyState(); }
     void selectOnly(CcControl* c) {
@@ -693,6 +719,7 @@ public:
             c->positions = model->positions; c->posNames = model->posNames; c->posValues = model->posValues;
             c->latching = model->latching; c->capColor = model->capColor;
             c->fontPx = model->fontPx; c->lineW = model->lineW;
+            c->nrpn = model->nrpn; c->nrpnNum = model->nrpnNum; c->wide = model->wide;
         } else if (k == CcControl::SliderSwitch) {
             c->resize(96, 160);                        // default switch: room for the position labels
         } else if (k == CcControl::PushSwitch) {
@@ -729,6 +756,7 @@ public:
             c->name = s->name; c->rmin = s->rmin; c->rmax = s->rmax; c->def = s->def; c->val = s->val; c->absolute = s->absolute; c->kind = s->kind;
             c->positions = s->positions; c->posNames = s->posNames; c->posValues = s->posValues; c->posIdx = s->posIdx;
             c->latching = s->latching; c->capColor = s->capColor; c->fontPx = s->fontPx; c->lineW = s->lineW;
+            c->nrpn = s->nrpn; c->nrpnNum = s->nrpnNum; c->wide = s->wide;
             if (!c->isDeco()) {
                 int n = qBound(0, s->cc, 127);
                 while (n < 127 && used.contains(n)) ++n;
@@ -751,6 +779,7 @@ public:
             cl.def = c->def; cl.val = c->val; cl.absolute = c->absolute; cl.kind = int(c->kind); cl.size = c->size(); cl.pos = c->pos();
             cl.positions = c->positions; cl.posNames = c->posNames; cl.posValues = c->posValues; cl.posIdx = c->posIdx;
             cl.latching = c->latching; cl.capColor = c->capColor; cl.fontPx = c->fontPx; cl.lineW = c->lineW;
+            cl.nrpn = c->nrpn; cl.nrpnNum = c->nrpnNum; cl.wide = c->wide;
             clips_.append(cl);
         }
     }
@@ -765,6 +794,7 @@ public:
             c->name = cl.name; c->rmin = cl.rmin; c->rmax = cl.rmax; c->def = cl.def; c->val = cl.val; c->absolute = cl.absolute; c->kind = CcControl::kindOf(cl.kind);
             c->positions = cl.positions; c->posNames = cl.posNames; c->posValues = cl.posValues; c->posIdx = cl.posIdx;
             c->latching = cl.latching; c->capColor = cl.capColor; c->fontPx = cl.fontPx; c->lineW = cl.lineW;
+            c->nrpn = cl.nrpn; c->nrpnNum = cl.nrpnNum; c->wide = cl.wide;
             if (!c->isDeco()) {                                // decoration takes no CC number
                 int n = qBound(0, cl.cc, 127);
                 while (n < 127 && used.contains(n)) ++n;        // next free CC
@@ -784,7 +814,7 @@ public:
     int nextFreeCc(int from) const {
         for (int n = qBound(0, from, 127); n <= 127; ++n) {
             bool used = false;
-            for (CcControl* c : controls_) if (!c->isDeco() && c->cc == n) { used = true; break; }
+            for (CcControl* c : controls_) if (!c->isDeco() && !c->nrpn && c->cc == n) { used = true; break; }
             if (!used) return n;
         }
         return 127;
@@ -917,25 +947,28 @@ protected:
 private:
     struct Clip { QString name; int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0; bool absolute = false; int kind = 0; QSize size; QPoint pos;
                             int positions = 4; QString posNames, posValues; int posIdx = 0;
-                  bool latching = false; int capColor = 0; int fontPx = 12; int lineW = 1; };
+                  bool latching = false; int capColor = 0; int fontPx = 12; int lineW = 1;
+                  bool nrpn = false; int nrpnNum = 0; bool wide = false; };
 public:
     struct Desc { QString name; int cc, rmin, rmax, def, val; bool absolute; int x, y, w, h, kind;
         int positions = 4; QString posNames, posValues; int posIdx = 0;          // Slider Switch only
         bool latching = false; int capColor = 0;                                 // Push Switch only
         int fontPx = 12; int lineW = 1;                                          // Label / Line
         int id = 0;                                                              // 0 = not numbered yet
+        bool nrpn = false; int nrpnNum = 0; bool wide = false;                   // address
         bool operator==(const Desc& o) const {
             return name == o.name && cc == o.cc && rmin == o.rmin && rmax == o.rmax && def == o.def && val == o.val
                 && absolute == o.absolute && x == o.x && y == o.y && w == o.w && h == o.h && kind == o.kind
                 && positions == o.positions && posNames == o.posNames && posValues == o.posValues && posIdx == o.posIdx
                 && latching == o.latching && capColor == o.capColor
-                && fontPx == o.fontPx && lineW == o.lineW && id == o.id; } };
+                && fontPx == o.fontPx && lineW == o.lineW && id == o.id
+                && nrpn == o.nrpn && nrpnNum == o.nrpnNum && wide == o.wide; } };
     QVector<Desc> snapshot() const {
         QVector<Desc> st;
         for (CcControl* c : controls_)
             st.append({ c->name, c->cc, c->rmin, c->rmax, c->def, c->val, c->absolute, c->x(), c->y(), c->width(), c->height(), int(c->kind),
                         c->positions, c->posNames, c->posValues, c->posIdx, c->latching, c->capColor,
-                        c->fontPx, c->lineW, c->id });
+                        c->fontPx, c->lineW, c->id, c->nrpn, c->nrpnNum, c->wide });
         return st;
     }
     void restore(const QVector<Desc>& st) {
@@ -946,6 +979,7 @@ public:
             c->name = d.name; c->cc = d.cc; c->rmin = d.rmin; c->rmax = d.rmax; c->def = d.def; c->val = d.val; c->absolute = d.absolute; c->kind = CcControl::kindOf(d.kind);
             c->positions = d.positions; c->posNames = d.posNames; c->posValues = d.posValues; c->posIdx = d.posIdx;
             c->latching = d.latching; c->capColor = d.capColor; c->fontPx = d.fontPx; c->lineW = d.lineW;
+            c->nrpn = d.nrpn; c->nrpnNum = d.nrpnNum; c->wide = d.wide;
             c->id = d.id > 0 ? d.id : takeId();        // a surface saved before ids gets numbered here
             setNextId(c->id + 1);
             c->resize(d.w, d.h); c->move(d.x, d.y); c->show();
@@ -955,6 +989,7 @@ public:
     }
 private:
     int  nextId_ = 1;
+    bool bankMsb_ = false, bankLsb_ = false;      // Bank Select armed -> CC#0 / CC#32 reserved
     bool locked_ = false, gridOn_ = true;
     int  gridStep_ = 16;
     QList<CcControl*> controls_, sel_;
@@ -1087,6 +1122,10 @@ void CcControl::paintEvent(QPaintEvent*)
             p.drawText(QRectF(lx, y - 8, qMax(1.0, W - lx), 16), Qt::AlignLeft | Qt::AlignVCenter, nm);
         }
         drawStem(p, QPointF(l.sx + (SLOT_W - STEM_W) / 2, detentY(posIdx, l) - STEM_H / 2));
+    }
+    if (blocked()) {                                       // reserved number: veiled, and mute
+        p.setPen(Qt::NoPen); p.setBrush(QColor(0x12, 0x15, 0x1c, 165));
+        p.drawRoundedRect(QRectF(0, 0, W, H), 4, 4);
     }
     if (edit && panel_->isSelected(this)) {                // four corner resize handles: SELECTED only
         p.setPen(Qt::NoPen); p.setBrush(QColor(0x5a, 0x8a, 0xc8));
@@ -1264,7 +1303,26 @@ void CcControl::applyState(int v, bool send)
     else { val = qBound(qMin(rmin, rmax), v, qMax(rmin, rmax)); }
     update();
     if (!send) return;
-    panel_->emitCc(cc, kind == Knob ? midiOf(val) : qBound(0, val, 127));
+    sendValue();
+}
+// A number can be spoken for: CC#0 while Bank MSB is armed, CC#32 while Bank LSB
+// is, and the four NRPN controllers as soon as any control on the surface is an
+// NRPN. A control sitting on one of them is dimmed and mute until that lifts.
+bool CcControl::blocked() const
+{
+    if (isDeco() || nrpn) return false;
+    if (cc == 0  && panel_->bankMsbArmed()) return true;
+    if (cc == 32 && panel_->bankLsbArmed()) return true;
+    if ((cc == 98 || cc == 99 || cc == 6 || cc == 38) && panel_->nrpnPresent()) return true;
+    return false;
+}
+void CcControl::sendValue()
+{
+    if (isDeco() || blocked()) return;
+    const int span = valueSpan();
+    const int v = (kind == Knob) ? midiOf(val, span) : qBound(0, val, span);
+    if (nrpn) panel_->emitNrpn(nrpnNum, v, wide);
+    else      panel_->emitCc(cc, v);
 }
 void CcControl::setPosFromY(int y)
 {
@@ -1276,20 +1334,20 @@ void CcControl::setPosFromY(int y)
     posIdx = best;
     val = valueAt(posIdx);
     update();
-    panel_->emitCc(cc, qBound(0, val, 127));
+    sendValue();
 }
 void CcControl::mousePressEvent(QMouseEvent* e)
 {
     if (e->button() != Qt::LeftButton) return;
     if (panel_->locked()) {                             // locked: vertical drag sets the value + sends MIDI
-        if (isDeco()) return;                           // decoration is inert
+        if (isDeco() || blocked()) return;              // decoration is inert; so is a reserved number
         valuing_ = true;
         if (kind == SliderSwitch) setPosFromY(e->pos().y());       // switch: jump to the nearest detent
         else if (kind == PushSwitch) {                             // push: bistable toggles, momentary goes down
             pressing_ = true;
             val = latching ? (val == rmax ? rmin : rmax) : rmax;
             update();
-            panel_->emitCc(cc, qBound(0, val, 127));
+            sendValue();
         }
         else { dragStartY_ = e->pos().y(); dragStartVal_ = val; }
         return;
@@ -1315,14 +1373,14 @@ void CcControl::mousePressEvent(QMouseEvent* e)
 void CcControl::mouseMoveEvent(QMouseEvent* e)
 {
     if (panel_->locked()) {                              // locked: value drag (up = more) or hover hint
-        if (isDeco()) { setCursor(Qt::ArrowCursor); return; }
+        if (isDeco() || blocked()) { setCursor(Qt::ArrowCursor); return; }
         if (!valuing_) { setCursor(kind == PushSwitch ? Qt::PointingHandCursor : Qt::SizeVerCursor); return; }
         if (kind == PushSwitch) return;                              // a button ignores the drag
         if (kind == SliderSwitch) { setPosFromY(e->pos().y()); return; }   // switch: the detent follows the drag
         const double span = (rmax != rmin) ? qAbs(rmax - rmin) : 1;   // knob: relative
         const int lo = qMin(rmin, rmax), hi = qMax(rmin, rmax);
         const int nv = qBound(lo, dragStartVal_ + qRound((dragStartY_ - e->pos().y()) * span / 150.0), hi);
-        if (nv != val) { val = nv; update(); panel_->emitCc(cc, midiOf(val)); }
+        if (nv != val) { val = nv; update(); sendValue(); }
         return;
     }
     if (!dragging_ && !resizing_) {                      // hover: move cursor on the body, resize on a corner
@@ -1347,7 +1405,7 @@ void CcControl::mouseReleaseEvent(QMouseEvent*)
 {
     if (pressing_) {                                   // a momentary switch falls back when let go
         pressing_ = false;
-        if (!latching && val != rmin) { val = rmin; panel_->emitCc(cc, qBound(0, val, 127)); }
+        if (!latching && val != rmin) { val = rmin; sendValue(); }
         update();
     }
     dragging_ = resizing_ = valuing_ = false;
@@ -1389,20 +1447,44 @@ void CcControl::editProperties()
     modeBox->setCurrentIndex(absolute ? 1 : 0);
     auto* nameEd = new QLineEdit(name);
     auto* ccSp = new QSpinBox;  ccSp->setRange(0, 127);  ccSp->setValue(cc);
+    // Address: a CC number, or an NRPN parameter as MSB / LSB / one number - three
+    // LINKED fields, because the manuals use either notation (Novation and Roland
+    // give the pair, Sequential the number). Fill in whichever the doc gives.
+    auto* addrBox = new QComboBox; addrBox->addItem(QStringLiteral("CC")); addrBox->addItem(QStringLiteral("NRPN"));
+    addrBox->setCurrentIndex(nrpn ? 1 : 0);
+    const int nn = qBound(0, nrpnNum, 16383);
+    auto* msbNr = new QSpinBox; msbNr->setRange(0, 127);   msbNr->setValue(nn / 128);
+    auto* lsbNr = new QSpinBox; lsbNr->setRange(0, 127);   lsbNr->setValue(nn % 128);
+    auto* numNr = new QSpinBox; numNr->setRange(0, 16383); numNr->setValue(nn);
+    auto* wideChk = new FilterCheckBox(QStringLiteral("14-bit (CC#6 + CC#38)")); wideChk->setNeutral(true); wideChk->setChecked(wide);
+    auto linking = std::make_shared<bool>(false);
+    auto fromPair = [msbNr, lsbNr, numNr, linking] {
+        if (*linking) return; *linking = true; numNr->setValue(msbNr->value() * 128 + lsbNr->value()); *linking = false; };
+    auto fromNum  = [msbNr, lsbNr, numNr, linking] {
+        if (*linking) return; *linking = true; msbNr->setValue(numNr->value() / 128); lsbNr->setValue(numNr->value() % 128); *linking = false; };
+    connect(msbNr, &QSpinBox::valueChanged, &d, [fromPair](int) { fromPair(); });
+    connect(lsbNr, &QSpinBox::valueChanged, &d, [fromPair](int) { fromPair(); });
+    connect(numNr, &QSpinBox::valueChanged, &d, [fromNum](int)  { fromNum(); });
     auto* minSp = new QSpinBox; minSp->setRange(-16384, 16383); minSp->setValue(rmin);
     auto* maxSp = new QSpinBox; maxSp->setRange(-16384, 16383); maxSp->setValue(rmax);
     auto* defSp = new QSpinBox; defSp->setRange(-16384, 16383); defSp->setValue(def);
     // Absolute keeps max-min <= 127 (a 7-bit MIDI window, may sit anywhere incl. negative):
     // pushing one bound past the span drags the other; a smaller span stays allowed.
-    auto capFromMin = [minSp, maxSp, modeBox] { if (modeBox->currentIndex() == 1 && maxSp->value() - minSp->value() > 127) maxSp->setValue(minSp->value() + 127); };
-    auto capFromMax = [minSp, maxSp, modeBox] { if (modeBox->currentIndex() == 1 && maxSp->value() - minSp->value() > 127) minSp->setValue(maxSp->value() - 127); };
+    auto spanOf = [addrBox, wideChk] { return (addrBox->currentIndex() == 1 && wideChk->isChecked()) ? 16383 : 127; };
+    auto capFromMin = [minSp, maxSp, modeBox, spanOf] { if (modeBox->currentIndex() == 1 && maxSp->value() - minSp->value() > spanOf()) maxSp->setValue(minSp->value() + spanOf()); };
+    auto capFromMax = [minSp, maxSp, modeBox, spanOf] { if (modeBox->currentIndex() == 1 && maxSp->value() - minSp->value() > spanOf()) minSp->setValue(maxSp->value() - spanOf()); };
     connect(minSp, &QSpinBox::valueChanged, &d, [capFromMin](int) { capFromMin(); });
     connect(maxSp, &QSpinBox::valueChanged, &d, [capFromMax](int) { capFromMax(); });
     connect(modeBox, &QComboBox::currentIndexChanged, &d, [capFromMin](int) { capFromMin(); });
     form->addRow(QStringLiteral("Type"),    typeBox);
     form->addRow(QStringLiteral("Mode"),    modeBox);
     form->addRow(QStringLiteral("Name"),    nameEd);
+    form->addRow(QStringLiteral("Address"), addrBox);
     form->addRow(QStringLiteral("CC #"),    ccSp);
+    form->addRow(QStringLiteral("NRPN MSB"), msbNr);
+    form->addRow(QStringLiteral("NRPN LSB"), lsbNr);
+    form->addRow(QStringLiteral("NRPN #"),   numNr);
+    form->addRow(QStringLiteral("Value"), wideChk);
     form->addRow(QStringLiteral("Min"),     minSp);
     form->addRow(QStringLiteral("Max"),     maxSp);
     form->addRow(QStringLiteral("Default"), defSp);
@@ -1430,12 +1512,16 @@ void CcControl::editProperties()
     form->addRow(QStringLiteral("Text size"), fontSp);
     form->addRow(QStringLiteral("Thickness"), lineSp);
     auto swRows = [form, posSp, namesEd, valsEd, actBox, colBox, modeBox, minSp, maxSp, defSp,
-                   fontSp, lineSp, nameEd, ccSp](int t) {
+                   fontSp, lineSp, nameEd, ccSp, addrBox, msbNr, lsbNr, numNr, wideChk](int t) {
         const bool sl = (t == int(SliderSwitch)), pb = (t == int(PushSwitch));
         const bool la = (t == int(Label)), li = (t == int(Line)), deco = la || li;
+        const bool useN = !deco && addrBox->currentIndex() == 1;
         form->setRowVisible(fontSp, la); form->setRowVisible(lineSp, li);
         form->setRowVisible(nameEd, !li);                  // a line has nothing to say
-        form->setRowVisible(ccSp, !deco);                  // decoration sends nothing
+        form->setRowVisible(addrBox, !deco);               // decoration sends nothing
+        form->setRowVisible(ccSp, !deco && !useN);
+        form->setRowVisible(msbNr, useN); form->setRowVisible(lsbNr, useN);
+        form->setRowVisible(numNr, useN); form->setRowVisible(wideChk, useN);
         form->setRowVisible(posSp, sl);   form->setRowVisible(namesEd, sl); form->setRowVisible(valsEd, sl);
         form->setRowVisible(actBox, pb);  form->setRowVisible(colBox, pb);
         form->setRowVisible(modeBox, !sl && !pb && !deco);
@@ -1450,6 +1536,7 @@ void CcControl::editProperties()
     };
     swRows(typeBox->currentData().toInt());
     connect(typeBox, &QComboBox::currentIndexChanged, &d, [swRows, typeBox](int) { swRows(typeBox->currentData().toInt()); });
+    connect(addrBox, &QComboBox::currentIndexChanged, &d, [swRows, typeBox](int) { swRows(typeBox->currentData().toInt()); });
     auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     form->addRow(bb);
     connect(bb, &QDialogButtonBox::accepted, &d, &QDialog::accept);
@@ -1477,13 +1564,17 @@ void CcControl::editProperties()
         absolute = (modeBox->currentIndex() == 1);
         name = nameEd->text().trimmed();
         cc = ccSp->value();
+        nrpn = (addrBox->currentIndex() == 1);
+        nrpnNum = numNr->value();
+        wide = wideChk->isChecked();
         rmin = minSp->value(); rmax = maxSp->value();
         if (rmax < rmin) qSwap(rmin, rmax);
-        if (absolute && rmax - rmin > 127) rmax = rmin + 127;   // 7-bit window
+        if (absolute && rmax - rmin > valueSpan()) rmax = rmin + valueSpan();   // 7- or 14-bit window
         def = qBound(rmin, defSp->value(), rmax);
         val = (kind == SliderSwitch) ? valueAt(posIdx)          // reset to the rest state on edit
             : (kind == PushSwitch) ? rmin : def;
         update();
+        panel_->refreshAll();                      // an NRPN appearing or leaving changes who is reserved
         panel_->endGesture();
     }
 }
@@ -1917,6 +2008,64 @@ void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
         // 0xf8..0xff (real time) is interleaved and leaves running status untouched
     }
 
+    // Decode NRPN. CC#99 opens a run, CC#98 completes the parameter, CC#6 writes
+    // the ONE line, and a CC#38 right behind widens the value on that same line.
+    // Any other message ends the run - except real time, which interleaves with
+    // everything and must not.
+    {
+        const MonCols& cols = out ? outCols_ : inCols_;
+        NrpnRun& r = out ? nrpnOut_ : nrpnIn_;
+        QListWidget* list = out ? monOut_ : monIn_;
+        const bool isCc = msg.size() == 3 && (msg[0] & 0xf0) == 0xb0;
+        // No "(14-bit)" tag: it pushed the label past its column and broke the raw
+        // data alignment. A 14-bit value shows by being above 127 and by its four
+        // segments in the raw column.
+        auto lineFor = [](int ch, int msb, int lsb, int value) {
+            const std::string chs = QString::asprintf("ch %2d", ch + 1).toStdString();
+            const std::string prm = QString::asprintf("#%d", msb * 128 + lsb).toStdString();
+            const std::string val = QString::asprintf("val %d", value).toStdString();
+            return QString::asprintf("%-9s %-5s %-7s %s", "NRPN", chs.c_str(), prm.c_str(), val.c_str());
+        };
+        // One message more in the raw column; a recreated status byte keeps its mark.
+        auto addSeg = [&r, &running, &msg] {
+            if (!r.raw.isEmpty()) r.raw += QStringLiteral(" | ");
+            if (running) r.runOffsets << r.raw.length();
+            r.raw += hexFull(msg);
+        };
+        if (cols.nrpn && isCc) {
+            const int ch = msg[0] & 0x0f, cc = msg[1], v = msg[2];
+            if (cc == 99) { r = NrpnRun(); r.ch = ch; r.msb = v; addSeg(); return; }
+            if (cc == 98 && r.ch == ch && r.msb >= 0 && r.lsb < 0) { r.lsb = v; addSeg(); return; }
+            if (cc == 6 && r.ch == ch && r.msb >= 0 && r.lsb >= 0 && !r.item) {
+                r.value = v; addSeg();
+                auto* one = new QListWidgetItem;
+                one->setData(Role_Stamp, nowStamp());
+                one->setData(Role_Label, lineFor(ch, r.msb, r.lsb, r.value));
+                one->setData(Role_Hex,   r.raw);
+                one->setData(Role_Run,   false);
+                QVariantList offs; for (int o : r.runOffsets) offs << o;
+                one->setData(Role_RunPos, offs);
+                rebuildMonRow(one, cols);
+                appendCapped(list, one);
+                r.item = one;
+                return;
+            }
+            if (cc == 38 && r.ch == ch && r.item && list->row(r.item) >= 0) {
+                r.value = (r.value << 7) | v; addSeg();
+                r.item->setData(Role_Label, lineFor(ch, r.msb, r.lsb, r.value));
+                r.item->setData(Role_Hex,   r.raw);
+                QVariantList offs; for (int o : r.runOffsets) offs << o;
+                r.item->setData(Role_RunPos, offs);
+                rebuildMonRow(r.item, cols);
+                r = NrpnRun();
+                return;
+            }
+            r = NrpnRun();                                // some other CC: not a run
+        } else if (!(msg.size() == 1 && msg[0] >= 0xf8)) {
+            r = NrpnRun();
+        }
+    }
+
     adios::Decoded d = adios::decode(msg);
     auto* it = new QListWidgetItem;
     it->setData(Role_Stamp, nowStamp());
@@ -1941,9 +2090,15 @@ void MainWindow::rebuildMonRow(QListWidgetItem* it, const MonCols& c)
                     line += c.raw ? label.leftJustified(38) : label; }
     if (c.raw)    { if (!line.isEmpty()) line += QStringLiteral("  "); line += hex; }
     it->setText(line);
-    const bool dim = c.raw && it->data(Role_Run).toBool();
+    // A plain line dims its one status byte when it ran on running status; a merged
+    // line (NRPN) carries the offsets of every recreated byte within its raw column.
+    QVariantList offs = it->data(Role_RunPos).toList();
+    if (offs.isEmpty() && it->data(Role_Run).toBool()) offs << 0;
+    const bool dim = c.raw && !offs.isEmpty();
+    QVariantList pos;
+    if (dim) { const int hexStart = int(line.length() - hex.length()); for (const QVariant& o : offs) pos << hexStart + o.toInt(); }
     it->setData(Role_Dim, dim);
-    it->setData(Role_HexPos, dim ? int(line.length() - hex.length()) : -1);
+    it->setData(Role_HexPos, pos);
 }
 
 void MainWindow::rerenderMonitor(QListWidget* list, const MonCols& c)
@@ -1998,6 +2153,14 @@ void MainWindow::buildMenus()
             });
             viewToggles_ << a;
         }
+        // Decode NRPN is a READING, not a column: the CC#99/98/6[/38] run of an NRPN
+        // collapses into one line, parameter and value, instead of three or four.
+        sub->addSeparator();
+        QAction* n = sub->addAction(tr("Decode NRPN"));
+        n->setObjectName(prefix + "DecodeNRPN");
+        n->setCheckable(true); n->setChecked(cols->nrpn);
+        connect(n, &QAction::toggled, this, [cols](bool v) { cols->nrpn = v; });
+        viewToggles_ << n;                        // persisted with the others
     };
 
     // The panel show/hide lives on a "Show" item INSIDE the sub-menu: a checkable
@@ -2068,6 +2231,16 @@ void MainWindow::openController()
         connect(ccGrid,   &QCheckBox::toggled, ccPanel, &CcPanel::setGrid);
         ccPanel->onLockChange = [ccLocked](bool on) { ccLocked->setChecked(on); };   // panel menu <-> header case
         ccPanel->onCc = [this](int cc, int v) { sendRaw({ uint8_t(0xB0 | kbChannel_), uint8_t(cc & 0x7f), uint8_t(v & 0x7f) }); };
+        // The NRPN run goes out WHOLE every time - parameter MSB, LSB, then the value -
+        // rather than trusting the receiver to remember the last parameter: that
+        // memory breaks as soon as anything else talks on the channel in between.
+        ccPanel->onNrpn = [this](int param, int v, bool wide) {
+            const uint8_t st = uint8_t(0xB0 | kbChannel_);
+            sendRaw({ st, uint8_t(99), uint8_t((param >> 7) & 0x7f) });
+            sendRaw({ st, uint8_t(98), uint8_t(param & 0x7f) });
+            sendRaw({ st, uint8_t(6),  uint8_t(wide ? (v >> 7) & 0x7f : v & 0x7f) });
+            if (wide) sendRaw({ st, uint8_t(38), uint8_t(v & 0x7f) });
+        };
         // --- Bank / Program Change, to the left of the surface -----------------
         // Bank Select is two controllers, CC0 (MSB) and CC32 (LSB), and they only ARM
         // a bank: the Program Change that follows is what actually picks the sound.
@@ -2117,6 +2290,12 @@ void MainWindow::openController()
         // An unticked line goes grey: the field it will not send has no business
         // looking editable.
         connect(msbChk, &QCheckBox::toggled, msbSp, &QWidget::setEnabled);
+        // Armed, a bank tick reserves its controller on the surface: CC#0 for MSB,
+        // CC#32 for LSB, each on its own.
+        auto armBank = [ccPanel, msbChk, lsbChk] { ccPanel->setBankArmed(msbChk->isChecked(), lsbChk->isChecked()); };
+        connect(msbChk, &QCheckBox::toggled, controllerWin_, [armBank](bool) { armBank(); });
+        connect(lsbChk, &QCheckBox::toggled, controllerWin_, [armBank](bool) { armBank(); });
+        armBank();
         connect(lsbChk, &QCheckBox::toggled, lsbSp, &QWidget::setEnabled);
         connect(pgmChk, &QCheckBox::toggled, pgmSp, &QWidget::setEnabled);
         // Turning a field sends NOTHING: Send is the only thing that puts bytes on
@@ -2585,6 +2764,7 @@ bool MainWindow::ctrlWriteConfig(const QString& path)
             x.writeAttribute("text", d.name); x.writeAttribute("size", num(d.fontPx));
         } else {
             x.writeAttribute("name", d.name); x.writeAttribute("cc", num(d.cc));
+            if (d.nrpn) { x.writeAttribute("nrpn", "1"); x.writeAttribute("param", num(d.nrpnNum)); x.writeAttribute("wide", b01(d.wide)); }
             if (k == CcControl::Knob) {
                 x.writeAttribute("min", num(d.rmin)); x.writeAttribute("max", num(d.rmax)); x.writeAttribute("default", num(d.def));
                 x.writeAttribute("value", num(d.val)); x.writeAttribute("absolute", b01(d.absolute));
@@ -2710,6 +2890,7 @@ bool MainWindow::ctrlLoadXml(const QString& path)
         d.id = attrInt(a, "id", 0);
         d.name = a.hasAttribute("text") ? a.value("text").toString() : a.value("name").toString();
         d.cc = attrInt(a, "cc", 1);
+        d.nrpn = attrBool(a, "nrpn", false); d.nrpnNum = attrInt(a, "param", 0); d.wide = attrBool(a, "wide", false);
         d.rmin = attrInt(a, "min", attrInt(a, "off", 0)); d.rmax = attrInt(a, "max", attrInt(a, "on", 127));
         d.def = attrInt(a, "default", 0); d.val = attrInt(a, "value", 0); d.absolute = attrBool(a, "absolute", false);
         d.positions = attrInt(a, "positions", 4); d.posNames = a.value("names").toString(); d.posValues = a.value("values").toString();
@@ -2923,7 +3104,8 @@ void MainWindow::ctrlRebuildRecent()
 // filter) and put the three splitters back to the first-launch defaults.
 void MainWindow::resetLayout()
 {
-    for (QAction* a : viewToggles_) a->setChecked(true);
+    for (QAction* a : viewToggles_)                   // Decode NRPN is a reading, not layout: left alone
+        if (!a->objectName().endsWith(QLatin1String("DecodeNRPN"))) a->setChecked(true);
     syncMonSplit();
     resize(960, 860);                                   // default main-window size
     // Big second value = "give it the rest": QSplitter clamps to what is left,
