@@ -621,10 +621,10 @@ public:
         }
         return 127;
     }
-    void refreshExtent() {                        // min size = bounding box -> scrollbars when it overflows
-        QRect box(0, 0, 1, 1);
+    void refreshExtent() {                        // min size = the EXACT bounding box, so the scrollbars
+        QRect box(0, 0, 1, 1);                    // show up only when a control is really clipped, never before
         for (CcControl* c : controls_) box = box.united(c->geometry());
-        setMinimumSize(box.right() + 8, box.bottom() + 8);
+        setMinimumSize(box.right() + 1, box.bottom() + 1);   // right()/bottom() are inclusive -> +1 = last pixel
     }
     // --- undo/redo of construction: snapshot the whole surface; a gesture (drag,
     // resize, alt-dup) coalesces into ONE entry; a no-op change pushes nothing. ---
