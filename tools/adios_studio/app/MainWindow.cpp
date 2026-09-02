@@ -12,8 +12,14 @@
 #include <QDialogButtonBox>
 #include <QFont>
 #include <QFormLayout>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QMessageBox>
+#include <QDir>
+#include <QStandardPaths>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 #include <QFontMetrics>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -497,6 +503,7 @@ public:
     Kind kind = Knob;
     QString name;                                 // shown on top; empty -> "CC<n>"
     int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0;
+    int id = 0;                                    // stable identity, never reused: what a snapshot refers to
     bool absolute = false;                         // false: value maps to MIDI 0..127; true: value IS the MIDI value (7-bit)
     // --- Slider Switch: detents, what each one is called and what it sends -----
     int     positions = 4;                         // 2..8
@@ -626,7 +633,7 @@ class CcPanel : public QWidget {
 public:
     explicit CcPanel(QWidget* parent = nullptr) : QWidget(parent) { setFocusPolicy(Qt::StrongFocus); }
     void setLocked(bool on) { locked_ = on; update(); for (CcControl* c : controls_) c->update(); notifyState(); }
-    void setGrid(bool on)   { gridOn_ = on; update(); }
+    void setGrid(bool on)   { if (gridOn_ != on && onEdited) onEdited(); gridOn_ = on; update(); }
     void setGridStep(int s) { gridStep_ = qMax(2, s); update(); }
     bool locked() const { return locked_; }
     std::function<void(bool)> onLockChange;       // menu Lock/Unlock routes through the header checkbox
@@ -655,9 +662,17 @@ public:
     }
     int  snap1(int v) const { return gridOn_ ? qRound(double(v) / gridStep_) * gridStep_ : v; }
     QPoint snap(QPoint p) const { return QPoint(snap1(p.x()), snap1(p.y())); }
+    // Identity: a counter that only ever climbs. A copy, a paste or an undo all get
+    // or keep their own id; a legacy surface (saved before ids) is numbered on load.
+    int  takeId() { return nextId_++; }
+    int  nextId() const { return nextId_; }
+    void setNextId(int n) { nextId_ = qMax(nextId_, n); }
+    bool gridOn() const { return gridOn_; }
+    std::function<void()> onEdited;               // a REAL change to the surface (config goes dirty)
     void addControl(CcControl::Kind k, QPoint at) {
         auto* c = new CcControl(this);
         c->kind = k;
+        c->id = takeId();
         CcControl* model = nullptr;                    // model on the last control OF THE SAME kind
         for (int i = controls_.size() - 1; i >= 0; --i) if (controls_[i]->kind == k) { model = controls_[i]; break; }
         if (model) {
@@ -698,6 +713,7 @@ public:
         QList<CcControl*> fresh;
         for (CcControl* s : src) {
             auto* c = new CcControl(this);
+            c->id = takeId();
             c->name = s->name; c->rmin = s->rmin; c->rmax = s->rmax; c->def = s->def; c->val = s->val; c->absolute = s->absolute; c->kind = s->kind;
             c->positions = s->positions; c->posNames = s->posNames; c->posValues = s->posValues; c->posIdx = s->posIdx;
             c->latching = s->latching; c->capColor = s->capColor; c->fontPx = s->fontPx; c->lineW = s->lineW;
@@ -733,6 +749,7 @@ public:
         QList<CcControl*> fresh;
         for (Clip& cl : clips_) {
             auto* c = new CcControl(this);
+            c->id = takeId();
             c->name = cl.name; c->rmin = cl.rmin; c->rmax = cl.rmax; c->def = cl.def; c->val = cl.val; c->absolute = cl.absolute; c->kind = CcControl::kindOf(cl.kind);
             c->positions = cl.positions; c->posNames = cl.posNames; c->posValues = cl.posValues; c->posIdx = cl.posIdx;
             c->latching = cl.latching; c->capColor = cl.capColor; c->fontPx = cl.fontPx; c->lineW = cl.lineW;
@@ -771,9 +788,13 @@ public:
     void endGesture() {
         if (gestureDepth_ == 0) return;
         if (--gestureDepth_ != 0) return;
-        if (snapshot() != pending_) { undo_.append(pending_); if (undo_.size() > 64) undo_.removeFirst(); redo_.clear(); }
+        if (snapshot() != pending_) {
+            undo_.append(pending_); if (undo_.size() > 64) undo_.removeFirst(); redo_.clear();
+            if (onEdited) onEdited();
+        }
         notifyState();
     }
+    void clearHistory() { undo_.clear(); redo_.clear(); notifyState(); }
     void undo() { if (undo_.isEmpty()) return; redo_.append(snapshot()); restore(undo_.takeLast()); notifyState(); }
     void redo() { if (redo_.isEmpty()) return; undo_.append(snapshot()); restore(redo_.takeLast()); notifyState(); }
     bool canUndo() const { return !locked_ && !undo_.isEmpty(); }
@@ -885,22 +906,24 @@ private:
     struct Clip { QString name; int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0; bool absolute = false; int kind = 0; QSize size; QPoint pos;
                             int positions = 4; QString posNames, posValues; int posIdx = 0;
                   bool latching = false; int capColor = 0; int fontPx = 12; int lineW = 1; };
+public:
     struct Desc { QString name; int cc, rmin, rmax, def, val; bool absolute; int x, y, w, h, kind;
         int positions = 4; QString posNames, posValues; int posIdx = 0;          // Slider Switch only
         bool latching = false; int capColor = 0;                                 // Push Switch only
         int fontPx = 12; int lineW = 1;                                          // Label / Line
+        int id = 0;                                                              // 0 = not numbered yet
         bool operator==(const Desc& o) const {
             return name == o.name && cc == o.cc && rmin == o.rmin && rmax == o.rmax && def == o.def && val == o.val
                 && absolute == o.absolute && x == o.x && y == o.y && w == o.w && h == o.h && kind == o.kind
                 && positions == o.positions && posNames == o.posNames && posValues == o.posValues && posIdx == o.posIdx
                 && latching == o.latching && capColor == o.capColor
-                && fontPx == o.fontPx && lineW == o.lineW; } };
+                && fontPx == o.fontPx && lineW == o.lineW && id == o.id; } };
     QVector<Desc> snapshot() const {
         QVector<Desc> st;
         for (CcControl* c : controls_)
             st.append({ c->name, c->cc, c->rmin, c->rmax, c->def, c->val, c->absolute, c->x(), c->y(), c->width(), c->height(), int(c->kind),
                         c->positions, c->posNames, c->posValues, c->posIdx, c->latching, c->capColor,
-                        c->fontPx, c->lineW });
+                        c->fontPx, c->lineW, c->id });
         return st;
     }
     void restore(const QVector<Desc>& st) {
@@ -911,11 +934,15 @@ private:
             c->name = d.name; c->cc = d.cc; c->rmin = d.rmin; c->rmax = d.rmax; c->def = d.def; c->val = d.val; c->absolute = d.absolute; c->kind = CcControl::kindOf(d.kind);
             c->positions = d.positions; c->posNames = d.posNames; c->posValues = d.posValues; c->posIdx = d.posIdx;
             c->latching = d.latching; c->capColor = d.capColor; c->fontPx = d.fontPx; c->lineW = d.lineW;
+            c->id = d.id > 0 ? d.id : takeId();        // a surface saved before ids gets numbered here
+            setNextId(c->id + 1);
             c->resize(d.w, d.h); c->move(d.x, d.y); c->show();
             controls_.append(c);
         }
         refreshExtent(); update();
     }
+private:
+    int  nextId_ = 1;
     bool locked_ = false, gridOn_ = true;
     int  gridStep_ = 16;
     QList<CcControl*> controls_, sel_;
@@ -1715,6 +1742,12 @@ void MainWindow::saveSettings()
         if (auto* sg = controllerWin_->findChild<QButtonGroup*>(QStringLiteral("snapGroup")))
             s.setValue("ctrl/snapshot", sg->checkedId());
         if (ccSurface_) s.setValue("ctrl/surface", static_cast<CcPanel*>(ccSurface_)->saveState());
+        // The working copy goes to the session file, with the name of the config it
+        // came from and whether it differs from it. The named file is NOT touched:
+        // only Save writes it.
+        s.setValue("ctrl/configPath", ctrlConfigPath_);
+        s.setValue("ctrl/dirty", ctrlDirty_);
+        ctrlWriteConfig(ctrlSessionPath());
     }
 
     // Filter: flags, channel mask, the Output "Apply Filter" toggle, and which
@@ -2032,7 +2065,7 @@ void MainWindow::openController()
         auto* msbChk = new FilterCheckBox(tr("Bank MSB")); msbChk->setObjectName(QStringLiteral("bankMsbOn"));
         auto* lsbChk = new FilterCheckBox(tr("Bank LSB")); lsbChk->setObjectName(QStringLiteral("bankLsbOn"));
         auto* pgmChk = new FilterCheckBox(tr("Program"));  pgmChk->setObjectName(QStringLiteral("programOn"));
-        for (FilterCheckBox* c : { msbChk, lsbChk, pgmChk }) { c->setNeutral(true); c->setChecked(true); }
+        for (FilterCheckBox* c : { msbChk, lsbChk, pgmChk }) { c->setNeutral(true); c->setChecked(false); }   // armed by hand
         auto* msbSp = new QSpinBox; msbSp->setObjectName(QStringLiteral("bankMsb")); msbSp->setRange(0, 127);
         auto* lsbSp = new QSpinBox; lsbSp->setObjectName(QStringLiteral("bankLsb")); lsbSp->setRange(0, 127);
         auto* pgmSp = new QSpinBox; pgmSp->setObjectName(QStringLiteral("program"));
@@ -2125,6 +2158,7 @@ void MainWindow::openController()
         chRow->addWidget(new QLabel(tr("Channel:")));
         chRow->addSpacing(6);
         auto* chGroup = new QButtonGroup(controllerWin_);
+        chGroup->setObjectName(QStringLiteral("chGroup"));
         for (int i = 0; i < 16; ++i) {
             auto* b = new QPushButton(QString::number(i + 1));
             b->setObjectName("kbChan");
@@ -2248,7 +2282,19 @@ void MainWindow::openController()
         // Pinning them again only carved whatever height they happened to have.
 
         auto* mb = new QMenuBar(controllerWin_);
-        mb->addMenu(tr("Config"));                       // empty for now (Control Change presets)
+        // Config: the whole controller as ONE file - New / Open / Save / Save As / Recent.
+        auto* cfgMenu = mb->addMenu(tr("Config"));
+        auto* cfgNew  = cfgMenu->addAction(tr("New"));      cfgNew->setShortcut(QKeySequence::New);
+        auto* cfgOpen = cfgMenu->addAction(tr("Open..."));  cfgOpen->setShortcut(QKeySequence::Open);
+        auto* cfgSave = cfgMenu->addAction(tr("Save"));     cfgSave->setShortcut(QKeySequence::Save);
+        auto* cfgAs   = cfgMenu->addAction(tr("Save As...")); cfgAs->setShortcut(QKeySequence::SaveAs);
+        cfgMenu->addSeparator();
+        ctrlRecentMenu_ = cfgMenu->addMenu(tr("Recent"));
+        connect(cfgNew,  &QAction::triggered, this, [this] { ctrlNewConfig(); });
+        connect(cfgOpen, &QAction::triggered, this, [this] { ctrlOpenConfig(); });
+        connect(cfgSave, &QAction::triggered, this, [this] { ctrlSaveConfig(false); });
+        connect(cfgAs,   &QAction::triggered, this, [this] { ctrlSaveConfig(true); });
+        ctrlRebuildRecent();
         auto* editMenu = mb->addMenu(tr("Edit"));
         auto* view = mb->addMenu(tr("View"));
 
@@ -2397,7 +2443,32 @@ void MainWindow::openController()
         if (auto* b = snapGroup->button(cs.value("ctrl/snapshot", 0).toInt())) b->setChecked(true);
         ccSurface_ = ccPanel;                                // for saveSettings
         if (const QByteArray surf = cs.value("ctrl/surface").toByteArray(); !surf.isEmpty())
-            ccPanel->loadState(surf);                        // bring the whole surface back
+            ccPanel->loadState(surf);                        // the legacy state (no config file yet)
+        // What comes back, in order of preference: the SESSION copy written at the
+        // last close (the exact working state, dirty flag included), else the named
+        // config that was open, else the legacy state restored above. Whatever the
+        // source, a session ALWAYS starts locked.
+        const QString cfg = cs.value("ctrl/configPath").toString();
+        ctrlConfigPath_ = (!cfg.isEmpty() && QFileInfo::exists(cfg)) ? cfg : QString();
+        bool dirty = false;
+        if (QFileInfo::exists(ctrlSessionPath()) && ctrlLoadXml(ctrlSessionPath()))
+            dirty = cs.value("ctrl/dirty", false).toBool();
+        else if (!ctrlConfigPath_.isEmpty())
+            ctrlLoadXml(ctrlConfigPath_);
+        ccLocked->setChecked(true);
+        // From here on, any change to what the config holds marks it dirty. Wired
+        // last so the restores above do not count.
+        ccPanel->onEdited = [this] { ctrlSetDirty(true); };
+        for (QSpinBox* sp : controllerWin_->findChildren<QSpinBox*>())
+            if (!sp->objectName().isEmpty()) connect(sp, &QSpinBox::valueChanged, this, [this](int) { ctrlSetDirty(true); });
+        for (QCheckBox* c : controllerWin_->findChildren<QCheckBox*>())
+            if (!c->objectName().isEmpty() && c->objectName() != QLatin1String("ccLocked"))
+                connect(c, &QCheckBox::toggled, this, [this](bool) { ctrlSetDirty(true); });
+        for (QAction* a : controllerWin_->findChildren<QAction*>())
+            if (!a->objectName().isEmpty() && a->isCheckable()) connect(a, &QAction::toggled, this, [this](bool) { ctrlSetDirty(true); });
+        connect(chGroup, &QButtonGroup::idToggled, this, [this](int, bool on) { if (on) ctrlSetDirty(true); });
+        ctrlDirty_ = dirty;
+        ctrlUpdateTitle();
 
         // Cap the width where EVERY key shows: once laid out, the window/keyboard
         // width difference IS the exact chrome (margins + group padding + border),
@@ -2410,6 +2481,277 @@ void MainWindow::openController()
     controllerWin_->show();
     controllerWin_->raise();
     controllerWin_->activateWindow();
+}
+
+// ---------------------------------------------------------------------------
+// Controller configuration file. One XML document holds what the window IS -
+// its layout, the Bank/Program settings, the surface with its identified
+// objects - and will hold the snapshots. Locked is deliberately not in it: a
+// session always starts locked. An unknown element is skipped with a warning,
+// never fatal, so a file from a newer version still opens.
+// ---------------------------------------------------------------------------
+namespace {
+const char* const kCapNames[4] = { "black", "blue", "red", "grey" };
+int capIndex(const QString& s) { for (int i = 0; i < 4; ++i) if (s == QLatin1String(kCapNames[i])) return i; return s.toInt(); }
+QString b01(bool v) { return v ? QStringLiteral("1") : QStringLiteral("0"); }
+bool attrBool(const QXmlStreamAttributes& a, const char* n, bool d) { return a.hasAttribute(n) ? a.value(n) != QLatin1String("0") : d; }
+int  attrInt (const QXmlStreamAttributes& a, const char* n, int d)  { return a.hasAttribute(n) ? a.value(n).toInt() : d; }
+}
+
+bool MainWindow::ctrlWriteConfig(const QString& path)
+{
+    if (!controllerWin_ || !ccSurface_) return false;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
+    auto* panel = static_cast<CcPanel*>(ccSurface_);
+    auto spin = [this](const char* n) { auto* s = controllerWin_->findChild<QSpinBox*>(QLatin1String(n)); return s ? s->value() : 0; };
+    auto tick = [this](const char* n) { auto* c = controllerWin_->findChild<QCheckBox*>(QLatin1String(n)); return c && c->isChecked(); };
+    auto num  = [](int v) { return QString::number(v); };
+
+    QXmlStreamWriter x(&f);
+    x.setAutoFormatting(true); x.setAutoFormattingIndent(2);
+    x.writeStartDocument();
+    x.writeStartElement("adios-controller"); x.writeAttribute("version", "1");
+
+    x.writeStartElement("window");
+    x.writeAttribute("w", num(controllerWin_->width())); x.writeAttribute("h", num(controllerWin_->height()));
+    x.writeEndElement();
+
+    x.writeStartElement("view");                          // every checkable View action, by name
+    for (QAction* a : controllerWin_->findChildren<QAction*>())
+        if (!a->objectName().isEmpty() && a->isCheckable()) x.writeAttribute(a->objectName(), b01(a->isChecked()));
+    x.writeEndElement();
+
+    x.writeStartElement("keyboard");
+    x.writeAttribute("channel", num(kbChannel_ + 1)); x.writeAttribute("noNoteOff", b01(tick("noNoteOff")));
+    x.writeEndElement();
+
+    x.writeStartElement("bank");
+    x.writeAttribute("msb", num(spin("bankMsb"))); x.writeAttribute("lsb", num(spin("bankLsb"))); x.writeAttribute("program", num(spin("program")));
+    x.writeAttribute("sendMsb", b01(tick("bankMsbOn"))); x.writeAttribute("sendLsb", b01(tick("bankLsbOn"))); x.writeAttribute("sendProgram", b01(tick("programOn")));
+    x.writeEndElement();
+
+    x.writeStartElement("surface");
+    x.writeAttribute("grid", b01(panel->gridOn())); x.writeAttribute("nextId", num(panel->nextId()));
+    for (const CcPanel::Desc& d : panel->snapshot()) {
+        const auto k = CcControl::kindOf(d.kind);
+        x.writeStartElement(k == CcControl::Knob ? "knob" : k == CcControl::SliderSwitch ? "slider"
+                          : k == CcControl::PushSwitch ? "push" : k == CcControl::Label ? "label" : "line");
+        x.writeAttribute("id", num(d.id));
+        if (k == CcControl::Line) {
+            x.writeAttribute("thickness", num(d.lineW));
+        } else if (k == CcControl::Label) {
+            x.writeAttribute("text", d.name); x.writeAttribute("size", num(d.fontPx));
+        } else {
+            x.writeAttribute("name", d.name); x.writeAttribute("cc", num(d.cc));
+            if (k == CcControl::Knob) {
+                x.writeAttribute("min", num(d.rmin)); x.writeAttribute("max", num(d.rmax)); x.writeAttribute("default", num(d.def));
+                x.writeAttribute("value", num(d.val)); x.writeAttribute("absolute", b01(d.absolute));
+            } else if (k == CcControl::SliderSwitch) {
+                x.writeAttribute("positions", num(d.positions)); x.writeAttribute("names", d.posNames);
+                x.writeAttribute("values", d.posValues); x.writeAttribute("position", num(d.posIdx));
+            } else {
+                x.writeAttribute("off", num(d.rmin)); x.writeAttribute("on", num(d.rmax)); x.writeAttribute("value", num(d.val));
+                x.writeAttribute("latched", b01(d.latching)); x.writeAttribute("cap", QLatin1String(kCapNames[qBound(0, d.capColor, 3)]));
+            }
+        }
+        x.writeAttribute("x", num(d.x)); x.writeAttribute("y", num(d.y)); x.writeAttribute("w", num(d.w)); x.writeAttribute("h", num(d.h));
+        x.writeEndElement();
+    }
+    x.writeEndElement();
+
+    x.writeStartElement("snapshots");                     // filled in by the next step
+    x.writeAttribute("sendOnlyChanges", "1"); x.writeAttribute("includeMod", "0");
+    x.writeEndElement();
+
+    x.writeEndElement();
+    x.writeEndDocument();
+    return f.error() == QFileDevice::NoError;
+}
+
+bool MainWindow::ctrlReadConfig(const QString& path)
+{
+    if (!ctrlLoadXml(path)) return false;
+    ctrlConfigPath_ = path;
+    ctrlAddRecent(path);
+    ctrlDirty_ = false;
+    ctrlUpdateTitle();
+    return true;
+}
+
+// The working copy lives beside the settings, not in the user's file: what changed
+// in a session survives a relaunch WITH its asterisk, and the named file on disk
+// moves only on Save.
+QString MainWindow::ctrlSessionPath() const
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+    return dir + QLatin1String("/controller-session.xml");
+}
+
+bool MainWindow::ctrlLoadXml(const QString& path)
+{
+    if (!controllerWin_ || !ccSurface_) return false;
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+    auto* panel = static_cast<CcPanel*>(ccSurface_);
+    QXmlStreamReader x(&f);
+    QVector<CcPanel::Desc> st;
+    int nextId = 1;
+    bool gridOn = true, seenSurface = false;
+    QSize win;
+
+    while (!x.atEnd()) {
+        if (x.readNext() != QXmlStreamReader::StartElement) continue;
+        const QString tag = x.name().toString();
+        const QXmlStreamAttributes a = x.attributes();
+        if (tag == QLatin1String("adios-controller")) continue;
+        if (tag == QLatin1String("window")) { win = QSize(attrInt(a, "w", 0), attrInt(a, "h", 0)); continue; }
+        if (tag == QLatin1String("view")) {
+            for (QAction* act : controllerWin_->findChildren<QAction*>())
+                if (!act->objectName().isEmpty() && act->isCheckable() && a.hasAttribute(act->objectName()))
+                    act->setChecked(attrBool(a, act->objectName().toUtf8().constData(), act->isChecked()));
+            continue;
+        }
+        if (tag == QLatin1String("keyboard")) {
+            if (auto* g = controllerWin_->findChild<QButtonGroup*>(QStringLiteral("chGroup")))
+                if (auto* b = g->button(qBound(0, attrInt(a, "channel", 1) - 1, 15))) b->setChecked(true);
+            if (auto* c = controllerWin_->findChild<QCheckBox*>(QStringLiteral("noNoteOff"))) c->setChecked(attrBool(a, "noNoteOff", c->isChecked()));
+            continue;
+        }
+        if (tag == QLatin1String("bank")) {
+            auto setSpin = [this](const char* n, int v) { if (auto* s = controllerWin_->findChild<QSpinBox*>(QLatin1String(n))) { const QSignalBlocker b(s); s->setValue(v); } };
+            auto setTick = [this](const char* n, bool v) { if (auto* c = controllerWin_->findChild<QCheckBox*>(QLatin1String(n))) c->setChecked(v); };
+            setSpin("bankMsb", attrInt(a, "msb", 0)); setSpin("bankLsb", attrInt(a, "lsb", 0)); setSpin("program", attrInt(a, "program", 1));
+            setTick("bankMsbOn", attrBool(a, "sendMsb", true)); setTick("bankLsbOn", attrBool(a, "sendLsb", true)); setTick("programOn", attrBool(a, "sendProgram", true));
+            continue;
+        }
+        if (tag == QLatin1String("surface")) { seenSurface = true; gridOn = attrBool(a, "grid", true); nextId = attrInt(a, "nextId", 1); continue; }
+        if (tag == QLatin1String("snapshots") || tag == QLatin1String("snapshot")) continue;   // next step
+        CcPanel::Desc d;
+        d.cc = 1; d.rmin = 0; d.rmax = 127; d.def = 0; d.val = 0; d.absolute = false;
+        if      (tag == QLatin1String("knob"))   d.kind = CcControl::Knob;
+        else if (tag == QLatin1String("slider")) d.kind = CcControl::SliderSwitch;
+        else if (tag == QLatin1String("push"))   d.kind = CcControl::PushSwitch;
+        else if (tag == QLatin1String("label"))  d.kind = CcControl::Label;
+        else if (tag == QLatin1String("line"))   d.kind = CcControl::Line;
+        else { qWarning("config: unknown element <%s> skipped", qPrintable(tag)); continue; }
+        d.id = attrInt(a, "id", 0);
+        d.name = a.hasAttribute("text") ? a.value("text").toString() : a.value("name").toString();
+        d.cc = attrInt(a, "cc", 1);
+        d.rmin = attrInt(a, "min", attrInt(a, "off", 0)); d.rmax = attrInt(a, "max", attrInt(a, "on", 127));
+        d.def = attrInt(a, "default", 0); d.val = attrInt(a, "value", 0); d.absolute = attrBool(a, "absolute", false);
+        d.positions = attrInt(a, "positions", 4); d.posNames = a.value("names").toString(); d.posValues = a.value("values").toString();
+        d.posIdx = attrInt(a, "position", 0);
+        d.latching = attrBool(a, "latched", false); d.capColor = capIndex(a.value("cap").toString());
+        d.fontPx = attrInt(a, "size", 12); d.lineW = attrInt(a, "thickness", 1);
+        d.x = attrInt(a, "x", 0); d.y = attrInt(a, "y", 0); d.w = attrInt(a, "w", 64); d.h = attrInt(a, "h", 80);
+        st.append(d);
+    }
+    if (x.hasError()) { qWarning("config: %s", qPrintable(x.errorString())); return false; }
+    if (seenSurface) {
+        panel->restore(st);
+        panel->setNextId(nextId);
+        panel->clearHistory();
+        if (auto* g = controllerWin_->findChild<QCheckBox*>(QStringLiteral("ccGrid"))) g->setChecked(gridOn);
+    }
+    if (win.isValid() && win.width() > 0 && win.height() > 0) controllerWin_->resize(win);
+    return true;
+}
+
+void MainWindow::ctrlSetDirty(bool on)
+{
+    if (ctrlDirty_ == on) return;
+    ctrlDirty_ = on;
+    ctrlUpdateTitle();
+}
+
+void MainWindow::ctrlUpdateTitle()
+{
+    if (!controllerWin_) return;
+    const QString name = ctrlConfigPath_.isEmpty() ? tr("Untitled") : QFileInfo(ctrlConfigPath_).fileName();
+    controllerWin_->setWindowTitle(QStringLiteral("ADIOS Controller - %1%2").arg(name, ctrlDirty_ ? QStringLiteral("*") : QString()));
+}
+
+void MainWindow::ctrlNewConfig()
+{
+    if (!controllerWin_ || !ccSurface_) return;
+    if (ctrlDirty_ && QMessageBox::question(controllerWin_, tr("New config"),
+            tr("Discard the changes to the current config?")) != QMessageBox::Yes) return;
+    auto* panel = static_cast<CcPanel*>(ccSurface_);
+    if (auto* l = controllerWin_->findChild<QCheckBox*>(QStringLiteral("ccLocked"))) l->setChecked(false);
+    panel->removeAll();
+    panel->clearHistory();
+    auto setSpin = [this](const char* n, int v) { if (auto* s = controllerWin_->findChild<QSpinBox*>(QLatin1String(n))) { const QSignalBlocker b(s); s->setValue(v); } };
+    setSpin("bankMsb", 0); setSpin("bankLsb", 0); setSpin("program", 1);   // program shows 1 = sends 0
+    for (const char* n : { "bankMsbOn", "bankLsbOn", "programOn" })
+        if (auto* c = controllerWin_->findChild<QCheckBox*>(QLatin1String(n))) c->setChecked(false);
+    ctrlConfigPath_.clear();
+    ctrlDirty_ = false;
+    ctrlUpdateTitle();
+}
+
+void MainWindow::ctrlOpenConfig(const QString& given)
+{
+    if (!controllerWin_) return;
+    QString path = given;
+    if (path.isEmpty()) {
+        const QString dir = QSettings().value("ctrl/configDir").toString();
+        path = QFileDialog::getOpenFileName(controllerWin_, tr("Open config"), dir, tr("ADIOS Controller config (*.xml)"));
+        if (path.isEmpty()) return;
+    }
+    if (ctrlDirty_ && QMessageBox::question(controllerWin_, tr("Open config"),
+            tr("Discard the changes to the current config?")) != QMessageBox::Yes) return;
+    if (!ctrlReadConfig(path)) {
+        QMessageBox::warning(controllerWin_, tr("Open config"), tr("Could not read %1").arg(path));
+        return;
+    }
+    QSettings().setValue("ctrl/configDir", QFileInfo(path).absolutePath());
+}
+
+bool MainWindow::ctrlSaveConfig(bool saveAs)
+{
+    if (!controllerWin_) return false;
+    QString path = ctrlConfigPath_;
+    if (saveAs || path.isEmpty()) {
+        const QString dir = QSettings().value("ctrl/configDir").toString();
+        path = QFileDialog::getSaveFileName(controllerWin_, tr("Save config"), dir, tr("ADIOS Controller config (*.xml)"));
+        if (path.isEmpty()) return false;
+        if (!path.endsWith(QLatin1String(".xml"), Qt::CaseInsensitive)) path += QLatin1String(".xml");
+    }
+    if (!ctrlWriteConfig(path)) {
+        QMessageBox::warning(controllerWin_, tr("Save config"), tr("Could not write %1").arg(path));
+        return false;
+    }
+    ctrlConfigPath_ = path;
+    QSettings().setValue("ctrl/configDir", QFileInfo(path).absolutePath());
+    ctrlAddRecent(path);
+    ctrlDirty_ = false;
+    ctrlUpdateTitle();
+    return true;
+}
+
+void MainWindow::ctrlAddRecent(const QString& path)
+{
+    QSettings s;
+    QStringList rec = s.value("ctrl/recent").toStringList();
+    rec.removeAll(path); rec.prepend(path);
+    while (rec.size() > 8) rec.removeLast();
+    s.setValue("ctrl/recent", rec);
+    ctrlRebuildRecent();
+}
+
+void MainWindow::ctrlRebuildRecent()
+{
+    if (!ctrlRecentMenu_) return;
+    ctrlRecentMenu_->clear();
+    const QStringList rec = QSettings().value("ctrl/recent").toStringList();
+    for (const QString& p : rec) {
+        QAction* a = ctrlRecentMenu_->addAction(QFileInfo(p).fileName());
+        a->setToolTip(p);
+        connect(a, &QAction::triggered, this, [this, p] { ctrlOpenConfig(p); });
+    }
+    ctrlRecentMenu_->setEnabled(!rec.isEmpty());
 }
 
 // Reset Layout: re-check every View toggle (show all panels, columns and the

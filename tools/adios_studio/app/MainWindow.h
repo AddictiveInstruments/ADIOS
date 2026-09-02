@@ -80,6 +80,23 @@ private:
     int      monRowH_ = 0;            // monitor-row height removed while both are hidden
     QWidget* controllerWin_ = nullptr;  // Tools > Controller, an independent window
     QWidget* ccSurface_ = nullptr;      // the Control Change CcPanel (saved on close)
+
+    // Controller configuration: one XML file holding the layout, the Bank/Program
+    // settings, the surface with its identified objects, and (later) the snapshots.
+    QString ctrlConfigPath_;            // empty = untitled, the legacy QSettings state drives
+    bool    ctrlDirty_ = false;
+    QMenu*  ctrlRecentMenu_ = nullptr;
+    void ctrlNewConfig();
+    void ctrlOpenConfig(const QString& path = QString());
+    bool ctrlSaveConfig(bool saveAs);
+    bool ctrlWriteConfig(const QString& path);
+    bool ctrlReadConfig(const QString& path);   // open a named file: load + bookkeeping
+    bool ctrlLoadXml(const QString& path);      // just the loading, no bookkeeping
+    QString ctrlSessionPath() const;            // the working copy, in the app data dir
+    void ctrlSetDirty(bool on);
+    void ctrlUpdateTitle();
+    void ctrlAddRecent(const QString& path);
+    void ctrlRebuildRecent();
     int      kbChannel_ = 0;            // keyboard MIDI TX channel (0..15)
     QString nowStamp();
 
