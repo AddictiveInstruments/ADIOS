@@ -469,16 +469,44 @@ class CcPanel;
 class CcControl : public QWidget {
 public:
     explicit CcControl(CcPanel* panel);
-    enum Kind { Knob, Fader };
+    enum Kind { Knob, Fader, SliderSwitch };      // appended: the kind is serialised as an int
     Kind kind = Knob;
     QString name;                                 // shown on top; empty -> "CC<n>"
     int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0;
     bool absolute = false;                         // false: value maps to MIDI 0..127; true: value IS the MIDI value (7-bit)
+    // --- Slider Switch: detents, what each one is called and what it sends -----
+    int     positions = 4;                         // 2..8
+    QString posNames;                              // "tri,sqr,sin"  - a missing entry prints nothing
+    QString posValues;                             // "0,42,85,127"  - a missing entry falls back to an even spread
+    int     posIdx = 0;                            // current detent, 0 = bottom
+    static QStringList splitCsv(const QString& s) {
+        QStringList out;
+        const QStringList raw = s.split(QLatin1Char(','));
+        for (const QString& t : raw) { const QString v = t.trimmed(); if (!v.isEmpty()) out << v; }
+        return out;
+    }
+    int     posCount() const { return qBound(2, positions, 8); }
+    QString nameAt(int i) const { const QStringList l = splitCsv(posNames); return i < l.size() ? l.at(i) : QString(); }
+    int     valueAt(int i) const {                 // explicit value if given, else spread over 0..127
+        const QStringList l = splitCsv(posValues);
+        if (i < l.size()) { bool ok = false; const int v = l.at(i).toInt(&ok); if (ok) return v; }
+        const int n = posCount();
+        return n < 2 ? 0 : qRound(double(i) * 127.0 / (n - 1));
+    }
     // The knob resizes FREELY (width and height independent); the fader still keeps
     // a ratio. 0 = free.
     double aspectHW() const { return kind == Fader ? 8.0 / 3.0 : 0.0; }
     int    minW()     const { return kind == Fader ? 24 : 48; }
-    int    minH()     const { return kind == Fader ? 64 : 48; }   // 48 = both label bands + a drawable dial
+    int    minH()     const {                  // the floor is what the drawing really needs, no more
+        if (kind == Fader) return 64;
+        // A switch takes (detents + 3) grid steps, and the count is exact, not padded:
+        // the two label bands with their gaps eat 40 px, the stem with its guards 24,
+        // and every gap between two detents is one grid step -
+        //     16 * (n + 3)  ==  40 + 24 + 16 * (n - 1)
+        // so the floor stays on the grid whatever the detent count.
+        if (kind == SliderSwitch) return int(LBL_PITCH * (posCount() + 3));
+        return 48;                             // knob: both label bands + a drawable dial
+    }
     // Everything the size must NOT change is frozen in PIXELS at the reference tile
     // 64x80 (what a fresh knob gets): the labels, their distance to the top and the
     // bottom edge, and every stroke width. Resizing plays on the DIAMETERS only.
@@ -490,6 +518,30 @@ public:
     static constexpr double PTR_W   = 2.5;    // pointer stroke
     static constexpr double ZERO_W  = 1.1;    // zero mark stroke
     static constexpr double RING_GAP = 6.27;  // ring radius -> body radius: a CONSTANT gap, not a ratio
+    // Slider Switch, same rule: the tile size changes the TRAVEL and nothing else.
+    // Brightness and edge radius were settled on the mock-up (60 %, radius 4).
+    static constexpr double BOT_GAP   = 4.8;   // groove -> value band (the knob needs none, its dial is round)
+    // Groove and stem: the mock-up figures taken down to 90 %.
+    static constexpr double SLOT_W    = 21.6;  // groove width
+    static constexpr double STEM_W    = 18.0;  // moving part: 1.8 px of groove left visible each side
+    static constexpr double STEM_H    = 21.6;
+    static constexpr int    TEETH     = 6;     // triangular teeth, edge to edge of the stem
+    static constexpr double STEM_LUM  = 0.60;  // black plastic: the whole profile is dimmed
+    static constexpr double EDGE_RAD  = 0.10;  // crest/valley blend half-width (0 = sharp edge)
+    // Travel guard: the stem never reaches the ends of the groove. 1.2 is not free -
+    // it is what makes stem + guards come to exactly 24, which is what lands the tile
+    // floor on a whole number of grid steps (see minH).
+    static constexpr double SW_INSET  = 1.2;
+    // A disc reads lighter than an arc of the same width - the arc is long, the disc
+    // is not - so the position dot is wider than the ring it has to match.
+    static constexpr double DOT_D     = 5.0;
+    static constexpr double DOT_GAP   = 4.0;   // dot -> groove
+    static constexpr double LBL_GAP   = 5.0;   // groove -> position labels
+    static constexpr double LBL_PITCH = 16.0;  // detent pitch, FIXED at the grid step whatever the tile height
+    static constexpr double SW_MARGIN = 3.0;   // keeps the whole block inside the tile
+    struct SwLayout { double sx, top, bot, cyTop, cyBot; };
+    SwLayout swLayout() const;                 // groove position and travel, for the current size
+    double   detentY(int i, const SwLayout& l) const;
     int midiOf(int v) const {                      // displayed value -> 7-bit MIDI
         if (absolute) return qBound(0, v - rmin, 127);         // transpose: MIDI = value - min
         if (rmax == rmin) return 0;
@@ -505,6 +557,8 @@ private:
     int cornerAt(QPoint pt) const;                // 0=TL 1=TR 2=BL 3=BR, -1 = body
     void editProperties();                        // right-click > Properties... modal dialog
     void setValueFromY(int y);                    // locked fader: absolute value from cursor Y
+    void setPosFromY(int y);                      // locked switch: nearest detent to cursor Y
+    void drawStem(QPainter& p, QPointF at) const; // the switch's moving part
     CcPanel* panel_;
     QPoint   grab_;                               // move: cursor offset inside the widget
     QPoint   rzAnchor_;                           // resize: the fixed (opposite) corner, parent coords
@@ -557,9 +611,13 @@ public:
         if (model) {
             c->name = model->name; c->rmin = model->rmin; c->rmax = model->rmax; c->def = model->def; c->val = model->def;
             c->absolute = model->absolute; c->resize(model->size());
+            c->positions = model->positions; c->posNames = model->posNames; c->posValues = model->posValues;
         } else if (k == CcControl::Fader) {
             c->resize(48, 128);                        // default fader: tall & narrow
+        } else if (k == CcControl::SliderSwitch) {
+            c->resize(96, 160);                        // default switch: room for the position labels
         }
+        if (k == CcControl::SliderSwitch) c->val = c->valueAt(c->posIdx);
         c->cc = nextFreeCc(1);                         // first free CC
         controls_.append(c);
         const QPoint pos = snap(at - QPoint(c->width() / 2, c->height() / 2));
@@ -584,6 +642,7 @@ public:
         for (CcControl* s : src) {
             auto* c = new CcControl(this);
             c->name = s->name; c->rmin = s->rmin; c->rmax = s->rmax; c->def = s->def; c->val = s->val; c->absolute = s->absolute; c->kind = s->kind;
+            c->positions = s->positions; c->posNames = s->posNames; c->posValues = s->posValues; c->posIdx = s->posIdx;
             int n = qBound(0, s->cc, 127);
             while (n < 127 && used.contains(n)) ++n;
             used.insert(n); c->cc = n;
@@ -602,6 +661,7 @@ public:
         for (CcControl* c : sel_) {
             Clip cl; cl.name = c->name; cl.cc = c->cc; cl.rmin = c->rmin; cl.rmax = c->rmax;
             cl.def = c->def; cl.val = c->val; cl.absolute = c->absolute; cl.kind = int(c->kind); cl.size = c->size(); cl.pos = c->pos();
+            cl.positions = c->positions; cl.posNames = c->posNames; cl.posValues = c->posValues; cl.posIdx = c->posIdx;
             clips_.append(cl);
         }
     }
@@ -613,6 +673,7 @@ public:
         for (Clip& cl : clips_) {
             auto* c = new CcControl(this);
             c->name = cl.name; c->rmin = cl.rmin; c->rmax = cl.rmax; c->def = cl.def; c->val = cl.val; c->absolute = cl.absolute; c->kind = CcControl::Kind(cl.kind);
+            c->positions = cl.positions; c->posNames = cl.posNames; c->posValues = cl.posValues; c->posIdx = cl.posIdx;
             int n = qBound(0, cl.cc, 127);
             while (n < 127 && used.contains(n)) ++n;           // next free CC
             used.insert(n); c->cc = n; cl.cc = n;              // remember -> repeated pastes keep climbing
@@ -670,19 +731,26 @@ public:
         endGesture();
     }
     // --- surface persistence (serialise every control's params + geometry) ---
+    // Format 2 appends the switch fields. The version marker had to fit WITHOUT
+    // breaking surfaces already saved: format 1 opened with a positive control
+    // count, so a negative lead value can only be a version, and the count follows.
     QByteArray saveState() const {
         QByteArray ba; QDataStream ds(&ba, QIODevice::WriteOnly);
         const auto st = snapshot();
-        ds << qint32(st.size());
+        ds << qint32(-2) << qint32(st.size());
         for (const Desc& d : st)
-            ds << d.name << d.cc << d.rmin << d.rmax << d.def << d.val << d.absolute << d.x << d.y << d.w << d.h << d.kind;
+            ds << d.name << d.cc << d.rmin << d.rmax << d.def << d.val << d.absolute << d.x << d.y << d.w << d.h << d.kind
+               << d.positions << d.posNames << d.posValues << d.posIdx;
         return ba;
     }
     void loadState(const QByteArray& ba) {
         QVector<Desc> st; QDataStream ds(ba); qint32 n = 0; ds >> n;
+        int ver = 1;
+        if (n < 0) { ver = -n; ds >> n; }              // pre-switch surfaces have no marker
         for (int i = 0; i < n; ++i) {
             Desc d;
             ds >> d.name >> d.cc >> d.rmin >> d.rmax >> d.def >> d.val >> d.absolute >> d.x >> d.y >> d.w >> d.h >> d.kind;
+            if (ver >= 2) ds >> d.positions >> d.posNames >> d.posValues >> d.posIdx;
             if (ds.status() != QDataStream::Ok) return;
             st.append(d);
         }
@@ -737,15 +805,19 @@ protected:
         else if (chosen == remAll) removeAll();
     }
 private:
-    struct Clip { QString name; int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0; bool absolute = false; int kind = 0; QSize size; QPoint pos; };
+    struct Clip { QString name; int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0; bool absolute = false; int kind = 0; QSize size; QPoint pos;
+                  int positions = 4; QString posNames, posValues; int posIdx = 0; };
     struct Desc { QString name; int cc, rmin, rmax, def, val; bool absolute; int x, y, w, h, kind;
+        int positions = 4; QString posNames, posValues; int posIdx = 0;          // Slider Switch only
         bool operator==(const Desc& o) const {
             return name == o.name && cc == o.cc && rmin == o.rmin && rmax == o.rmax && def == o.def && val == o.val
-                && absolute == o.absolute && x == o.x && y == o.y && w == o.w && h == o.h && kind == o.kind; } };
+                && absolute == o.absolute && x == o.x && y == o.y && w == o.w && h == o.h && kind == o.kind
+                && positions == o.positions && posNames == o.posNames && posValues == o.posValues && posIdx == o.posIdx; } };
     QVector<Desc> snapshot() const {
         QVector<Desc> st;
         for (CcControl* c : controls_)
-            st.append({ c->name, c->cc, c->rmin, c->rmax, c->def, c->val, c->absolute, c->x(), c->y(), c->width(), c->height(), int(c->kind) });
+            st.append({ c->name, c->cc, c->rmin, c->rmax, c->def, c->val, c->absolute, c->x(), c->y(), c->width(), c->height(), int(c->kind),
+                        c->positions, c->posNames, c->posValues, c->posIdx });
         return st;
     }
     void restore(const QVector<Desc>& st) {
@@ -754,6 +826,7 @@ private:
         for (const Desc& d : st) {
             auto* c = new CcControl(this);
             c->name = d.name; c->cc = d.cc; c->rmin = d.rmin; c->rmax = d.rmax; c->def = d.def; c->val = d.val; c->absolute = d.absolute; c->kind = CcControl::Kind(d.kind);
+            c->positions = d.positions; c->posNames = d.posNames; c->posValues = d.posValues; c->posIdx = d.posIdx;
             c->resize(d.w, d.h); c->move(d.x, d.y); c->show();
             controls_.append(c);
         }
@@ -802,11 +875,14 @@ void CcControl::paintEvent(QPaintEvent*)
     }
     const double nameH = NAME_H, topGap = TOP_GAP, valueH = VAL_H;   // fixed bands -> fixed insets
     QFont f = p.font(); f.setPixelSize(LBL_PX); p.setFont(f);        // fixed label size
+    // Both labels are centred on the GRAPHIC: the tile centre everywhere, except on
+    // a switch whose groove has slid left to make room for its position labels.
+    const double cx = (kind == SliderSwitch) ? swLayout().sx + SLOT_W / 2 : W / 2;
     p.setPen(QColor(0xdf, 0xe4, 0xec));                    // name on top (else CC<n>)
-    p.drawText(QRectF(2, 2, W - 4, nameH), Qt::AlignHCenter | Qt::AlignVCenter,
+    p.drawText(QRectF(cx - W / 2, 2, W, nameH), Qt::AlignHCenter | Qt::AlignVCenter,
                name.isEmpty() ? QStringLiteral("CC%1").arg(cc) : name);
     p.setPen(QColor(0x8a, 0x94, 0xa6));                    // value below
-    p.drawText(QRectF(2, H - valueH - 2, W - 4, valueH), Qt::AlignHCenter | Qt::AlignVCenter, QString::number(val));
+    p.drawText(QRectF(cx - W / 2, H - valueH - 2, W, valueH), Qt::AlignHCenter | Qt::AlignVCenter, QString::number(val));
     const double t     = (rmax > rmin) ? qBound(0.0, double(val - rmin) / (rmax - rmin), 1.0) : 0.0;
     const double tZero = (rmax > rmin) ? qBound(0.0, double(0   - rmin) / (rmax - rmin), 1.0) : 0.0;
     const double regTop = nameH + topGap, regBot = H - valueH;            // control area between the labels
@@ -838,7 +914,7 @@ void CcControl::paintEvent(QPaintEvent*)
         p.setPen(QPen(QColor(0xdf, 0xe4, 0xec), PTR_W));
         p.drawLine(QPointF(cx + br * 0.45 * std::sin(a), cy - br * 0.45 * std::cos(a)),
                    QPointF(cx + (br - 1) * std::sin(a), cy - (br - 1) * std::cos(a)));   // pointer
-    } else {                                                                  // Fader (vertical slider)
+    } else if (kind == Fader) {                                               // Fader (vertical slider)
         const double cxf = W / 2.0, top = regTop + 4, bot = regBot - 4;
         const double trackW = qMax(4.0, W * 0.14);
         p.setPen(Qt::NoPen); p.setBrush(QColor(0x3a, 0x41, 0x4e));            // track
@@ -855,6 +931,27 @@ void CcControl::paintEvent(QPaintEvent*)
         p.drawRoundedRect(QRectF(cxf - hw / 2, yVal - hh / 2, hw, hh), 3, 3);
         p.setPen(QPen(QColor(0xdf, 0xe4, 0xec), 1.5));
         p.drawLine(QPointF(cxf - hw * 0.3, yVal), QPointF(cxf + hw * 0.3, yVal));
+    } else {                                                                  // Slider Switch
+        const SwLayout l = swLayout();
+        QLinearGradient sg(l.sx, 0, l.sx + SLOT_W, 0);                        // groove, lit from the right
+        sg.setColorAt(0, QColor(0x04, 0x05, 0x07));
+        sg.setColorAt(0.4, QColor(0x09, 0x0b, 0x0f));
+        sg.setColorAt(1, QColor(0x12, 0x16, 0x1c));
+        p.setPen(QPen(QColor(0x2b, 0x31, 0x3a), 1)); p.setBrush(sg);
+        p.drawRoundedRect(QRectF(l.sx + 0.5, l.top + 0.5, SLOT_W - 1, l.bot - l.top - 1), 3, 3);
+        const int np = posCount();
+        for (int i = 0; i < np; ++i) {                                        // dot on the left, label on the right
+            const double y = detentY(i, l);
+            const bool on = (i == posIdx);
+            p.setPen(Qt::NoPen); p.setBrush(on ? QColor(0x5a, 0x8a, 0xc8) : QColor(0x3a, 0x41, 0x4e));
+            p.drawEllipse(QPointF(l.sx - DOT_GAP - DOT_D / 2, y), DOT_D / 2, DOT_D / 2);
+            const QString nm = nameAt(i);
+            if (nm.isEmpty()) continue;
+            const double lx = l.sx + SLOT_W + LBL_GAP;
+            p.setPen(on ? QColor(0x5a, 0x8a, 0xc8) : QColor(0x6b, 0x74, 0x84));
+            p.drawText(QRectF(lx, y - 8, qMax(1.0, W - lx), 16), Qt::AlignLeft | Qt::AlignVCenter, nm);
+        }
+        drawStem(p, QPointF(l.sx + (SLOT_W - STEM_W) / 2, detentY(posIdx, l) - STEM_H / 2));
     }
     if (edit && panel_->isSelected(this)) {                // four corner resize handles: SELECTED only
         p.setPen(Qt::NoPen); p.setBrush(QColor(0x5a, 0x8a, 0xc8));
@@ -863,12 +960,88 @@ void CcControl::paintEvent(QPaintEvent*)
         p.drawRect(0, h - hs, hs, hs); p.drawRect(w - hs, h - hs, hs, hs);
     }
 }
+// Where the groove sits and how far the stem may travel. The groove is centred in
+// the tile; when the position labels would not fit on its right the whole block
+// slides left, but never past the tile's own margin.
+CcControl::SwLayout CcControl::swLayout() const
+{
+    const double W = width(), H = height();
+    QFont f = font(); f.setPixelSize(LBL_PX);
+    const QFontMetricsF fm(f);
+    double nw = 0;
+    for (int i = 0; i < posCount(); ++i) nw = qMax(nw, fm.horizontalAdvance(nameAt(i)));
+    const double leftW  = DOT_D + DOT_GAP;
+    const double rightW = nw > 0 ? LBL_GAP + nw : 0;
+    double sx = (W - SLOT_W) / 2, shift = 0;
+    if (sx + SLOT_W + rightW > W - SW_MARGIN) shift = (W - SW_MARGIN) - (sx + SLOT_W + rightW);
+    if (sx - leftW + shift < SW_MARGIN)       shift = SW_MARGIN - (sx - leftW);
+    sx += shift;
+    // The detent pitch is fixed, so the TRAVEL is fixed too, and the groove is only
+    // as long as the travel it has to serve - a groove longer than the stem can run
+    // would be a lie. Spare height therefore goes around it: the groove is centred
+    // in what the two label bands leave. Under the floor (a surface saved before
+    // this rule) the groove is clamped and the detents squeeze together.
+    const double regTop = NAME_H + TOP_GAP, regBot = H - VAL_H - BOT_GAP;
+    const double want = STEM_H + 2 * SW_INSET + LBL_PITCH * (posCount() - 1);
+    const double gh = qMin(want, regBot - regTop);
+    SwLayout l;
+    l.sx    = sx;
+    l.top   = regTop + (regBot - regTop - gh) / 2;
+    l.bot   = l.top + gh;
+    l.cyTop = l.top + SW_INSET + STEM_H / 2;
+    l.cyBot = qMax(l.cyTop, l.bot - SW_INSET - STEM_H / 2);
+    return l;
+}
+double CcControl::detentY(int i, const SwLayout& l) const     // detent 0 = bottom = first value
+{
+    const int n = posCount();
+    return n < 2 ? l.cyBot : l.cyBot - (l.cyBot - l.cyTop) * double(i) / (n - 1);
+}
+// The moving part: a black piece whose face carries TEETH triangular ridges. One
+// ridge = one gradient period - valley, lit face, crest, shadow face, valley - so
+// the radius only widens the blend at the crest and at the bottom of the valley,
+// and the brightness multiplies the whole profile at once.
+void CcControl::drawStem(QPainter& p, QPointF at) const
+{
+    auto dim = [](int r, int g, int b) {
+        return QColor(qRound(r * STEM_LUM), qRound(g * STEM_LUM), qRound(b * STEM_LUM));
+    };
+    const QColor lit = dim(58, 64, 73), crest = dim(80, 88, 100), shadow = dim(18, 21, 27), valley = dim(8, 10, 14);
+    const double th = STEM_H / TEETH, h = EDGE_RAD;
+    p.setPen(Qt::NoPen);
+    for (int k = 0; k < TEETH; ++k) {
+        const double y = at.y() + k * th;
+        QLinearGradient g(0, y, 0, y + th);
+        g.setColorAt(0, valley);      g.setColorAt(h, lit);        g.setColorAt(0.5 - h, lit);
+        g.setColorAt(0.5, crest);
+        g.setColorAt(0.5 + h, shadow); g.setColorAt(1 - h, shadow); g.setColorAt(1, valley);
+        p.setBrush(g);
+        p.drawRect(QRectF(at.x(), y, STEM_W, th));
+    }
+    p.setPen(QPen(QColor(0, 0, 0), 0.7)); p.setBrush(Qt::NoBrush);
+    p.drawRect(QRectF(at.x(), at.y(), STEM_W, STEM_H));
+}
+// Locked switch: nearest detent to the cursor, sent as soon as it changes. Press
+// and drag both land here, so the switch follows the mouse like a fader does.
+void CcControl::setPosFromY(int y)
+{
+    const SwLayout l = swLayout();
+    const int n = posCount();
+    int best = 0; double bd = 1e18;
+    for (int i = 0; i < n; ++i) { const double d = qAbs(detentY(i, l) - y); if (d < bd) { bd = d; best = i; } }
+    if (best == posIdx) return;
+    posIdx = best;
+    val = valueAt(posIdx);
+    update();
+    panel_->emitCc(cc, qBound(0, val, 127));
+}
 void CcControl::mousePressEvent(QMouseEvent* e)
 {
     if (e->button() != Qt::LeftButton) return;
     if (panel_->locked()) {                             // locked: vertical drag sets the value + sends MIDI
         valuing_ = true;
         if (kind == Fader) setValueFromY(e->pos().y());          // fader: click-to-position (absolute)
+        else if (kind == SliderSwitch) setPosFromY(e->pos().y());  // switch: jump to the nearest detent
         else { dragStartY_ = e->pos().y(); dragStartVal_ = val; }
         return;
     }
@@ -895,6 +1068,7 @@ void CcControl::mouseMoveEvent(QMouseEvent* e)
     if (panel_->locked()) {                              // locked: value drag (up = more) or hover hint
         if (!valuing_) { setCursor(Qt::SizeVerCursor); return; }
         if (kind == Fader) { setValueFromY(e->pos().y()); return; }   // fader: absolute
+        if (kind == SliderSwitch) { setPosFromY(e->pos().y()); return; }   // switch: the detent follows the drag
         const double span = (rmax != rmin) ? qAbs(rmax - rmin) : 1;   // knob: relative
         const int lo = qMin(rmin, rmax), hi = qMax(rmin, rmax);
         const int nv = qBound(lo, dragStartVal_ + qRound((dragStartY_ - e->pos().y()) * span / 150.0), hi);
@@ -957,9 +1131,15 @@ void CcControl::contextMenuEvent(QContextMenuEvent* e)
 void CcControl::editProperties()
 {
     QDialog d(this);
-    d.setWindowTitle(QStringLiteral("Knob properties"));
+    d.setWindowTitle(kind == SliderSwitch ? QStringLiteral("Slider Switch properties")
+                   : kind == Fader        ? QStringLiteral("Fader properties")
+                                          : QStringLiteral("Knob properties"));
     auto* form = new QFormLayout(&d);
-    auto* typeBox = new QComboBox; typeBox->addItem(QStringLiteral("Knob"));   // future: Slider, Button...
+    auto* typeBox = new QComboBox;                              // item order = the Kind enum
+    typeBox->addItem(QStringLiteral("Knob"));
+    typeBox->addItem(QStringLiteral("Fader"));
+    typeBox->addItem(QStringLiteral("Slider Switch"));
+    typeBox->setCurrentIndex(int(kind));
     auto* modeBox = new QComboBox; modeBox->addItem(QStringLiteral("Relative")); modeBox->addItem(QStringLiteral("Absolute"));
     modeBox->setCurrentIndex(absolute ? 1 : 0);
     auto* nameEd = new QLineEdit(name);
@@ -981,12 +1161,45 @@ void CcControl::editProperties()
     form->addRow(QStringLiteral("Min"),     minSp);
     form->addRow(QStringLiteral("Max"),     maxSp);
     form->addRow(QStringLiteral("Default"), defSp);
+    // Slider Switch: how many detents, what each is called, what each one sends. A
+    // switch carries its own values, so Mode/Min/Max/Default are meaningless for it
+    // and the two sets of rows swap with the type.
+    auto* posSp   = new QSpinBox; posSp->setRange(2, 8); posSp->setValue(posCount());
+    auto* namesEd = new QLineEdit(posNames);  namesEd->setPlaceholderText(QStringLiteral("On,Off"));
+    auto* valsEd  = new QLineEdit(posValues); valsEd->setPlaceholderText(QStringLiteral("127,0"));
+    form->addRow(QStringLiteral("Positions"),       posSp);
+    form->addRow(QStringLiteral("Position names"),  namesEd);
+    form->addRow(QStringLiteral("Position values"), valsEd);
+    auto swRows = [form, posSp, namesEd, valsEd, modeBox, minSp, maxSp, defSp](int t) {
+        const bool sw = (t == int(SliderSwitch));
+        form->setRowVisible(posSp, sw);    form->setRowVisible(namesEd, sw); form->setRowVisible(valsEd, sw);
+        form->setRowVisible(modeBox, !sw); form->setRowVisible(minSp, !sw);
+        form->setRowVisible(maxSp, !sw);   form->setRowVisible(defSp, !sw);
+    };
+    swRows(typeBox->currentIndex());
+    connect(typeBox, &QComboBox::currentIndexChanged, &d, [swRows](int t) { swRows(t); });
     auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     form->addRow(bb);
     connect(bb, &QDialogButtonBox::accepted, &d, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
     if (d.exec() == QDialog::Accepted) {
         panel_->beginGesture();
+        const Kind nk = Kind(typeBox->currentIndex());
+        if (nk != kind) {                          // type change: honour the new kind's floors and ratio
+            kind = nk;
+            int w = qMax(width(), minW()), h = qMax(height(), minH());
+            if (aspectHW() > 0.0) h = qRound(w * aspectHW());
+            resize(w, h);
+            panel_->refreshExtent();
+        }
+        positions = posSp->value();
+        posNames  = namesEd->text().trimmed();
+        posValues = valsEd->text().trimmed();
+        posIdx    = qBound(0, posIdx, posCount() - 1);
+        if (height() < minH()) {                   // more detents need a taller tile, else the labels collide
+            resize(width(), minH());
+            panel_->refreshExtent();
+        }
         absolute = (modeBox->currentIndex() == 1);
         name = nameEd->text().trimmed();
         cc = ccSp->value();
@@ -994,7 +1207,7 @@ void CcControl::editProperties()
         if (rmax < rmin) qSwap(rmin, rmax);
         if (absolute && rmax - rmin > 127) rmax = rmin + 127;   // 7-bit window
         def = qBound(rmin, defSp->value(), rmax);
-        val = def;                                 // reset to the default on edit
+        val = (kind == SliderSwitch) ? valueAt(posIdx) : def;   // reset to the default on edit
         update();
         panel_->endGesture();
     }
@@ -1718,7 +1931,8 @@ void MainWindow::openController()
         auto* addMenu = editMenu->addMenu(tr("Add"));
         auto* addKnobAct  = addMenu->addAction(tr("Knob"));
         auto* addFaderAct = addMenu->addAction(tr("Fader"));
-        addMenu->addAction(tr("Switch"))->setEnabled(false);     // Switch to come
+        auto* addSwAct    = addMenu->addAction(tr("Slider Switch"));
+        addMenu->addAction(tr("Push Switch"))->setEnabled(false);   // momentary switch to come
         editMenu->addSeparator();
         auto* dupAct = editMenu->addAction(tr("Duplicate")); dupAct->setShortcut(QKeySequence(QStringLiteral("Ctrl+D")));
         auto* remAct = editMenu->addAction(tr("Remove"));    remAct->setShortcut(QKeySequence::Delete);
@@ -1731,6 +1945,8 @@ void MainWindow::openController()
             ccPanel->beginGesture(); ccPanel->addControl(CcControl::Knob, ccPanel->visibleRegion().boundingRect().center()); ccPanel->endGesture(); });
         connect(addFaderAct, &QAction::triggered, ccPanel, [ccPanel] {
             ccPanel->beginGesture(); ccPanel->addControl(CcControl::Fader, ccPanel->visibleRegion().boundingRect().center()); ccPanel->endGesture(); });
+        connect(addSwAct, &QAction::triggered, ccPanel, [ccPanel] {
+            ccPanel->beginGesture(); ccPanel->addControl(CcControl::SliderSwitch, ccPanel->visibleRegion().boundingRect().center()); ccPanel->endGesture(); });
         connect(dupAct,     &QAction::triggered, ccPanel, [ccPanel] { ccPanel->beginGesture(); ccPanel->duplicateSelection(); ccPanel->endGesture(); });
         connect(remAct,     &QAction::triggered, ccPanel, [ccPanel] { ccPanel->beginGesture(); ccPanel->deleteSelected(); ccPanel->endGesture(); });
         connect(selAllAct,  &QAction::triggered, ccPanel, [ccPanel] { ccPanel->selectAll(); });
