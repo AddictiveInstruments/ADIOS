@@ -469,7 +469,14 @@ class CcPanel;
 class CcControl : public QWidget {
 public:
     explicit CcControl(CcPanel* panel);
-    enum Kind { Knob, Fader, SliderSwitch };      // appended: the kind is serialised as an int
+    // The kind is serialised as an int, so these numbers must never move: 1 was the
+    // fader, now dropped, and its slot stays EMPTY rather than shifting the others.
+    enum Kind { Knob = 0, SliderSwitch = 2, PushSwitch = 3, Label = 4, Line = 5 };
+    static Kind kindOf(int v) {
+        return (v == SliderSwitch || v == PushSwitch || v == Label || v == Line) ? Kind(v) : Knob;
+    }
+    // Decoration: no MIDI, no CC number, and no label bands - it IS the drawing.
+    bool isDeco() const { return kind == Label || kind == Line; }
     Kind kind = Knob;
     QString name;                                 // shown on top; empty -> "CC<n>"
     int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0;
@@ -479,6 +486,17 @@ public:
     QString posNames;                              // "tri,sqr,sin"  - a missing entry prints nothing
     QString posValues;                             // "0,42,85,127"  - a missing entry falls back to an even spread
     int     posIdx = 0;                            // current detent, 0 = bottom
+    // --- Push Switch: a PB86 cap with its LED ---------------------------------
+    bool latching = false;                         // false: momentary, held down; true: bistable
+    int  capColor = 0;                             // index in capColorAt()
+    // --- Label and Line -------------------------------------------------------
+    int  fontPx = 12;                              // Label: text size
+    int  lineW  = 1;                               // Line: thickness
+    static const QColor& capColorAt(int i) {       // one base tone per cap, every shade derives from it
+        static const QColor c[4] = { QColor(0x33, 0x38, 0x3f), QColor(0x5a, 0x8a, 0xc8),
+                                     QColor(0xa6, 0x3a, 0x33), QColor(0x9a, 0xa1, 0xab) };
+        return c[qBound(0, i, 3)];
+    }
     static QStringList splitCsv(const QString& s) {
         QStringList out;
         const QStringList raw = s.split(QLatin1Char(','));
@@ -493,18 +511,17 @@ public:
         const int n = posCount();
         return n < 2 ? 0 : qRound(double(i) * 127.0 / (n - 1));
     }
-    // The knob resizes FREELY (width and height independent); the fader still keeps
-    // a ratio. 0 = free.
-    double aspectHW() const { return kind == Fader ? 8.0 / 3.0 : 0.0; }
-    int    minW()     const { return kind == Fader ? 24 : 48; }
+    // Every kind resizes FREELY: width and height are independent.
+    int    minW()     const { return isDeco() ? 16 : 48; }   // a dial, a groove or a cap need 48
     int    minH()     const {                  // the floor is what the drawing really needs, no more
-        if (kind == Fader) return 64;
+        if (isDeco()) return 16;               // one grid cell
         // A switch takes (detents + 3) grid steps, and the count is exact, not padded:
         // the two label bands with their gaps eat 40 px, the stem with its guards 24,
         // and every gap between two detents is one grid step -
         //     16 * (n + 3)  ==  40 + 24 + 16 * (n - 1)
         // so the floor stays on the grid whatever the detent count.
         if (kind == SliderSwitch) return int(LBL_PITCH * (posCount() + 3));
+        if (kind == PushSwitch) return 80;         // the cap keeps its 42x60 ratio, this leaves it 40 px
         return 48;                             // knob: both label bands + a drawable dial
     }
     // Everything the size must NOT change is frozen in PIXELS at the reference tile
@@ -539,6 +556,24 @@ public:
     static constexpr double LBL_GAP   = 5.0;   // groove -> position labels
     static constexpr double LBL_PITCH = 16.0;  // detent pitch, FIXED at the grid step whatever the tile height
     static constexpr double SW_MARGIN = 3.0;   // keeps the whole block inside the tile
+    // Push Switch. Unlike the knob, whose strokes stay in pixels, the CAP scales as
+    // a whole: it is drawn at a reference of 42x60 and blown up to the room it gets,
+    // so every figure below is a ratio of that reference. Only the outline and the
+    // edge fade stay in pixels. Values settled on the mock-up.
+    static constexpr double PB_W = 42.0, PB_H = 60.0;   // reference cap
+    static constexpr double PB_R      = 2.0;   // corner radius
+    static constexpr double PB_SLOPE  = 7.8;   // chamfer, from the edge to the plateau
+    static constexpr double PB_SMOOTH = 0.45;  // how far a slope melts into its neighbours (0 = knife edge)
+    static constexpr double PB_EDGE   = 1.0;   // outer edge fade, in PIXELS, never scaled
+    static constexpr double PB_SEAM   = 0.38;  // where the chamfer starts, in cap heights
+    static constexpr double PB_LED    = 10.2;  // lens diameter
+    static constexpr double PB_HOLE   = 12.2;  // the hole it sits in
+    static constexpr double PB_LEDY   = 0.21;  // lens centre, in cap heights
+    static constexpr double PB_DARK   = 0.45;  // pressed: black at the bottom edge, nothing at the top
+    // Every shade of the cap is the base tone times one of these.
+    static constexpr double PB_T_TOP = 1.22, PB_T_LEFT = 1.07, PB_T_RIGHT = 0.68,
+                            PB_T_BOT = 0.57, PB_T_PLAT = 0.90, PB_T_BASE2 = 0.81;
+    void drawCap(QPainter& p, const QRectF& box, bool down) const;
     struct SwLayout { double sx, top, bot, cyTop, cyBot; };
     SwLayout swLayout() const;                 // groove position and travel, for the current size
     double   detentY(int i, const SwLayout& l) const;
@@ -556,13 +591,13 @@ protected:
 private:
     int cornerAt(QPoint pt) const;                // 0=TL 1=TR 2=BL 3=BR, -1 = body
     void editProperties();                        // right-click > Properties... modal dialog
-    void setValueFromY(int y);                    // locked fader: absolute value from cursor Y
     void setPosFromY(int y);                      // locked switch: nearest detent to cursor Y
     void drawStem(QPainter& p, QPointF at) const; // the switch's moving part
     CcPanel* panel_;
     QPoint   grab_;                               // move: cursor offset inside the widget
     QPoint   rzAnchor_;                           // resize: the fixed (opposite) corner, parent coords
     bool     dragging_ = false, resizing_ = false, rzRight_ = false, rzBottom_ = false, valuing_ = false;
+    bool     pressing_ = false;                   // push switch: cap held down (never saved)
     int      dragStartY_ = 0, dragStartVal_ = 0;  // locked: vertical drag adjusts the value
     QPoint   dragPrev_;                            // last snapped drag target (incremental group move)
 };
@@ -612,19 +647,24 @@ public:
             c->name = model->name; c->rmin = model->rmin; c->rmax = model->rmax; c->def = model->def; c->val = model->def;
             c->absolute = model->absolute; c->resize(model->size());
             c->positions = model->positions; c->posNames = model->posNames; c->posValues = model->posValues;
-        } else if (k == CcControl::Fader) {
-            c->resize(48, 128);                        // default fader: tall & narrow
+            c->latching = model->latching; c->capColor = model->capColor;
+            c->fontPx = model->fontPx; c->lineW = model->lineW;
         } else if (k == CcControl::SliderSwitch) {
             c->resize(96, 160);                        // default switch: room for the position labels
+        } else if (k == CcControl::PushSwitch) {
+            c->resize(64, 100);                        // the size at which the cap comes out 42x60 exactly
+        } else if (k == CcControl::Label) {
+            c->resize(96, 16);
+        } else if (k == CcControl::Line) {
+            c->resize(128, 16);
         }
         if (k == CcControl::SliderSwitch) c->val = c->valueAt(c->posIdx);
-        c->cc = nextFreeCc(1);                         // first free CC
+        if (!c->isDeco()) c->cc = nextFreeCc(1);        // first free CC; decoration takes none
         controls_.append(c);
         const QPoint pos = snap(at - QPoint(c->width() / 2, c->height() / 2));
         c->move(qMax(0, pos.x()), qMax(0, pos.y()));
         c->show(); selectOnly(c); refreshExtent();
     }
-    void addKnob(QPoint at) { addControl(CcControl::Knob, at); }   // panel right-click convenience
     void forget(CcControl* c) { controls_.removeAll(c); sel_.removeAll(c); }
     QPoint moveSelectionBy(QPoint d) {            // drag one selected control -> the whole group follows
         for (CcControl* c : sel_) { d.setX(qMax(d.x(), -c->x())); d.setY(qMax(d.y(), -c->y())); }  // keep all >= 0
@@ -643,9 +683,12 @@ public:
             auto* c = new CcControl(this);
             c->name = s->name; c->rmin = s->rmin; c->rmax = s->rmax; c->def = s->def; c->val = s->val; c->absolute = s->absolute; c->kind = s->kind;
             c->positions = s->positions; c->posNames = s->posNames; c->posValues = s->posValues; c->posIdx = s->posIdx;
-            int n = qBound(0, s->cc, 127);
-            while (n < 127 && used.contains(n)) ++n;
-            used.insert(n); c->cc = n;
+            c->latching = s->latching; c->capColor = s->capColor; c->fontPx = s->fontPx; c->lineW = s->lineW;
+            if (!c->isDeco()) {
+                int n = qBound(0, s->cc, 127);
+                while (n < 127 && used.contains(n)) ++n;
+                used.insert(n); c->cc = n;
+            }
             c->resize(s->size());
             controls_.append(c);
             const QPoint pos = snap(s->pos() + QPoint(dx, dy));
@@ -662,6 +705,7 @@ public:
             Clip cl; cl.name = c->name; cl.cc = c->cc; cl.rmin = c->rmin; cl.rmax = c->rmax;
             cl.def = c->def; cl.val = c->val; cl.absolute = c->absolute; cl.kind = int(c->kind); cl.size = c->size(); cl.pos = c->pos();
             cl.positions = c->positions; cl.posNames = c->posNames; cl.posValues = c->posValues; cl.posIdx = c->posIdx;
+            cl.latching = c->latching; cl.capColor = c->capColor; cl.fontPx = c->fontPx; cl.lineW = c->lineW;
             clips_.append(cl);
         }
     }
@@ -672,11 +716,14 @@ public:
         QList<CcControl*> fresh;
         for (Clip& cl : clips_) {
             auto* c = new CcControl(this);
-            c->name = cl.name; c->rmin = cl.rmin; c->rmax = cl.rmax; c->def = cl.def; c->val = cl.val; c->absolute = cl.absolute; c->kind = CcControl::Kind(cl.kind);
+            c->name = cl.name; c->rmin = cl.rmin; c->rmax = cl.rmax; c->def = cl.def; c->val = cl.val; c->absolute = cl.absolute; c->kind = CcControl::kindOf(cl.kind);
             c->positions = cl.positions; c->posNames = cl.posNames; c->posValues = cl.posValues; c->posIdx = cl.posIdx;
-            int n = qBound(0, cl.cc, 127);
-            while (n < 127 && used.contains(n)) ++n;           // next free CC
-            used.insert(n); c->cc = n; cl.cc = n;              // remember -> repeated pastes keep climbing
+            c->latching = cl.latching; c->capColor = cl.capColor; c->fontPx = cl.fontPx; c->lineW = cl.lineW;
+            if (!c->isDeco()) {                                // decoration takes no CC number
+                int n = qBound(0, cl.cc, 127);
+                while (n < 127 && used.contains(n)) ++n;        // next free CC
+                used.insert(n); c->cc = n; cl.cc = n;           // remember -> repeated pastes keep climbing
+            }
             if (cl.size.isValid()) c->resize(cl.size);
             controls_.append(c);
             const QPoint pos = snap(cl.pos + QPoint(gridStep_, gridStep_));
@@ -691,7 +738,7 @@ public:
     int nextFreeCc(int from) const {
         for (int n = qBound(0, from, 127); n <= 127; ++n) {
             bool used = false;
-            for (CcControl* c : controls_) if (c->cc == n) { used = true; break; }
+            for (CcControl* c : controls_) if (!c->isDeco() && c->cc == n) { used = true; break; }
             if (!used) return n;
         }
         return 127;
@@ -737,10 +784,11 @@ public:
     QByteArray saveState() const {
         QByteArray ba; QDataStream ds(&ba, QIODevice::WriteOnly);
         const auto st = snapshot();
-        ds << qint32(-2) << qint32(st.size());
+        ds << qint32(-4) << qint32(st.size());
         for (const Desc& d : st)
             ds << d.name << d.cc << d.rmin << d.rmax << d.def << d.val << d.absolute << d.x << d.y << d.w << d.h << d.kind
-               << d.positions << d.posNames << d.posValues << d.posIdx;
+               << d.positions << d.posNames << d.posValues << d.posIdx << d.latching << d.capColor
+               << d.fontPx << d.lineW;
         return ba;
     }
     void loadState(const QByteArray& ba) {
@@ -751,6 +799,8 @@ public:
             Desc d;
             ds >> d.name >> d.cc >> d.rmin >> d.rmax >> d.def >> d.val >> d.absolute >> d.x >> d.y >> d.w >> d.h >> d.kind;
             if (ver >= 2) ds >> d.positions >> d.posNames >> d.posValues >> d.posIdx;
+            if (ver >= 3) ds >> d.latching >> d.capColor;
+            if (ver >= 4) ds >> d.fontPx >> d.lineW;
             if (ds.status() != QDataStream::Ok) return;
             st.append(d);
         }
@@ -795,29 +845,45 @@ protected:
         QMenu m(this);
         QAction* lk = m.addAction(locked_ ? QStringLiteral("Unlock") : QStringLiteral("Lock"));   // first
         m.addSeparator();
-        QAction* add = m.addAction(QStringLiteral("Add Knob"));      add->setEnabled(!locked_);
+        QMenu* addM = m.addMenu(QStringLiteral("Add"));              addM->setEnabled(!locked_);
+        QAction* aKnob = addM->addAction(QStringLiteral("Knob"));
+        QAction* aSlid = addM->addAction(QStringLiteral("Slider Switch"));
+        QAction* aPush = addM->addAction(QStringLiteral("Push Switch"));
+        addM->addSeparator();
+        QAction* aLbl  = addM->addAction(QStringLiteral("Label"));
+        QAction* aLin  = addM->addAction(QStringLiteral("Line"));
         QAction* selAll = m.addAction(QStringLiteral("Select All")); selAll->setEnabled(!locked_ && !controls_.isEmpty());
         QAction* remAll = m.addAction(QStringLiteral("Remove All")); remAll->setEnabled(!locked_ && !controls_.isEmpty());
         QAction* chosen = m.exec(e->globalPos());
         if (chosen == lk && onLockChange) onLockChange(!locked_);
-        else if (chosen == add) { beginGesture(); addKnob(e->pos()); endGesture(); }
+        else if (chosen == aKnob) { beginGesture(); addControl(CcControl::Knob, e->pos()); endGesture(); }
+        else if (chosen == aSlid) { beginGesture(); addControl(CcControl::SliderSwitch, e->pos()); endGesture(); }
+        else if (chosen == aPush) { beginGesture(); addControl(CcControl::PushSwitch, e->pos()); endGesture(); }
+        else if (chosen == aLbl)  { beginGesture(); addControl(CcControl::Label, e->pos()); endGesture(); }
+        else if (chosen == aLin)  { beginGesture(); addControl(CcControl::Line, e->pos()); endGesture(); }
         else if (chosen == selAll) selectAll();
         else if (chosen == remAll) removeAll();
     }
 private:
     struct Clip { QString name; int cc = 1, rmin = 0, rmax = 127, def = 0, val = 0; bool absolute = false; int kind = 0; QSize size; QPoint pos;
-                  int positions = 4; QString posNames, posValues; int posIdx = 0; };
+                            int positions = 4; QString posNames, posValues; int posIdx = 0;
+                  bool latching = false; int capColor = 0; int fontPx = 12; int lineW = 1; };
     struct Desc { QString name; int cc, rmin, rmax, def, val; bool absolute; int x, y, w, h, kind;
         int positions = 4; QString posNames, posValues; int posIdx = 0;          // Slider Switch only
+        bool latching = false; int capColor = 0;                                 // Push Switch only
+        int fontPx = 12; int lineW = 1;                                          // Label / Line
         bool operator==(const Desc& o) const {
             return name == o.name && cc == o.cc && rmin == o.rmin && rmax == o.rmax && def == o.def && val == o.val
                 && absolute == o.absolute && x == o.x && y == o.y && w == o.w && h == o.h && kind == o.kind
-                && positions == o.positions && posNames == o.posNames && posValues == o.posValues && posIdx == o.posIdx; } };
+                && positions == o.positions && posNames == o.posNames && posValues == o.posValues && posIdx == o.posIdx
+                && latching == o.latching && capColor == o.capColor
+                && fontPx == o.fontPx && lineW == o.lineW; } };
     QVector<Desc> snapshot() const {
         QVector<Desc> st;
         for (CcControl* c : controls_)
             st.append({ c->name, c->cc, c->rmin, c->rmax, c->def, c->val, c->absolute, c->x(), c->y(), c->width(), c->height(), int(c->kind),
-                        c->positions, c->posNames, c->posValues, c->posIdx });
+                        c->positions, c->posNames, c->posValues, c->posIdx, c->latching, c->capColor,
+                        c->fontPx, c->lineW });
         return st;
     }
     void restore(const QVector<Desc>& st) {
@@ -825,8 +891,9 @@ private:
         controls_.clear(); sel_.clear();
         for (const Desc& d : st) {
             auto* c = new CcControl(this);
-            c->name = d.name; c->cc = d.cc; c->rmin = d.rmin; c->rmax = d.rmax; c->def = d.def; c->val = d.val; c->absolute = d.absolute; c->kind = CcControl::Kind(d.kind);
+            c->name = d.name; c->cc = d.cc; c->rmin = d.rmin; c->rmax = d.rmax; c->def = d.def; c->val = d.val; c->absolute = d.absolute; c->kind = CcControl::kindOf(d.kind);
             c->positions = d.positions; c->posNames = d.posNames; c->posValues = d.posValues; c->posIdx = d.posIdx;
+            c->latching = d.latching; c->capColor = d.capColor; c->fontPx = d.fontPx; c->lineW = d.lineW;
             c->resize(d.w, d.h); c->move(d.x, d.y); c->show();
             controls_.append(c);
         }
@@ -847,7 +914,11 @@ private:
 CcControl::CcControl(CcPanel* panel) : QWidget(panel), panel_(panel) {
     resize(64, 80);                                             // default 4x5 grid cells
     setMouseTracking(true);
-    setStyleSheet(QStringLiteral("background: transparent;"));   // beat the global QWidget bg -> panel shows through
+    setObjectName(QStringLiteral("ccControl"));
+    // SCOPED to this widget on purpose: an unscoped rule descends on every child,
+    // and the properties dialog is one - its drop-downs came out transparent, which
+    // on screen means white.
+    setStyleSheet(QStringLiteral("#ccControl { background: transparent; }"));
 }
 
 int CcControl::cornerAt(QPoint pt) const
@@ -875,6 +946,29 @@ void CcControl::paintEvent(QPaintEvent*)
     }
     const double nameH = NAME_H, topGap = TOP_GAP, valueH = VAL_H;   // fixed bands -> fixed insets
     QFont f = p.font(); f.setPixelSize(LBL_PX); p.setFont(f);        // fixed label size
+    if (isDeco()) {                                        // decoration: no bands, no value
+        if (kind == Label) {
+            QFont lf = p.font(); lf.setPixelSize(qBound(6, fontPx, 96)); p.setFont(lf);
+            // An unnamed label keeps showing its placeholder even once locked, dimmed:
+            // an object one can neither see nor select would just be a trap.
+            const bool empty = name.isEmpty();
+            p.setPen(empty ? QColor(0x6b, 0x74, 0x84) : QColor(0xdf, 0xe4, 0xec));
+            p.drawText(QRectF(2, 0, W - 4, H), Qt::AlignCenter,
+                       empty ? QStringLiteral("Label") : name);
+        } else {                                           // Line: the tile's long side decides which way
+            const double th = qBound(1, lineW, 8);
+            p.setPen(Qt::NoPen); p.setBrush(QColor(0x3d, 0x47, 0x57));
+            if (W >= H) p.drawRect(QRectF(0, (H - th) / 2, W, th));
+            else        p.drawRect(QRectF((W - th) / 2, 0, th, H));
+        }
+        if (edit && panel_->isSelected(this)) {            // same four handles as everything else
+            p.setPen(Qt::NoPen); p.setBrush(QColor(0x5a, 0x8a, 0xc8));
+            const int hs = 6, w = width(), h = height();
+            p.drawRect(0, 0, hs, hs); p.drawRect(w - hs, 0, hs, hs);
+            p.drawRect(0, h - hs, hs, hs); p.drawRect(w - hs, h - hs, hs, hs);
+        }
+        return;
+    }
     // Both labels are centred on the GRAPHIC: the tile centre everywhere, except on
     // a switch whose groove has slid left to make room for its position labels.
     const double cx = (kind == SliderSwitch) ? swLayout().sx + SLOT_W / 2 : W / 2;
@@ -914,23 +1008,8 @@ void CcControl::paintEvent(QPaintEvent*)
         p.setPen(QPen(QColor(0xdf, 0xe4, 0xec), PTR_W));
         p.drawLine(QPointF(cx + br * 0.45 * std::sin(a), cy - br * 0.45 * std::cos(a)),
                    QPointF(cx + (br - 1) * std::sin(a), cy - (br - 1) * std::cos(a)));   // pointer
-    } else if (kind == Fader) {                                               // Fader (vertical slider)
-        const double cxf = W / 2.0, top = regTop + 4, bot = regBot - 4;
-        const double trackW = qMax(4.0, W * 0.14);
-        p.setPen(Qt::NoPen); p.setBrush(QColor(0x3a, 0x41, 0x4e));            // track
-        p.drawRoundedRect(QRectF(cxf - trackW / 2, top, trackW, bot - top), trackW / 2, trackW / 2);
-        const double yVal = bot - t * (bot - top), yZero = bot - tZero * (bot - top);
-        p.setBrush(QColor(0x5a, 0x8a, 0xc8));                                 // fill: ALWAYS from zero to value
-        p.drawRoundedRect(QRectF(cxf - trackW / 2, qMin(yVal, yZero), trackW, qMax(1.0, qAbs(yVal - yZero))), trackW / 2, trackW / 2);
-        p.setPen(QPen(QColor(0xe9, 0xed, 0xf3), 1));                          // zero mark
-        p.drawLine(QPointF(cxf - W * 0.2, yZero), QPointF(cxf + W * 0.2, yZero));
-        const double hw = W * 0.62, hh = qMax(7.0, H * 0.045);               // handle
-        QLinearGradient hgr(0, yVal - hh / 2, 0, yVal + hh / 2);
-        hgr.setColorAt(0, QColor(0x3c, 0x46, 0x58)); hgr.setColorAt(1, QColor(0x1a, 0x1f, 0x28));
-        p.setPen(QPen(QColor(0x0c, 0x0d, 0x11), 1)); p.setBrush(hgr);
-        p.drawRoundedRect(QRectF(cxf - hw / 2, yVal - hh / 2, hw, hh), 3, 3);
-        p.setPen(QPen(QColor(0xdf, 0xe4, 0xec), 1.5));
-        p.drawLine(QPointF(cxf - hw * 0.3, yVal), QPointF(cxf + hw * 0.3, yVal));
+    } else if (kind == PushSwitch) {                                          // Push Switch
+        drawCap(p, QRectF(4, regTop, W - 8, regBot - BOT_GAP - regTop), pressing_);
     } else {                                                                  // Slider Switch
         const SwLayout l = swLayout();
         QLinearGradient sg(l.sx, 0, l.sx + SLOT_W, 0);                        // groove, lit from the right
@@ -963,6 +1042,101 @@ void CcControl::paintEvent(QPaintEvent*)
 // Where the groove sits and how far the stem may travel. The groove is centred in
 // the tile; when the position labels would not fit on its right the whole block
 // slides left, but never past the tile's own margin.
+// One base tone per cap, every shade derived from it: a new colour is ONE value,
+// not seven.
+static QColor pbTone(const QColor& c, double f)
+{
+    return QColor(qBound(0, qRound(c.red()   * f), 255),
+                  qBound(0, qRound(c.green() * f), 255),
+                  qBound(0, qRound(c.blue()  * f), 255));
+}
+// The PB86 cap: a single moulded piece of CONSTANT width, whose lower part is made
+// of four slopes running from the very edges down to a central plateau - there is no
+// flat band between a slope and an edge - with the LED on the surface above them.
+// Pressed, the cap does not move an inch: a shadow builds up towards its bottom edge.
+void CcControl::drawCap(QPainter& p, const QRectF& box, bool down) const
+{
+    const double k = qMin(box.width() / PB_W, box.height() / PB_H);
+    if (k <= 0.0) return;
+    const double W = PB_W * k, H = PB_H * k;
+    const double x0 = box.x() + (box.width() - W) / 2, y0 = box.y() + (box.height() - H) / 2;
+    const double c = PB_SLOPE * k, r = PB_R * k, sy = y0 + H * PB_SEAM;
+    const QColor base = capColorAt(capColor), base2 = pbTone(base, PB_T_BASE2), plat = pbTone(base, PB_T_PLAT);
+
+    QPainterPath shape;
+    shape.addRoundedRect(QRectF(x0, y0, W, H), r, r);
+    p.save();
+    p.setClipPath(shape);
+    p.setPen(Qt::NoPen);
+
+    QLinearGradient bg(0, y0, 0, y0 + H);
+    bg.setColorAt(0, base); bg.setColorAt(1, base2);
+    p.setBrush(bg); p.drawRect(QRectF(x0, y0, W, H));
+
+    auto face = [&](const QPolygonF& poly, QPointF a, QPointF b, double f) {
+        QLinearGradient g(a, b);                   // across the slope: neighbour, own tone, plateau
+        const double t = PB_SMOOTH / 2;
+        g.setColorAt(0, base2);
+        g.setColorAt(t, pbTone(base, f));
+        g.setColorAt(1 - t, pbTone(base, f));
+        g.setColorAt(1, plat);
+        p.setBrush(g); p.drawPolygon(poly);
+    };
+    face(QPolygonF({ QPointF(x0, sy), QPointF(x0 + W, sy), QPointF(x0 + W - c, sy + c), QPointF(x0 + c, sy + c) }),
+         QPointF(0, sy), QPointF(0, sy + c), PB_T_TOP);
+    face(QPolygonF({ QPointF(x0, sy), QPointF(x0 + c, sy + c), QPointF(x0 + c, y0 + H - c), QPointF(x0, y0 + H) }),
+         QPointF(x0, 0), QPointF(x0 + c, 0), PB_T_LEFT);
+    face(QPolygonF({ QPointF(x0 + W, sy), QPointF(x0 + W, y0 + H), QPointF(x0 + W - c, y0 + H - c), QPointF(x0 + W - c, sy + c) }),
+         QPointF(x0 + W, 0), QPointF(x0 + W - c, 0), PB_T_RIGHT);
+    face(QPolygonF({ QPointF(x0, y0 + H), QPointF(x0 + c, y0 + H - c), QPointF(x0 + W - c, y0 + H - c), QPointF(x0 + W, y0 + H) }),
+         QPointF(0, y0 + H), QPointF(0, y0 + H - c), PB_T_BOT);
+    p.setBrush(plat);
+    p.drawRect(QRectF(x0 + c, sy + c, W - 2 * c, y0 + H - c - sy - c));
+
+    for (int j = 0; j < 12; ++j) {                 // edge fade in twelve layers whose TOTAL width is
+        const double t = j / 12.0, ins = 0.75 + t * PB_EDGE;   // the setting - so every tenth of a pixel shows
+        QColor e(0x0a, 0x0c, 0x10); e.setAlphaF(0.5 * (1 - t));
+        p.setPen(QPen(e, PB_EDGE / 12.0 + 0.35)); p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(QRectF(x0 + ins, y0 + ins, W - 2 * ins, H - 2 * ins),
+                          qMax(0.0, r - t * PB_EDGE), qMax(0.0, r - t * PB_EDGE));
+    }
+    if (down) {                                    // pressed: no travel at all, only shadow
+        QLinearGradient sh(0, y0, 0, y0 + H);
+        sh.setColorAt(0, QColor(0, 0, 0, 0));
+        sh.setColorAt(1, QColor(0, 0, 0, int(PB_DARK * 255)));
+        p.setPen(Qt::NoPen); p.setBrush(sh); p.drawRect(QRectF(x0, y0, W, H));
+    }
+    p.restore();
+
+    // Outline LAST, over everything: painted before, the slopes would cover its inner
+    // half and the lower part would come out a hair wider than the upper one.
+    p.setPen(QPen(QColor(0x0a, 0x0c, 0x10), 1.5)); p.setBrush(Qt::NoBrush);
+    p.drawRoundedRect(QRectF(x0, y0, W, H), r, r);
+
+    const bool lit = (val != rmin);                // the LED alone tells momentary from bistable
+    const QPointF lc(x0 + W / 2, y0 + H * PB_LEDY);
+    const double lr = PB_LED * k / 2, hr = PB_HOLE * k / 2;
+    p.setPen(Qt::NoPen);
+    if (lit) {
+        const double hal = PB_LED * k * 1.9;
+        QRadialGradient ha(lc, hal);
+        ha.setColorAt(0,    QColor(0xff, 0x4a, 0x34, 128));
+        ha.setColorAt(0.55, QColor(0xff, 0x4a, 0x34, 36));
+        ha.setColorAt(1,    QColor(0xff, 0x4a, 0x34, 0));
+        p.setBrush(ha); p.drawEllipse(lc, hal, hal);
+    }
+    p.setBrush(QColor(0x0b, 0x0d, 0x11)); p.drawEllipse(lc, hr, hr);
+    QRadialGradient lg(lc, lr, lc + QPointF(-lr * 0.24, -lr * 0.36));
+    if (lit) { lg.setColorAt(0, QColor(0xff, 0xf2, 0xec)); lg.setColorAt(0.28, QColor(0xff, 0x6a, 0x52));
+               lg.setColorAt(0.70, QColor(0xee, 0x2d, 0x20)); lg.setColorAt(1, QColor(0x8e, 0x17, 0x12)); }
+    else     { lg.setColorAt(0, QColor(0x5c, 0x2a, 0x28)); lg.setColorAt(0.55, QColor(0x3a, 0x16, 0x18));
+               lg.setColorAt(1, QColor(0x20, 0x0c, 0x0e)); }
+    p.setBrush(lg); p.drawEllipse(lc, lr, lr);
+    QColor spec(0xff, 0xff, 0xff); spec.setAlphaF(lit ? 0.55 : 0.10);
+    p.setBrush(spec);
+    p.drawEllipse(QPointF(lc.x() - PB_LED * k * 0.16, lc.y() - PB_LED * k * 0.20),
+                  PB_LED * k * 0.15, PB_LED * k * 0.10);
+}
 CcControl::SwLayout CcControl::swLayout() const
 {
     const double W = width(), H = height();
@@ -1039,9 +1213,15 @@ void CcControl::mousePressEvent(QMouseEvent* e)
 {
     if (e->button() != Qt::LeftButton) return;
     if (panel_->locked()) {                             // locked: vertical drag sets the value + sends MIDI
+        if (isDeco()) return;                           // decoration is inert
         valuing_ = true;
-        if (kind == Fader) setValueFromY(e->pos().y());          // fader: click-to-position (absolute)
-        else if (kind == SliderSwitch) setPosFromY(e->pos().y());  // switch: jump to the nearest detent
+        if (kind == SliderSwitch) setPosFromY(e->pos().y());       // switch: jump to the nearest detent
+        else if (kind == PushSwitch) {                             // push: bistable toggles, momentary goes down
+            pressing_ = true;
+            val = latching ? (val == rmax ? rmin : rmax) : rmax;
+            update();
+            panel_->emitCc(cc, qBound(0, val, 127));
+        }
         else { dragStartY_ = e->pos().y(); dragStartVal_ = val; }
         return;
     }
@@ -1066,8 +1246,9 @@ void CcControl::mousePressEvent(QMouseEvent* e)
 void CcControl::mouseMoveEvent(QMouseEvent* e)
 {
     if (panel_->locked()) {                              // locked: value drag (up = more) or hover hint
-        if (!valuing_) { setCursor(Qt::SizeVerCursor); return; }
-        if (kind == Fader) { setValueFromY(e->pos().y()); return; }   // fader: absolute
+        if (isDeco()) { setCursor(Qt::ArrowCursor); return; }
+        if (!valuing_) { setCursor(kind == PushSwitch ? Qt::PointingHandCursor : Qt::SizeVerCursor); return; }
+        if (kind == PushSwitch) return;                              // a button ignores the drag
         if (kind == SliderSwitch) { setPosFromY(e->pos().y()); return; }   // switch: the detent follows the drag
         const double span = (rmax != rmin) ? qAbs(rmax - rmin) : 1;   // knob: relative
         const int lo = qMin(rmin, rmax), hi = qMax(rmin, rmax);
@@ -1081,19 +1262,10 @@ void CcControl::mouseMoveEvent(QMouseEvent* e)
                         : (c == 0 || c == 3) ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor);
         return;
     }
-    if (resizing_) {                                    // corner drag, snapped to the grid
+    if (resizing_) {                                    // corner drag, each side on its own axis
         const QPoint cur = mapToParent(e->pos());
-        const double asp = aspectHW();
-        int w, h;
-        if (asp > 0.0) {                                // fixed ratio: one drag drives both sides
-            const double want = qMax(double(qAbs(cur.x() - rzAnchor_.x())),
-                                     double(qAbs(cur.y() - rzAnchor_.y())) / asp);
-            w = qMax(minW(), panel_->snap1(qRound(want)));
-            h = qRound(w * asp);
-        } else {                                        // free: each side follows its own axis
-            w = qMax(minW(), panel_->snap1(qAbs(cur.x() - rzAnchor_.x())));
-            h = qMax(minH(), panel_->snap1(qAbs(cur.y() - rzAnchor_.y())));
-        }
+        const int w = qMax(minW(), panel_->snap1(qAbs(cur.x() - rzAnchor_.x())));
+        const int h = qMax(minH(), panel_->snap1(qAbs(cur.y() - rzAnchor_.y())));
         setGeometry(qMax(0, rzRight_ ? rzAnchor_.x() - w : rzAnchor_.x()),
                     qMax(0, rzBottom_ ? rzAnchor_.y() - h : rzAnchor_.y()), w, h);
         panel_->refreshExtent();
@@ -1102,15 +1274,15 @@ void CcControl::mouseMoveEvent(QMouseEvent* e)
     const QPoint target = panel_->snap(mapToParent(e->pos()) - grab_);   // move the whole selection together
     dragPrev_ += panel_->moveSelectionBy(target - dragPrev_);            // incremental: works whether or not 'this' is in the group
 }
-void CcControl::mouseReleaseEvent(QMouseEvent*) { dragging_ = resizing_ = valuing_ = false; panel_->endGesture(); }
-void CcControl::setValueFromY(int y)
+void CcControl::mouseReleaseEvent(QMouseEvent*)
 {
-    const double nameH = height() * 0.20, topGap = height() * 0.06, valueH = height() * 0.18;
-    const double top = nameH + topGap + 4, bot = height() - valueH - 4;
-    const double tt = qBound(0.0, (bot - y) / qMax(1.0, bot - top), 1.0);
-    const int lo = qMin(rmin, rmax), hi = qMax(rmin, rmax);
-    const int nv = lo + qRound(tt * (hi - lo));
-    if (nv != val) { val = nv; update(); panel_->emitCc(cc, midiOf(val)); }
+    if (pressing_) {                                   // a momentary switch falls back when let go
+        pressing_ = false;
+        if (!latching && val != rmin) { val = rmin; panel_->emitCc(cc, qBound(0, val, 127)); }
+        update();
+    }
+    dragging_ = resizing_ = valuing_ = false;
+    panel_->endGesture();
 }
 void CcControl::contextMenuEvent(QContextMenuEvent* e)
 {
@@ -1130,16 +1302,20 @@ void CcControl::contextMenuEvent(QContextMenuEvent* e)
 }
 void CcControl::editProperties()
 {
-    QDialog d(this);
+    QDialog d(window());                       // the window, not the control: nothing of ours leaks into it
     d.setWindowTitle(kind == SliderSwitch ? QStringLiteral("Slider Switch properties")
-                   : kind == Fader        ? QStringLiteral("Fader properties")
+                   : kind == PushSwitch   ? QStringLiteral("Push Switch properties")
+                   : kind == Label        ? QStringLiteral("Label properties")
+                   : kind == Line         ? QStringLiteral("Line properties")
                                           : QStringLiteral("Knob properties"));
     auto* form = new QFormLayout(&d);
-    auto* typeBox = new QComboBox;                              // item order = the Kind enum
-    typeBox->addItem(QStringLiteral("Knob"));
-    typeBox->addItem(QStringLiteral("Fader"));
-    typeBox->addItem(QStringLiteral("Slider Switch"));
-    typeBox->setCurrentIndex(int(kind));
+    auto* typeBox = new QComboBox;                              // the Kind rides in the item DATA:
+    typeBox->addItem(QStringLiteral("Knob"),          int(Knob));    // the rows no longer match the enum
+    typeBox->addItem(QStringLiteral("Slider Switch"), int(SliderSwitch));
+    typeBox->addItem(QStringLiteral("Push Switch"),   int(PushSwitch));
+    typeBox->addItem(QStringLiteral("Label"),         int(Label));
+    typeBox->addItem(QStringLiteral("Line"),          int(Line));
+    typeBox->setCurrentIndex(qMax(0, typeBox->findData(int(kind))));
     auto* modeBox = new QComboBox; modeBox->addItem(QStringLiteral("Relative")); modeBox->addItem(QStringLiteral("Absolute"));
     modeBox->setCurrentIndex(absolute ? 1 : 0);
     auto* nameEd = new QLineEdit(name);
@@ -1170,32 +1346,61 @@ void CcControl::editProperties()
     form->addRow(QStringLiteral("Positions"),       posSp);
     form->addRow(QStringLiteral("Position names"),  namesEd);
     form->addRow(QStringLiteral("Position values"), valsEd);
-    auto swRows = [form, posSp, namesEd, valsEd, modeBox, minSp, maxSp, defSp](int t) {
-        const bool sw = (t == int(SliderSwitch));
-        form->setRowVisible(posSp, sw);    form->setRowVisible(namesEd, sw); form->setRowVisible(valsEd, sw);
-        form->setRowVisible(modeBox, !sw); form->setRowVisible(minSp, !sw);
-        form->setRowVisible(maxSp, !sw);   form->setRowVisible(defSp, !sw);
+    // Push Switch: what a press does, and the colour of the cap.
+    auto* actBox = new QComboBox;
+    actBox->addItem(QStringLiteral("Momentary")); actBox->addItem(QStringLiteral("Latched"));
+    actBox->setCurrentIndex(latching ? 1 : 0);
+    auto* colBox = new QComboBox;
+    colBox->addItem(QStringLiteral("Black")); colBox->addItem(QStringLiteral("Blue"));
+    colBox->addItem(QStringLiteral("Red"));   colBox->addItem(QStringLiteral("Light grey"));
+    colBox->setCurrentIndex(qBound(0, capColor, 3));
+    form->addRow(QStringLiteral("Action"), actBox);
+    form->addRow(QStringLiteral("Cap"),    colBox);
+    auto* fontSp = new QSpinBox; fontSp->setRange(6, 96); fontSp->setValue(qBound(6, fontPx, 96));
+    auto* lineSp = new QSpinBox; lineSp->setRange(1, 8);  lineSp->setValue(qBound(1, lineW, 8));
+    form->addRow(QStringLiteral("Text size"), fontSp);
+    form->addRow(QStringLiteral("Thickness"), lineSp);
+    auto swRows = [form, posSp, namesEd, valsEd, actBox, colBox, modeBox, minSp, maxSp, defSp,
+                   fontSp, lineSp, nameEd, ccSp](int t) {
+        const bool sl = (t == int(SliderSwitch)), pb = (t == int(PushSwitch));
+        const bool la = (t == int(Label)), li = (t == int(Line)), deco = la || li;
+        form->setRowVisible(fontSp, la); form->setRowVisible(lineSp, li);
+        form->setRowVisible(nameEd, !li);                  // a line has nothing to say
+        form->setRowVisible(ccSp, !deco);                  // decoration sends nothing
+        form->setRowVisible(posSp, sl);   form->setRowVisible(namesEd, sl); form->setRowVisible(valsEd, sl);
+        form->setRowVisible(actBox, pb);  form->setRowVisible(colBox, pb);
+        form->setRowVisible(modeBox, !sl && !pb && !deco);
+        form->setRowVisible(minSp, !sl && !deco);  form->setRowVisible(maxSp, !sl && !deco);
+        // A push switch has no range, it has two values - so its two rows are named
+        // for what they are instead of Min and Max.
+        if (auto* l = qobject_cast<QLabel*>(form->labelForField(minSp)))
+            l->setText(pb ? QStringLiteral("Value Off") : QStringLiteral("Min"));
+        if (auto* l = qobject_cast<QLabel*>(form->labelForField(maxSp)))
+            l->setText(pb ? QStringLiteral("Value On")  : QStringLiteral("Max"));
+        form->setRowVisible(defSp, !sl && !pb && !deco);
     };
-    swRows(typeBox->currentIndex());
-    connect(typeBox, &QComboBox::currentIndexChanged, &d, [swRows](int t) { swRows(t); });
+    swRows(typeBox->currentData().toInt());
+    connect(typeBox, &QComboBox::currentIndexChanged, &d, [swRows, typeBox](int) { swRows(typeBox->currentData().toInt()); });
     auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     form->addRow(bb);
     connect(bb, &QDialogButtonBox::accepted, &d, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
     if (d.exec() == QDialog::Accepted) {
         panel_->beginGesture();
-        const Kind nk = Kind(typeBox->currentIndex());
-        if (nk != kind) {                          // type change: honour the new kind's floors and ratio
+        const Kind nk = kindOf(typeBox->currentData().toInt());
+        if (nk != kind) {                          // type change: honour the new kind's floors
             kind = nk;
-            int w = qMax(width(), minW()), h = qMax(height(), minH());
-            if (aspectHW() > 0.0) h = qRound(w * aspectHW());
-            resize(w, h);
+            resize(qMax(width(), minW()), qMax(height(), minH()));
             panel_->refreshExtent();
         }
         positions = posSp->value();
         posNames  = namesEd->text().trimmed();
         posValues = valsEd->text().trimmed();
         posIdx    = qBound(0, posIdx, posCount() - 1);
+        latching  = (actBox->currentIndex() == 1);
+        capColor  = colBox->currentIndex();
+        fontPx    = fontSp->value();
+        lineW     = lineSp->value();
         if (height() < minH()) {                   // more detents need a taller tile, else the labels collide
             resize(width(), minH());
             panel_->refreshExtent();
@@ -1207,7 +1412,8 @@ void CcControl::editProperties()
         if (rmax < rmin) qSwap(rmin, rmax);
         if (absolute && rmax - rmin > 127) rmax = rmin + 127;   // 7-bit window
         def = qBound(rmin, defSp->value(), rmax);
-        val = (kind == SliderSwitch) ? valueAt(posIdx) : def;   // reset to the default on edit
+        val = (kind == SliderSwitch) ? valueAt(posIdx)          // reset to the rest state on edit
+            : (kind == PushSwitch) ? rmin : def;
         update();
         panel_->endGesture();
     }
@@ -1922,7 +2128,7 @@ void MainWindow::openController()
                     controllerWin_->resize(size());
                 });
 
-        // --- Edit: undo/redo, Add (Knob; Fader/Switch to come), duplicate/remove,
+        // --- Edit: undo/redo, Add (knob, both switches), duplicate/remove,
         // select all / remove all. Shortcuts on the actions; enabled states kept
         // live by the panel (onStateChanged). ---
         auto* undoAct = editMenu->addAction(tr("Undo")); undoAct->setShortcut(QKeySequence::Undo);
@@ -1930,9 +2136,11 @@ void MainWindow::openController()
         editMenu->addSeparator();
         auto* addMenu = editMenu->addMenu(tr("Add"));
         auto* addKnobAct  = addMenu->addAction(tr("Knob"));
-        auto* addFaderAct = addMenu->addAction(tr("Fader"));
         auto* addSwAct    = addMenu->addAction(tr("Slider Switch"));
-        addMenu->addAction(tr("Push Switch"))->setEnabled(false);   // momentary switch to come
+        auto* addPbAct    = addMenu->addAction(tr("Push Switch"));
+        addMenu->addSeparator();
+        auto* addLblAct   = addMenu->addAction(tr("Label"));
+        auto* addLinAct   = addMenu->addAction(tr("Line"));
         editMenu->addSeparator();
         auto* dupAct = editMenu->addAction(tr("Duplicate")); dupAct->setShortcut(QKeySequence(QStringLiteral("Ctrl+D")));
         auto* remAct = editMenu->addAction(tr("Remove"));    remAct->setShortcut(QKeySequence::Delete);
@@ -1943,10 +2151,14 @@ void MainWindow::openController()
         connect(redoAct,    &QAction::triggered, ccPanel, [ccPanel] { ccPanel->redo(); });
         connect(addKnobAct, &QAction::triggered, ccPanel, [ccPanel] {
             ccPanel->beginGesture(); ccPanel->addControl(CcControl::Knob, ccPanel->visibleRegion().boundingRect().center()); ccPanel->endGesture(); });
-        connect(addFaderAct, &QAction::triggered, ccPanel, [ccPanel] {
-            ccPanel->beginGesture(); ccPanel->addControl(CcControl::Fader, ccPanel->visibleRegion().boundingRect().center()); ccPanel->endGesture(); });
         connect(addSwAct, &QAction::triggered, ccPanel, [ccPanel] {
             ccPanel->beginGesture(); ccPanel->addControl(CcControl::SliderSwitch, ccPanel->visibleRegion().boundingRect().center()); ccPanel->endGesture(); });
+        connect(addPbAct, &QAction::triggered, ccPanel, [ccPanel] {
+            ccPanel->beginGesture(); ccPanel->addControl(CcControl::PushSwitch, ccPanel->visibleRegion().boundingRect().center()); ccPanel->endGesture(); });
+        connect(addLblAct, &QAction::triggered, ccPanel, [ccPanel] {
+            ccPanel->beginGesture(); ccPanel->addControl(CcControl::Label, ccPanel->visibleRegion().boundingRect().center()); ccPanel->endGesture(); });
+        connect(addLinAct, &QAction::triggered, ccPanel, [ccPanel] {
+            ccPanel->beginGesture(); ccPanel->addControl(CcControl::Line, ccPanel->visibleRegion().boundingRect().center()); ccPanel->endGesture(); });
         connect(dupAct,     &QAction::triggered, ccPanel, [ccPanel] { ccPanel->beginGesture(); ccPanel->duplicateSelection(); ccPanel->endGesture(); });
         connect(remAct,     &QAction::triggered, ccPanel, [ccPanel] { ccPanel->beginGesture(); ccPanel->deleteSelected(); ccPanel->endGesture(); });
         connect(selAllAct,  &QAction::triggered, ccPanel, [ccPanel] { ccPanel->selectAll(); });

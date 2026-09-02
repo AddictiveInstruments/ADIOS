@@ -31,11 +31,20 @@ QComboBox, QSpinBox, QLineEdit {
     selection-background-color: #4a7ab8;
 }
 QComboBox::drop-down { border: none; width: 18px; }
+/* Drop-down list. Dressing the VIEW alone is not enough: the item delegate paints
+   every row from the palette, so the rows themselves have to be given their colours
+   or they come out on the light default ground. */
 QComboBox QAbstractItemView {
     background: #161a22;
+    color: #dfe4ec;
     border: 1px solid #3d4757;
-    selection-background-color: #4a7ab8;
+    outline: 0;
+    selection-background-color: #2c4a6e;
+    selection-color: #f2f6fc;
 }
+QComboBox QAbstractItemView::item          { background: #161a22; color: #dfe4ec; padding: 3px 8px; min-height: 18px; }
+QComboBox QAbstractItemView::item:selected { background: #2c4a6e; color: #f2f6fc; }
+QComboBox QAbstractItemView::item:disabled { color: #5a6172; }
 QComboBox::down-arrow {           /* a real image: the CSS border-triangle renders as a block in Qt */
     image: url(:/app/arrow_down.png);
     width: 12px; height: 7px;
