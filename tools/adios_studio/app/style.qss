@@ -30,6 +30,17 @@ QComboBox, QSpinBox, QLineEdit {
     padding: 3px 8px;
     selection-background-color: #4a7ab8;
 }
+/* A disabled field must LOOK disabled: the global colour would otherwise paint it
+   exactly like a live one (the state was real, just invisible). */
+QWidget:disabled { color: #5a6172; }                       /* any disabled widget: dim text, labels included */
+/* A field switched off by a tick: the :disabled state alone is not honoured on a
+   QSpinBox (its text is drawn by an inner line edit), so the code also sets a
+   "dim" property and the style keys on that - the same trick as the snapshot cells. */
+QSpinBox[dim="true"], QComboBox[dim="true"] { color: #5a6172; border-color: #2e3644; background: #13161d; }
+QSpinBox[dim="true"] QLineEdit { color: #5a6172; background: transparent; }
+QComboBox:disabled, QSpinBox:disabled, QLineEdit:disabled {
+    color: #5a6172; border-color: #2e3644; background: #13161d;
+}
 QComboBox::drop-down { border: none; width: 18px; }
 /* Drop-down list. Dressing the VIEW alone is not enough: the item delegate paints
    every row from the palette, so the rows themselves have to be given their colours
@@ -131,17 +142,20 @@ QCheckBox { color: #8a94a6; spacing: 4px; }
 /* --- Input filter tree --- */
 QToolButton { background: transparent; border: none; }   /* the disclosure triangles */
 QLabel#filterLabel { color: #8a94a6; }   /* parent-level label */
+QLabel#filterLabel:disabled { color: #5a6172; }   /* the id rule would otherwise beat the disabled grey */
+QFrame#prefSep { background: #2a2f3a; border: none; }   /* Preferences: the rule between two groups */
 QLabel#filterSub   { color: #5a6172; }   /* sub-filter label (child), e.g. Channels */
 
 /* filter checkboxes are painted by FilterCheckBox (border + white tick, no fill) */
 
-/* channel matrix cells: green/red border + fill kept; number dims when inactive */
+/* channel matrix cells: the general theme - grey outline off, accent blue on - the
+   same cell as the keyboard's channel row. No red, no green. */
 QPushButton#chanBtn {
     padding: 0; font-size: 9px;
-    border: 1px solid #e0666b; border-radius: 2px;
-    background: transparent; color: #5a6172;      /* inactive: no fill, just the red outline */
+    border: 1px solid #3d4757; border-radius: 2px;
+    background: transparent; color: #5a6172;
 }
-QPushButton#chanBtn:checked  { border-color: #55b56a; background: #23331f; color: #eef3ea; }
+QPushButton#chanBtn:checked  { border-color: #5a8ac8; background: #4a7ab8; color: #f2f6fc; }
 QPushButton#chanBtn:disabled { border-color: #3a3f4a; color: #5a6172; background: transparent; }
 
 /* Left Hand: wheel captions in the normal label colour (like "Channel:"),

@@ -554,6 +554,7 @@ public:
     // detent, the button's on/off - and how it is put back, sent or not.
     int  stateValue() const { return kind == SliderSwitch ? posIdx : val; }
     void applyState(int v, bool send);
+    void applyMidi(int midi);                      // from the wire: on screen only, nothing sent
     int     posCount() const { return qBound(2, positions, 8); }
     QString nameAt(int i) const { const QStringList l = splitCsv(posNames); return i < l.size() ? l.at(i) : QString(); }
     int     valueAt(int i) const {                 // explicit value if given, else spread over 0..127
@@ -1137,6 +1138,19 @@ void CcControl::paintEvent(QPaintEvent*)
 // Where the groove sits and how far the stem may travel. The groove is centred in
 // the tile; when the position labels would not fit on its right the whole block
 // slides left, but never past the tile's own margin.
+// A field switched off by a tick must LOOK off. setEnabled alone is not enough:
+// the stylesheet's :disabled state does not reach a QSpinBox's inner line edit,
+// so a "dim" property is set as well, and the style keys on it (re-polished so it
+// takes at once, children included).
+static void setFieldOn(QWidget* w, bool on)
+{
+    w->setEnabled(on);
+    w->setProperty("dim", !on);
+    w->style()->unpolish(w); w->style()->polish(w);
+    for (QWidget* c : w->findChildren<QWidget*>()) { c->style()->unpolish(c); c->style()->polish(c); }
+    w->update();
+}
+
 // One base tone per cap, every shade derived from it: a new colour is ONE value,
 // not seven.
 static QColor pbTone(const QColor& c, double f)
@@ -1323,6 +1337,29 @@ void CcControl::sendValue()
     const int v = (kind == Knob) ? midiOf(val, span) : qBound(0, val, span);
     if (nrpn) panel_->emitNrpn(nrpnNum, v, wide);
     else      panel_->emitCc(cc, v);
+}
+void CcControl::applyMidi(int midi)
+{
+    if (isDeco()) return;
+    const int span = valueSpan();
+    midi = qBound(0, midi, span);
+    if (kind == Knob) {
+        const int lo = qMin(rmin, rmax), hi = qMax(rmin, rmax);
+        const int nv = absolute ? qBound(lo, rmin + midi, hi)                       // the inverse of midiOf
+                                : qBound(lo, rmin + qRound(double(midi) / span * (rmax - rmin)), hi);
+        if (nv == val) return;
+        val = nv;
+    } else if (kind == SliderSwitch) {
+        int best = 0, bd = 1 << 20;                                                 // the detent nearest that value
+        for (int i = 0; i < posCount(); ++i) { const int d = qAbs(valueAt(i) - midi); if (d < bd) { bd = d; best = i; } }
+        if (best == posIdx) return;
+        posIdx = best; val = valueAt(posIdx);
+    } else {
+        const int nv = (midi == rmax) ? rmax : (midi == rmin) ? rmin : (midi >= 64 ? rmax : rmin);
+        if (nv == val) return;
+        val = nv;
+    }
+    update();
 }
 void CcControl::setPosFromY(int y)
 {
@@ -1943,6 +1980,7 @@ void MainWindow::onTick()
 void MainWindow::routeIn(const adios::Bytes& msg, uint64_t)
 {
     monitorLine(false, msg);
+    ctrlMidiIn(msg);
 
     // Debug Terminal: the core sends console text as a "debug string" SysEx
     // (cmd 0x0D, sub 0x40) - F0 00 22 15 32 <id> 0D 40 <7-bit ascii...> F7.
@@ -2289,15 +2327,16 @@ void MainWindow::openController()
         armSend();
         // An unticked line goes grey: the field it will not send has no business
         // looking editable.
-        connect(msbChk, &QCheckBox::toggled, msbSp, &QWidget::setEnabled);
+        connect(msbChk, &QCheckBox::toggled, msbSp, [msbSp](bool on) { setFieldOn(msbSp, on); });
         // Armed, a bank tick reserves its controller on the surface: CC#0 for MSB,
         // CC#32 for LSB, each on its own.
         auto armBank = [ccPanel, msbChk, lsbChk] { ccPanel->setBankArmed(msbChk->isChecked(), lsbChk->isChecked()); };
         connect(msbChk, &QCheckBox::toggled, controllerWin_, [armBank](bool) { armBank(); });
         connect(lsbChk, &QCheckBox::toggled, controllerWin_, [armBank](bool) { armBank(); });
         armBank();
-        connect(lsbChk, &QCheckBox::toggled, lsbSp, &QWidget::setEnabled);
-        connect(pgmChk, &QCheckBox::toggled, pgmSp, &QWidget::setEnabled);
+        connect(lsbChk, &QCheckBox::toggled, lsbSp, [lsbSp](bool on) { setFieldOn(lsbSp, on); });
+        connect(pgmChk, &QCheckBox::toggled, pgmSp, [pgmSp](bool on) { setFieldOn(pgmSp, on); });
+        setFieldOn(msbSp, msbChk->isChecked()); setFieldOn(lsbSp, lsbChk->isChecked()); setFieldOn(pgmSp, pgmChk->isChecked());
         // Turning a field sends NOTHING: Send is the only thing that puts bytes on
         // the wire, and the ticks arm what it will carry.
         connect(sendBtn, &QPushButton::clicked, controllerWin_, [sendBank, sendPgm] { sendBank(); sendPgm(); });
@@ -2387,7 +2426,7 @@ void MainWindow::openController()
         auto* noNoteOff = new FilterCheckBox(tr("No Note Off"));   // on: release sends Note On vel 0 (running status)
         noNoteOff->setObjectName("noNoteOff");                     // persisted with the View toggles
         noNoteOff->setNeutral(true);                               // same gray box + white tick as "Apply Filter"
-        chRow->addWidget(noNoteOff);
+        noNoteOff->setText(tr("Keyboard No Note Off"));            // shown in Preferences, not on the keyboard row
         connect(chGroup, &QButtonGroup::idToggled, this, [this](int id, bool on) { if (on) kbChannel_ = id; });
         gl->addLayout(chRow);
         gl->addSpacing(TOP_GAP);
@@ -2506,10 +2545,51 @@ void MainWindow::openController()
         cfgMenu->addSeparator();
         ctrlRecentMenu_ = cfgMenu->addMenu(tr("Recent"));
         cfgMenu->addSeparator();
-        snapOnlyAct_ = cfgMenu->addAction(tr("Send only changes"));   snapOnlyAct_->setCheckable(true); snapOnlyAct_->setChecked(true);
-        snapModAct_  = cfgMenu->addAction(tr("Snapshot includes Mod")); snapModAct_->setCheckable(true); snapModAct_->setChecked(false);
-        connect(snapOnlyAct_, &QAction::toggled, this, [this](bool) { ctrlSetDirty(true); });
-        connect(snapModAct_,  &QAction::toggled, this, [this](bool) { ctrlSetDirty(true); });
+        auto* prefAct = cfgMenu->addAction(tr("Preferences..."));
+
+        // The Preferences window. Built now, shown on demand, and a CHILD of the
+        // controller window: its ticks are found by the same objectName loops that
+        // persist every other tick, and they live in the config file like the rest.
+        prefsDlg_ = new QDialog(controllerWin_);
+        prefsDlg_->setWindowTitle(tr("Preferences"));
+        prefsDlg_->setModal(false);
+        auto* pf = new QFormLayout(prefsDlg_);
+        pf->setHorizontalSpacing(14); pf->setVerticalSpacing(8);
+        auto mkTick = [](const QString& t, const char* obj, bool on) {
+            auto* c = new FilterCheckBox(t); c->setObjectName(QLatin1String(obj)); c->setNeutral(true); c->setChecked(on); return c;
+        };
+        midiInChk_   = mkTick(tr("MIDI Input"),                 "midiIn",      false);
+        fwdChk_      = mkTick(tr("MIDI Forward"),               "midiForward", false);
+        snapOnlyAct_ = mkTick(tr("Snapshot Send only changes"), "snapOnly",    true);
+        snapModAct_  = mkTick(tr("Snapshot includes Mod"),      "snapMod",     false);
+        omniChk_ = mkTick(tr("MIDI Input Omni"), "midiOmni", true);   // ticked: any channel
+        inChanSp_ = new QSpinBox; inChanSp_->setObjectName(QStringLiteral("midiInChan")); inChanSp_->setRange(1, 16); inChanSp_->setFixedWidth(62);
+        // Three groups, two rules between them: a 1 px line in the panel's border tone.
+        auto mkSep = [] { auto* f = new QFrame; f->setObjectName(QStringLiteral("prefSep")); f->setFixedHeight(1); return f; };
+        pf->addRow(noNoteOff);                                   // moved here from the keyboard row
+        pf->addRow(mkSep());
+        pf->addRow(midiInChk_);
+        pf->addRow(omniChk_);
+        pf->addRow(tr("MIDI Input Channel"), inChanSp_);
+        if (QWidget* l = pf->labelForField(inChanSp_)) l->setObjectName(QStringLiteral("filterLabel"));   // the ticks' grey, not label white
+        pf->addRow(fwdChk_);
+        pf->addRow(mkSep());
+        pf->addRow(snapOnlyAct_);
+        pf->addRow(snapModAct_);
+        // Everything under MIDI Input follows it: Omni and Forward only with Input on,
+        // the channel only with Input on AND Omni off.
+        auto prefEnable = [this, pf] {
+            const bool in = midiInChk_->isChecked();
+            omniChk_->setEnabled(in);
+            fwdChk_->setEnabled(in);
+            const bool chan = in && !omniChk_->isChecked();
+            setFieldOn(inChanSp_, chan);
+            if (QWidget* l = pf->labelForField(inChanSp_)) l->setEnabled(chan);   // the label greys with its field
+        };
+        connect(omniChk_,   &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
+        connect(midiInChk_, &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
+        prefEnable();
+        connect(prefAct, &QAction::triggered, this, [this] { prefsDlg_->show(); prefsDlg_->raise(); prefsDlg_->activateWindow(); });
         connect(cfgNew,  &QAction::triggered, this, [this] { ctrlNewConfig(); });
         connect(cfgOpen, &QAction::triggered, this, [this] { ctrlOpenConfig(); });
         connect(cfgSave, &QAction::triggered, this, [this] { ctrlSaveConfig(false); });
@@ -2746,6 +2826,11 @@ bool MainWindow::ctrlWriteConfig(const QString& path)
     x.writeAttribute("channel", num(kbChannel_ + 1)); x.writeAttribute("noNoteOff", b01(tick("noNoteOff")));
     x.writeEndElement();
 
+    x.writeStartElement("midiIn");
+    x.writeAttribute("on", b01(tick("midiIn"))); x.writeAttribute("omni", b01(tick("midiOmni")));
+    x.writeAttribute("channel", num(inChanSp_ ? inChanSp_->value() : 1)); x.writeAttribute("forward", b01(tick("midiForward")));
+    x.writeEndElement();
+
     x.writeStartElement("bank");
     x.writeAttribute("msb", num(spin("bankMsb"))); x.writeAttribute("lsb", num(spin("bankLsb"))); x.writeAttribute("program", num(spin("program")));
     x.writeAttribute("sendMsb", b01(tick("bankMsbOn"))); x.writeAttribute("sendLsb", b01(tick("bankLsbOn"))); x.writeAttribute("sendProgram", b01(tick("programOn")));
@@ -2871,6 +2956,13 @@ bool MainWindow::ctrlLoadXml(const QString& path)
             if (auto* c = controllerWin_->findChild<QCheckBox*>(QStringLiteral("noNoteOff"))) c->setChecked(attrBool(a, "noNoteOff", c->isChecked()));
             continue;
         }
+        if (tag == QLatin1String("midiIn")) {
+            if (midiInChk_) midiInChk_->setChecked(attrBool(a, "on", false));
+            if (omniChk_)   omniChk_->setChecked(attrBool(a, "omni", true));
+            if (inChanSp_)  { const QSignalBlocker b(inChanSp_); inChanSp_->setValue(qBound(1, attrInt(a, "channel", 1), 16)); }
+            if (fwdChk_)    fwdChk_->setChecked(attrBool(a, "forward", false));
+            continue;
+        }
         if (tag == QLatin1String("bank")) {
             auto setSpin = [this](const char* n, int v) { if (auto* s = controllerWin_->findChild<QSpinBox*>(QLatin1String(n))) { const QSignalBlocker b(s); s->setValue(v); } };
             auto setTick = [this](const char* n, bool v) { if (auto* c = controllerWin_->findChild<QCheckBox*>(QLatin1String(n))) c->setChecked(v); };
@@ -2949,6 +3041,36 @@ void MainWindow::ctrlNewConfig()
     ctrlConfigPath_.clear();
     ctrlDirty_ = false;
     ctrlUpdateTitle();
+}
+
+// ---- MIDI Input: the wire drives the surface ------------------------------------
+// With MIDI Input on, an incoming Control Change - or an NRPN run - lands on the
+// controls that carry that address, on screen only: nothing is sent back. Omni On
+// listens on every channel, Omni Off on one. Forward re-sends what comes in, except
+// SysEx, which is Studio's own dialogue with the core.
+void MainWindow::ctrlMidiIn(const adios::Bytes& msg)
+{
+    if (!controllerWin_ || !ccSurface_ || !midiInChk_ || !midiInChk_->isChecked() || msg.empty()) return;
+    const uint8_t st = msg[0];
+    if (fwdChk_ && fwdChk_->isChecked() && st != 0xf0) sendRaw(msg);
+    if (msg.size() != 3 || (st & 0xf0) != 0xb0) return;                  // only CC drive the surface
+    const int ch = st & 0x0f;
+    if (omniChk_ && !omniChk_->isChecked() && inChanSp_ && ch != inChanSp_->value() - 1) return;
+    const int cc = msg[1], v = msg[2];
+    auto* panel = static_cast<CcPanel*>(ccSurface_);
+    NrpnRun& r = nrpnCtl_;
+    if (cc == 99) { r = NrpnRun(); r.ch = ch; r.msb = v; return; }
+    if (cc == 98) { if (r.ch == ch && r.msb >= 0) r.lsb = v; return; }
+    if (cc == 6 || cc == 38) {
+        if (r.ch != ch || r.msb < 0 || r.lsb < 0) return;
+        const int param = r.msb * 128 + r.lsb;
+        if (cc == 6) r.value = v; else r.value = (r.value << 7) | v;
+        for (CcControl* c : panel->controls())
+            if (c->nrpn && c->nrpnNum == param && (cc == 6 ? !c->wide : c->wide)) c->applyMidi(r.value);
+        return;
+    }
+    for (CcControl* c : panel->controls())
+        if (!c->nrpn && !c->isDeco() && c->cc == cc && !c->blocked()) c->applyMidi(v);
 }
 
 // ---- snapshots ---------------------------------------------------------------
@@ -3179,6 +3301,7 @@ void MainWindow::buildInputFilter()
 
     auto cb = [this](const QString& text, bool checked, bool* field, bool sub = true) {
         auto* c = new FilterCheckBox(text);
+        c->setNeutral(true);                     // the general theme: no red/green state colours
         c->setSub(sub);                          // children are sub-filters (dimmer)
         c->setChecked(checked);
         connect(c, &QCheckBox::toggled, this, [field](bool v) { *field = v; });
@@ -3195,6 +3318,7 @@ void MainWindow::buildInputFilter()
                                    QVBoxLayout* body, QList<QWidget*> kids) -> QToolButton* {
         auto* tri = new TriangleButton; tri->setFixedWidth(16);
         auto* mcb = new FilterCheckBox(title);
+        mcb->setNeutral(true);
         mcb->setChecked(checked);
         auto* head = new QHBoxLayout; head->setContentsMargins(0, 0, 0, 0); head->setSpacing(0);
         head->addWidget(tri); head->addWidget(mcb); head->addStretch();

@@ -7,6 +7,7 @@
 // routed to the monitor, the terminal and the uploader in turn.
 
 #pragma once
+class QCheckBox; class QComboBox; class QSpinBox; class QDialog;
 #include <QElapsedTimer>
 #include <QList>
 #include <QPair>
@@ -102,8 +103,16 @@ private:
     // state by id, and the Mod wheel. Stored in the config file with two options.
     struct CtrlSnap { bool used = false; int msb = 0, lsb = 0, program = 1, mod = 0; QMap<int, int> values; };
     QVector<CtrlSnap> ctrlSnaps_;
-    QAction* snapOnlyAct_ = nullptr;    // "Send only changes"
-    QAction* snapModAct_  = nullptr;    // "Snapshot includes Mod"
+    // Preferences window (Config > Preferences...): the ticks live there, as
+    // children of the controller window so they persist with the others.
+    QDialog*   prefsDlg_     = nullptr;
+    QCheckBox* snapOnlyAct_  = nullptr; // "Snapshot Send only changes"
+    QCheckBox* snapModAct_   = nullptr; // "Snapshot includes Mod"
+    QCheckBox* midiInChk_    = nullptr; // "MIDI Input": incoming CC/NRPN drive the surface
+    QCheckBox* omniChk_      = nullptr; // "MIDI Input Omni": ticked = any channel, else one
+    QSpinBox*  inChanSp_     = nullptr; // that channel, 1..16
+    QCheckBox* fwdChk_       = nullptr; // "MIDI Forward": what comes in goes out again
+    void ctrlMidiIn(const adios::Bytes& msg);   // GUI thread, from routeIn
     QWidget* modWheel_ = nullptr;       // the Mod wheel (a .cpp-local class, kept as a QWidget)
     void ctrlStoreSnapshot(int n);
     void ctrlRecallSnapshot(int n);
@@ -179,6 +188,7 @@ private:
         QListWidgetItem* item = nullptr;
     };
     NrpnRun      nrpnIn_, nrpnOut_;
+    NrpnRun      nrpnCtl_;              // an NRPN run arriving for the controller's surface
 
     adios::In   in_;
     adios::Out  out_;
