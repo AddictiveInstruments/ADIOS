@@ -158,6 +158,15 @@ QPushButton#kbChan {
 QPushButton#kbChan:hover   { border-color: #5a8ac8; }
 QPushButton#kbChan:checked { border-color: #5a8ac8; background: #4a7ab8; color: #f2f6fc; }
 
+/* Snapshot cells: the same cell, one size up (26 px instead of 18). */
+QPushButton#snapCell {
+    padding: 0; font-size: 11px;
+    border: 1px solid #3d4757; border-radius: 2px;
+    background: transparent; color: #8a94a6;
+}
+QPushButton#snapCell:hover   { border-color: #5a8ac8; }
+QPushButton#snapCell:checked { border-color: #5a8ac8; background: #4a7ab8; color: #f2f6fc; }
+
 /* Set all / Clear all */
 QPushButton#miniBtn {
     background: transparent; border: 1px solid #3d4757; border-radius: 2px;

@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include <QApplication>
+#include <QScreen>
 #include <QCheckBox>
 #include <QClipboard>
 #include <QCloseEvent>
@@ -277,7 +278,7 @@ protected:
             const int m = allWhite_[scroll_ + i];
             const QRect r(i * KW, 0, KW, h);
             p.setPen(QColor(0xaa, 0xb4, 0xc2));
-            p.setBrush(m == cur_ ? QColor(0x4a, 0x7a, 0xb8) : QColor(0xe9, 0xed, 0xf3));
+            p.setBrush(m == cur_ ? hitColor(false) : QColor(0xe9, 0xed, 0xf3));
             p.drawRoundedRect(QRectF(r).adjusted(0.5, -3, -0.5, -0.5), 3, 3);      // top clipped -> bottom rounded
             if (m % 12 == 0) {                                                     // label each C
                 p.setPen(QColor(0x5a, 0x61, 0x72));
@@ -289,7 +290,7 @@ protected:
             if (!isBlack(bm)) continue;
             const QRect r((i + 1) * KW - BW / 2, 0, BW, bh);
             p.setPen(QColor(0x0c, 0x11, 0x18));
-            p.setBrush(bm == cur_ ? QColor(0x4a, 0x7a, 0xb8) : QColor(0x20, 0x25, 0x2f));
+            p.setBrush(bm == cur_ ? hitColor(true) : QColor(0x20, 0x25, 0x2f));
             p.drawRoundedRect(QRectF(r).adjusted(0.5, -3, -0.5, -0.5), 3, 3);
         }
     }
@@ -309,6 +310,16 @@ private:
             if (QRect(i * KW, 0, KW, h).contains(pt)) return allWhite_[scroll_ + i];
         return -1;
     }
+    // The pressed key lights with its velocity: a soft touch is a pale tint, a hard
+    // one the full accent. The low end stays clearly visible - a press must show.
+    QColor hitColor(bool black) const {
+        const double t = qBound(0, curVel_, 127) / 127.0;
+        const QColor lo = black ? QColor(0x2c, 0x44, 0x66) : QColor(0xb9, 0xcf, 0xe8);
+        const QColor hi = black ? QColor(0x5a, 0x8a, 0xc8) : QColor(0x4a, 0x7a, 0xb8);
+        return QColor(qRound(lo.red()   + (hi.red()   - lo.red())   * t),
+                      qRound(lo.green() + (hi.green() - lo.green()) * t),
+                      qRound(lo.blue()  + (hi.blue()  - lo.blue())  * t));
+    }
     // Velocity from WHERE on the key it was pressed: lower = louder. A few-pixel
     // band at the bottom reaches 127 easily; the top never yields 0 (vel 0 = Note Off).
     int velFromY(int note, int y) const {
@@ -317,10 +328,15 @@ private:
         const double f = qBound(0.0, double(y) / qMax(1, kh - 6), 1.0);
         return 1 + qRound(f * 126);   // 1..127
     }
-    void press(int note, int y) { if (note < 0 || note == cur_) return; release(); cur_ = note; if (onNoteOn) onNoteOn(note, velFromY(note, y)); update(); }
+    void press(int note, int y) {
+        if (note < 0 || note == cur_) return;
+        release(); cur_ = note; curVel_ = velFromY(note, y);   // kept: the highlight is drawn from it
+        if (onNoteOn) onNoteOn(note, curVel_);
+        update();
+    }
     void release() { if (cur_ < 0) return; const int n = cur_; cur_ = -1; if (onNoteOff) onNoteOff(n); update(); }
     QVector<int> allWhite_;
-    int scroll_ = 0, center_ = 0, cur_ = -1;
+    int scroll_ = 0, center_ = 0, cur_ = -1, curVel_ = 0;
 };
 
 // A pitch-bend / modulation wheel: the black cylinder validated in the mock-up,
@@ -332,8 +348,8 @@ class Wheel : public QWidget {
 public:
     enum Type { Pitch, Mod };
     std::function<void(int)> onChange;
-    explicit Wheel(Type t, QWidget* parent = nullptr) : QWidget(parent), type_(t) {
-        setFixedSize(TW, H);
+    explicit Wheel(Type t, int h, QWidget* parent = nullptr) : QWidget(parent), type_(t), h_(h) {
+        setFixedSize(TW, h_);
         val_ = (type_ == Pitch) ? 8192 : 0;
         buildHighlight();
     }
@@ -345,7 +361,7 @@ public:
 protected:
     void paintEvent(QPaintEvent*) override {
         constexpr double PI = 3.14159265358979323846;
-        const double cx = OX + W / 2.0, cy = H / 2.0, R = H / 2.0 - 3.0,
+        const double cx = OX + W / 2.0, cy = h_ / 2.0, R = h_ / 2.0 - 3.0,
                      RX = W / 2.0 - 3.0, MAXRY = W / 2.0 - 3.0;   // margin scaled with width -> same ellipse proportion
         const double STEP = PI / 22.0, SPAN = PI / 2.0 * 0.82, EDGE = PI / 2.0 - 0.03;
         const double roll = (type_ == Pitch) ? (val_ - 8192) / 8192.0 * SPAN
@@ -355,7 +371,7 @@ protected:
         const QPainterPath path = bodyPath();
         p.save();
         p.setClipPath(path);
-        p.fillRect(QRectF(OX, 0, W, H), QColor(0x0b, 0x0d, 0x15));   // blue-black, to match the slate theme
+        p.fillRect(QRectF(OX, 0, W, h_), QColor(0x0b, 0x0d, 0x15));   // blue-black, to match the slate theme
         if (ridges_)
             for (int k = -40; k <= 40; ++k) {                 // surface ridges, bunching toward the ends
                 const double a = (k + 0.5) * STEP + roll;
@@ -370,12 +386,12 @@ protected:
         hg.setColorAt(0.0, QColor(0, 0, 0, 217));  hg.setColorAt(0.24, QColor(0, 0, 0, 20));
         hg.setColorAt(0.5, QColor(0, 0, 0, 0));    hg.setColorAt(0.76, QColor(0, 0, 0, 20));
         hg.setColorAt(1.0, QColor(0, 0, 0, 217));
-        p.fillRect(QRectF(OX, 0, W, H), hg);
+        p.fillRect(QRectF(OX, 0, W, h_), hg);
         p.drawImage(QPointF(OX, 0), highlight_);              // sine-windowed vertical reflet
-        QLinearGradient vg(0, 0, 0, H);                       // extra darkening at the two ends
+        QLinearGradient vg(0, 0, 0, h_);                       // extra darkening at the two ends
         vg.setColorAt(0.0, QColor(0, 0, 0, 230)); vg.setColorAt(0.11, QColor(0, 0, 0, 0));
         vg.setColorAt(0.89, QColor(0, 0, 0, 0));  vg.setColorAt(1.0, QColor(0, 0, 0, 230));
-        p.fillRect(QRectF(OX, 0, W, H), vg);
+        p.fillRect(QRectF(OX, 0, W, h_), vg);
         const double ym = cy - R * std::sin(roll), ry = std::max(1.0, MAXRY * std::cos(roll));
         QLinearGradient mg(0, ym - ry, 0, ym + ry);           // opaque marker, reflet at the bottom
         mg.setColorAt(0.0, QColor(0x06, 0x07, 0x0d)); mg.setColorAt(0.5, QColor(0x0c, 0x0e, 0x17));   // bluer grays (theme)
@@ -393,48 +409,48 @@ protected:
             p.drawRect(QRectF(OX - 1 - len, y - 0.5, len, 1));
             p.drawRect(QRectF(OX + W + 1, y - 0.5, len, 1));
         };
-        if (type_ == Pitch) { tick(cy, 6); tick(CH + 2, 4); tick(H - CH - 2, 4); }   // long tick = rest
-        else                { tick(H - CH - 2, 6); tick(cy, 4); tick(CH + 2, 4); }   // mod rests low
+        if (type_ == Pitch) { tick(cy, 6); tick(CH + 2, 4); tick(h_ - CH - 2, 4); }   // long tick = rest
+        else                { tick(h_ - CH - 2, 6); tick(cy, 4); tick(CH + 2, 4); }   // mod rests low
     }
     void mousePressEvent(QMouseEvent* e) override { pressed_ = true; stopSpring(); fromY(e->position().y()); }
     void mouseMoveEvent(QMouseEvent* e) override  { if (pressed_) fromY(e->position().y()); }
     void mouseReleaseEvent(QMouseEvent*) override { if (!pressed_) return; pressed_ = false; if (type_ == Pitch) startSpring(); }
 
 private:
-    static constexpr int H = 126, W = 22, OX = 8, CH = 8;   // width cut ~1/3 (33->22), ends scaled to match
+    static constexpr int W = 22, OX = 8, CH = 8;   // width cut ~1/3 (33->22), ends scaled to match
 
     QPainterPath bodyPath() const {                           // straight sides, full-width elliptical ends
         const double rx = W / 2.0 - 0.5, ry = CH, cxw = OX + W / 2.0;
         const QRectF topR(cxw - rx, 0.5, 2 * rx, 2 * ry);
-        const QRectF botR(cxw - rx, H - 0.5 - 2 * ry, 2 * rx, 2 * ry);
+        const QRectF botR(cxw - rx, h_ - 0.5 - 2 * ry, 2 * rx, 2 * ry);
         QPainterPath p;
         p.arcMoveTo(topR, 180);
         p.arcTo(topR, 180, -180);                             // left -> top -> right
-        p.lineTo(cxw + rx, H - 0.5 - ry);
+        p.lineTo(cxw + rx, h_ - 0.5 - ry);
         p.arcTo(botR, 0, -180);                               // right -> bottom -> left
         p.closeSubpath();
         return p;
     }
     void buildHighlight() {                                   // built once: it does not move as the wheel rolls
         constexpr double PI = 3.14159265358979323846;
-        highlight_ = QImage(W, H, QImage::Format_ARGB32_Premultiplied);
+        highlight_ = QImage(W, h_, QImage::Format_ARGB32_Premultiplied);
         highlight_.fill(Qt::transparent);
         QPainter g(&highlight_);
         QLinearGradient band(0, 0, W, 0);
         band.setColorAt(0.0, QColor(255, 255, 255, 0)); band.setColorAt(0.5, QColor(255, 255, 255, 43));
         band.setColorAt(1.0, QColor(255, 255, 255, 0));
-        g.fillRect(QRectF(0, 0, W, H), band);
+        g.fillRect(QRectF(0, 0, W, h_), band);
         g.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-        QLinearGradient vmask(0, 0, 0, H);
+        QLinearGradient vmask(0, 0, 0, h_);
         for (int i = 0; i <= 24; ++i) {
             const double q = i / 24.0;
             vmask.setColorAt(q, QColor(0, 0, 0, int(std::lround(255 * std::sin(PI * q)))));
         }
-        g.fillRect(QRectF(0, 0, W, H), vmask);
+        g.fillRect(QRectF(0, 0, W, h_), vmask);
     }
     void quantizeIf() { if (bit7_ && type_ == Pitch) val_ = qBound(0, qRound(val_ / 128.0), 127) * 128; }   // snap to MSB grid
     void fromY(double y) {
-        double t = (y - 9.0) / (H - 18.0);
+        double t = (y - 9.0) / (h_ - 18.0);
         t = std::max(0.0, std::min(1.0, t));
         val_ = (type_ == Pitch) ? int(std::lround((1 - t) * 16383)) : int(std::lround((1 - t) * 127));
         quantizeIf();
@@ -455,6 +471,7 @@ private:
     void stopSpring() { if (spring_) { spring_->stop(); spring_ = nullptr; } }
 
     Type type_;
+    const int h_;                   // height, handed in: the keybed is built on the same figure
     int  val_ = 8192;
     bool ridges_ = true, pressed_ = false, bit7_ = false;
     QImage highlight_;
@@ -1113,7 +1130,10 @@ void CcControl::drawCap(QPainter& p, const QRectF& box, bool down) const
     p.setPen(QPen(QColor(0x0a, 0x0c, 0x10), 1.5)); p.setBrush(Qt::NoBrush);
     p.drawRoundedRect(QRectF(x0, y0, W, H), r, r);
 
-    const bool lit = (val != rmin);                // the LED alone tells momentary from bistable
+    // Only a LATCHED switch carries a LED. A momentary one has no state to show, so
+    // its cap comes out bare - no lens, no hole - and the press reads on the shadow.
+    if (!latching) return;
+    const bool lit = (val != rmin);
     const QPointF lc(x0 + W / 2, y0 + H * PB_LEDY);
     const double lr = PB_LED * k / 2, hr = PB_HOLE * k / 2;
     p.setPen(Qt::NoPen);
@@ -1687,7 +1707,13 @@ void MainWindow::saveSettings()
             if (!a->objectName().isEmpty()) s.setValue("ctrl/" + a->objectName(), a->isChecked());
         for (QCheckBox* c : controllerWin_->findChildren<QCheckBox*>())  // No Note Off
             if (!c->objectName().isEmpty()) s.setValue("ctrl/" + c->objectName(), c->isChecked());
+        for (QSpinBox* sp : controllerWin_->findChildren<QSpinBox*>())   // Bank MSB/LSB, Program
+            if (!sp->objectName().isEmpty()) s.setValue("ctrl/" + sp->objectName(), sp->value());
+        for (QSplitter* sp : controllerWin_->findChildren<QSplitter*>()) // the Bank | surface divider
+            if (!sp->objectName().isEmpty()) s.setValue("ctrl/" + sp->objectName(), sp->saveState());
         s.setValue("ctrl/channel", kbChannel_);
+        if (auto* sg = controllerWin_->findChild<QButtonGroup*>(QStringLiteral("snapGroup")))
+            s.setValue("ctrl/snapshot", sg->checkedId());
         if (ccSurface_) s.setValue("ctrl/surface", static_cast<CcPanel*>(ccSurface_)->saveState());
     }
 
@@ -1964,6 +1990,9 @@ void MainWindow::openController()
 
         auto* col = new QVBoxLayout(controllerWin_);
         col->setContentsMargins(12, 12, 12, 12);   // like the main window's root layout
+        // The window can never be dragged under what its content needs: the layout
+        // minimum is enforced whatever explicit minimum the window may carry.
+        col->setSizeConstraint(QLayout::SetMinimumSize);
         col->setSpacing(0);
         // --- Control Change: a canvas of CC controls ABOVE the keyboard, taking the
         // leftover height. Locked/Grid live in the group header (outside the panel);
@@ -1984,7 +2013,106 @@ void MainWindow::openController()
         connect(ccGrid,   &QCheckBox::toggled, ccPanel, &CcPanel::setGrid);
         ccPanel->onLockChange = [ccLocked](bool on) { ccLocked->setChecked(on); };   // panel menu <-> header case
         ccPanel->onCc = [this](int cc, int v) { sendRaw({ uint8_t(0xB0 | kbChannel_), uint8_t(cc & 0x7f), uint8_t(v & 0x7f) }); };
-        col->addWidget(ccGrp, 1);              // fills the room above the keyboard
+        // --- Bank / Program Change, to the left of the surface -----------------
+        // Bank Select is two controllers, CC0 (MSB) and CC32 (LSB), and they only ARM
+        // a bank: the Program Change that follows is what actually picks the sound.
+        // Hence Send firing the three in that order, and a bank field on its own
+        // merely re-arming.
+        auto* bkGrp  = new QGroupBox(tr("Bank / Program Change"));
+        auto* bkCol  = new QVBoxLayout(bkGrp); bkCol->setContentsMargins(0, 0, 0, 0); bkCol->setSpacing(8);
+        // A GRID, not a form: QFormLayout deliberately tops the label when the field
+        // is taller than it - meant for multi-line fields, and no setLabelAlignment
+        // undoes it. Here each cell states its own vertical centring.
+        auto* bkGrid = new QGridLayout;
+        bkGrid->setContentsMargins(0, 0, 0, 0);
+        bkGrid->setHorizontalSpacing(10); bkGrid->setVerticalSpacing(6);
+        // A tick in front of each: unticked, that message simply does not go out -
+        // green border when it will, red when it will not, the same checkbox as
+        // Locked and Grid. The fields are kept narrow, three digits is all they hold.
+        auto* msbChk = new FilterCheckBox(tr("Bank MSB")); msbChk->setObjectName(QStringLiteral("bankMsbOn"));
+        auto* lsbChk = new FilterCheckBox(tr("Bank LSB")); lsbChk->setObjectName(QStringLiteral("bankLsbOn"));
+        auto* pgmChk = new FilterCheckBox(tr("Program"));  pgmChk->setObjectName(QStringLiteral("programOn"));
+        for (FilterCheckBox* c : { msbChk, lsbChk, pgmChk }) { c->setNeutral(true); c->setChecked(true); }
+        auto* msbSp = new QSpinBox; msbSp->setObjectName(QStringLiteral("bankMsb")); msbSp->setRange(0, 127);
+        auto* lsbSp = new QSpinBox; lsbSp->setObjectName(QStringLiteral("bankLsb")); lsbSp->setRange(0, 127);
+        auto* pgmSp = new QSpinBox; pgmSp->setObjectName(QStringLiteral("program"));
+        pgmSp->setRange(1, 128);                       // shown 1..128, sent 0..127
+        for (QSpinBox* sp : { msbSp, lsbSp, pgmSp }) sp->setFixedWidth(62);
+        auto* sendBtn = new QPushButton(tr("Send"));
+        const Qt::Alignment mid = Qt::AlignLeft | Qt::AlignVCenter;
+        bkGrid->addWidget(msbChk, 0, 0, mid); bkGrid->addWidget(msbSp, 0, 1, mid);   // tick, then its box
+        bkGrid->addWidget(lsbChk, 1, 0, mid); bkGrid->addWidget(lsbSp, 1, 1, mid);
+        bkGrid->addWidget(pgmChk, 2, 0, mid); bkGrid->addWidget(pgmSp, 2, 1, mid);
+        bkCol->addLayout(bkGrid);
+        bkCol->addWidget(sendBtn);
+        bkCol->addStretch();                           // fields stay at the top of the group
+        auto sendBank = [this, msbSp, lsbSp, msbChk, lsbChk] {
+            if (msbChk->isChecked()) sendRaw({ uint8_t(0xb0 | kbChannel_), uint8_t(0),  uint8_t(msbSp->value()) });
+            if (lsbChk->isChecked()) sendRaw({ uint8_t(0xb0 | kbChannel_), uint8_t(32), uint8_t(lsbSp->value()) });
+        };
+        auto sendPgm = [this, pgmSp, pgmChk] {
+            if (pgmChk->isChecked()) sendRaw({ uint8_t(0xc0 | kbChannel_), uint8_t(pgmSp->value() - 1) });
+        };
+        auto armSend = [sendBtn, msbChk, lsbChk, pgmChk] {   // nothing ticked, nothing to send
+            sendBtn->setEnabled(msbChk->isChecked() || lsbChk->isChecked() || pgmChk->isChecked());
+        };
+        for (FilterCheckBox* c : { msbChk, lsbChk, pgmChk })
+            connect(c, &QCheckBox::toggled, controllerWin_, [armSend](bool) { armSend(); });
+        armSend();
+        // An unticked line goes grey: the field it will not send has no business
+        // looking editable.
+        connect(msbChk, &QCheckBox::toggled, msbSp, &QWidget::setEnabled);
+        connect(lsbChk, &QCheckBox::toggled, lsbSp, &QWidget::setEnabled);
+        connect(pgmChk, &QCheckBox::toggled, pgmSp, &QWidget::setEnabled);
+        // Turning a field sends NOTHING: Send is the only thing that puts bytes on
+        // the wire, and the ticks arm what it will carry.
+        connect(sendBtn, &QPushButton::clicked, controllerWin_, [sendBank, sendPgm] { sendBank(); sendPgm(); });
+
+        // A splitter rather than a fixed width: the two groups share the room and the
+        // user decides where the line sits. Only the surface grows with the window.
+        // --- Snapshot: 4 x 16 cells, the channel cells one size up -------------
+        // Four columns rather than sixteen: this side of the splitter is the narrow
+        // one, a row of sixteen would have pushed the surface out of the window.
+        auto* snapGrp  = new QGroupBox(tr("Snapshot"));
+        auto* snapCol  = new QVBoxLayout(snapGrp); snapCol->setContentsMargins(0, 0, 0, 0); snapCol->setSpacing(0);
+        auto* snapGrid = new QGridLayout; snapGrid->setContentsMargins(0, 0, 0, 0); snapGrid->setSpacing(4);
+        auto* snapGroup = new QButtonGroup(controllerWin_);
+        snapGroup->setObjectName(QStringLiteral("snapGroup"));
+        for (int i = 0; i < 64; ++i) {
+            auto* b = new QPushButton(QString::number(i + 1));
+            b->setObjectName(QStringLiteral("snapCell"));
+            b->setCheckable(true);
+            b->setFixedSize(26, 26);                   // 18x18 for a channel cell, 26 here
+            snapGroup->addButton(b, i);
+            snapGrid->addWidget(b, i / 4, i % 4);
+        }
+        auto* snapHost = new QWidget;                  // the grid rides inside the scroll area
+        auto* snapHostLay = new QVBoxLayout(snapHost);
+        snapHostLay->setContentsMargins(0, 0, 0, 0); snapHostLay->setSpacing(0);
+        snapHostLay->addLayout(snapGrid);
+        snapHostLay->addStretch();
+        auto* snapScroll = new QScrollArea;
+        snapScroll->setWidget(snapHost);
+        snapScroll->setWidgetResizable(true);
+        snapScroll->setFrameShape(QFrame::NoFrame);
+        snapScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);   // four columns, never more
+        snapScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        snapCol->addWidget(snapScroll, 1);
+
+        auto* leftCol = new QWidget;                   // the two groups share the left side
+        auto* leftLay = new QVBoxLayout(leftCol);
+        leftLay->setContentsMargins(0, 0, 0, 0); leftLay->setSpacing(10);
+        leftLay->addWidget(bkGrp);
+        leftLay->addWidget(snapGrp, 1);
+        // Static column, and no wider than its content asks for: Fixed means the
+        // layout hands it exactly its size hint, and every spare pixel goes to the
+        // surface. The splitter is gone with it.
+        leftCol->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+        auto* topRow = new QHBoxLayout;
+        topRow->setContentsMargins(0, 0, 0, 0); topRow->setSpacing(10);
+        topRow->addWidget(leftCol);
+        topRow->addWidget(ccGrp, 1);
+        col->addLayout(topRow, 1);             // fills the room above the keyboard
         col->addSpacing(10);
 
         auto* grp = new QGroupBox(tr("MIDI Keyboard"));
@@ -2015,13 +2143,20 @@ void MainWindow::openController()
         gl->addLayout(chRow);
         gl->addSpacing(TOP_GAP);
 
-        auto* keybed = new QWidget; keybed->setFixedHeight(4);   // thin accent strip above the keys
+        // The strip and its gap are named because Left Hand mirrors them: a wheel runs
+        // from the TOP of the strip to the BOTTOM of the white keys.
+        const int STRIP_H = 4, STRIP_GAP = 2;
+        auto* keybed = new QWidget; keybed->setFixedHeight(STRIP_H);   // thin accent strip above the keys
         keybed->setStyleSheet("background:#4a7ab8; border-radius:2px;");
         gl->addWidget(keybed);
-        gl->addSpacing(2);
+        gl->addSpacing(STRIP_GAP);
 
+        // 112 is a PHYSICAL height - the way the author measures it, with a ruler on
+        // a screen shot - so it is divided by the display scaling: 112 on screen at
+        // 100 % and at 125 % alike. Keys and wheels are built on this one figure.
+        const int keyH = qRound(112.0 / QGuiApplication::primaryScreen()->devicePixelRatio());
         auto* kb = new PianoKeyboard;
-        kb->setFixedHeight(120);
+        kb->setFixedHeight(keyH);
         gl->addWidget(kb);
 
         gl->addSpacing(10);                    // gap: the scrollbar sits away from the keys
@@ -2063,14 +2198,19 @@ void MainWindow::openController()
             l->setAlignment(Qt::AlignCenter); l->setFixedSize(Wheel::TW, h); return l;
         };
         auto* labRow = new QHBoxLayout; labRow->setContentsMargins(0, 0, 0, 0); labRow->setSpacing(WHEEL_GAP);
-        auto* lblBend = mkCentered(tr("Bend"), "wheelLbl", 18);      // 18 = the Channel row height
-        auto* lblMod  = mkCentered(tr("Mod"),  "wheelLbl", 18);
+        // Row for row with the keyboard group: the labels take the Channel row's own
+        // height, the wheels span strip + gap + keys, the values sit in a row the
+        // height of the scrollbar's.
+        const int chH = chRow->sizeHint().height();
+        auto* lblBend = mkCentered(tr("Bend"), "wheelLbl", chH);
+        auto* lblMod  = mkCentered(tr("Mod"),  "wheelLbl", chH);
         labRow->addWidget(lblBend); labRow->addWidget(lblMod);
         lgl->addLayout(labRow);
         lgl->addSpacing(TOP_GAP);
         auto* whRow = new QHBoxLayout; whRow->setContentsMargins(0, 0, 0, 0); whRow->setSpacing(WHEEL_GAP);
-        auto* pitch = new Wheel(Wheel::Pitch);   // 49 x 126, top aligns with the blue strip
-        auto* mod   = new Wheel(Wheel::Mod);
+        const int wheelH = STRIP_H + STRIP_GAP + keyH;  // top of the strip to the foot of the keys
+        auto* pitch = new Wheel(Wheel::Pitch, wheelH);
+        auto* mod   = new Wheel(Wheel::Mod, wheelH);
         whRow->addWidget(pitch); whRow->addWidget(mod);
         lgl->addLayout(whRow);
         lgl->addSpacing(10);
@@ -2097,6 +2237,16 @@ void MainWindow::openController()
 
         // Menu bar: Config (presets later), Edit, View. A plain QWidget has no
         // native menu bar, so the layout hosts it - same trick as the main window.
+        // Floors, so the window cannot be dragged shorter than what these can draw:
+        // squashed to a band, a surface shows the top of its knobs and nothing else.
+        // A hidden group is ignored by the layout, so masking one still frees its room.
+        ccGrp->setMinimumHeight(160);
+        snapGrp->setMinimumHeight(140);
+        // Nothing to freeze down here: the keybed is setFixedHeight(120), the strip
+        // and the scrollbar row are fixed too, and a wheel is setFixedSize - both
+        // groups already take their height from their content and never stretch.
+        // Pinning them again only carved whatever height they happened to have.
+
         auto* mb = new QMenuBar(controllerWin_);
         mb->addMenu(tr("Config"));                       // empty for now (Control Change presets)
         auto* editMenu = mb->addMenu(tr("Edit"));
@@ -2105,10 +2255,49 @@ void MainWindow::openController()
         // --- View: Reset Layout (top) then the Left Hand toggles ---
         auto* resetAct = view->addAction(tr("Reset Layout"));
         view->addSeparator();
-        auto* lh = new StayOpenMenu(tr("Left Hand"), view); view->addMenu(lh);   // StayOpen: toggles don't close it
         auto addToggle = [](QMenu* m, const QString& t, const char* obj, bool on) {
             auto* a = m->addAction(t); a->setObjectName(obj); a->setCheckable(true); a->setChecked(on); return a;
         };
+        // One sub-menu per group, in the order they sit on screen. Hiding both groups
+        // of the left column empties it, and the surface takes the whole width.
+        // With the three top groups hidden there is nothing left that WANTS height -
+        // only the keyboard, which has a fixed one. The window then snaps to that
+        // height and refuses to be stretched vertically, instead of being draggable
+        // over an empty band. The height it had is kept in a property, and handed
+        // back the moment a group returns.
+        auto fitToKeyboard = [this, bkGrp, snapGrp, ccGrp] {
+            if (!controllerWin_ || !controllerWin_->layout()) return;
+            // isHidden(), NOT isVisible(): before the window is shown, isVisible() is
+            // false for every child, hidden or not - and the toggles restored from the
+            // settings fire exactly then. With a group saved hidden, the window came up
+            // with its maximum locked, and could never be dragged taller.
+            const bool any = !bkGrp->isHidden() || !snapGrp->isHidden() || !ccGrp->isHidden();
+            // Only the MAXIMUM is ever touched: an explicit minimum on the window would
+            // override the one the layout computes, and let the window be dragged under
+            // its content - which is exactly how the groups came to overlap once.
+            controllerWin_->setMaximumHeight(QWIDGETSIZE_MAX);      // unlock before measuring
+            if (!any) {
+                if (!controllerWin_->property("freeH").isValid())
+                    controllerWin_->setProperty("freeH", controllerWin_->height());
+                controllerWin_->layout()->activate();               // the hide must be accounted for
+                const int h = controllerWin_->sizeHint().height();
+                controllerWin_->resize(controllerWin_->width(), h);
+                controllerWin_->setMaximumHeight(h);                // locked: min (layout) == max
+            } else if (const QVariant fh = controllerWin_->property("freeH"); fh.isValid()) {
+                controllerWin_->resize(controllerWin_->width(), fh.toInt());
+                controllerWin_->setProperty("freeH", QVariant());
+            }
+        };
+        auto* bpmM = new StayOpenMenu(tr("Bank/Program Change"), view); view->addMenu(bpmM);
+        connect(addToggle(bpmM, tr("Show"), "bpmShow", true), &QAction::toggled, controllerWin_,
+                [bkGrp, fitToKeyboard](bool on) { bkGrp->setVisible(on); fitToKeyboard(); });
+        auto* snapM = new StayOpenMenu(tr("Snapshot"), view); view->addMenu(snapM);
+        connect(addToggle(snapM, tr("Show"), "snapShow", true), &QAction::toggled, controllerWin_,
+                [snapGrp, fitToKeyboard](bool on) { snapGrp->setVisible(on); fitToKeyboard(); });
+        auto* ccM = new StayOpenMenu(tr("Control Change"), view); view->addMenu(ccM);
+        connect(addToggle(ccM, tr("Show"), "ccShow", true), &QAction::toggled, controllerWin_,
+                [ccGrp, fitToKeyboard](bool on) { ccGrp->setVisible(on); fitToKeyboard(); });
+        auto* lh = new StayOpenMenu(tr("Left Hand"), view); view->addMenu(lh);   // StayOpen: toggles don't close it
         auto* aShow = addToggle(lh, tr("Show"), "lhShow", true);
         connect(aShow, &QAction::toggled, lhGrp, &QWidget::setVisible);
         auto* aStripped = addToggle(lh, tr("Stripped"), "lhStripped", true);
@@ -2192,7 +2381,20 @@ void MainWindow::openController()
             const QVariant v = cs.value("ctrl/" + c->objectName());
             if (v.isValid()) c->setChecked(v.toBool());
         }
+        for (QSpinBox* sp : controllerWin_->findChildren<QSpinBox*>()) {
+            if (sp->objectName().isEmpty()) continue;
+            const QVariant v = cs.value("ctrl/" + sp->objectName());
+            if (!v.isValid()) continue;
+            const QSignalBlocker block(sp);              // no signal storm while restoring
+            sp->setValue(v.toInt());
+        }
+        for (QSplitter* sp : controllerWin_->findChildren<QSplitter*>()) {
+            if (sp->objectName().isEmpty()) continue;
+            const QByteArray st = cs.value("ctrl/" + sp->objectName()).toByteArray();
+            if (!st.isEmpty()) sp->restoreState(st);
+        }
         if (auto* b = chGroup->button(cs.value("ctrl/channel", 0).toInt())) b->setChecked(true);
+        if (auto* b = snapGroup->button(cs.value("ctrl/snapshot", 0).toInt())) b->setChecked(true);
         ccSurface_ = ccPanel;                                // for saveSettings
         if (const QByteArray surf = cs.value("ctrl/surface").toByteArray(); !surf.isEmpty())
             ccPanel->loadState(surf);                        // bring the whole surface back
