@@ -22,6 +22,12 @@ if errorlevel 1 ( echo Visual Studio 2022 not found at "%VS%" & exit /b 1 )
   -DCMAKE_BUILD_TYPE=Release
 if errorlevel 1 exit /b 1
 
+REM Windows locks a running exe against being OVERWRITTEN, but not against being
+REM RENAMED: move the previous binary aside so the link succeeds even while ADIOS
+REM Studio is open - the running instance keeps the file it was started from.
+if exist build-gui\adios_studio.old.exe del /q build-gui\adios_studio.old.exe >nul 2>&1
+if exist build-gui\adios_studio.exe ren build-gui\adios_studio.exe adios_studio.old.exe >nul 2>&1
+
 "%CMAKE%" --build build-gui
 if errorlevel 1 exit /b 1
 
