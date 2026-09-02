@@ -164,6 +164,7 @@ QPushButton#snapCell {
     border: 1px solid #3d4757; border-radius: 2px;
     background: transparent; color: #8a94a6;
 }
+QPushButton#snapCell[used="true"] { color: #dfe4ec; border-color: #5a8ac8; }   /* holds a snapshot: blue frame */
 QPushButton#snapCell:hover   { border-color: #5a8ac8; }
 QPushButton#snapCell:checked { border-color: #5a8ac8; background: #4a7ab8; color: #f2f6fc; }
 

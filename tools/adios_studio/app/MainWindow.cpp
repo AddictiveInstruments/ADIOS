@@ -18,6 +18,7 @@
 #include <QMessageBox>
 #include <QDir>
 #include <QStandardPaths>
+#include <QStyle>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QFontMetrics>
@@ -360,6 +361,12 @@ public:
         buildHighlight();
     }
     int  value() const { return val_; }
+    void setValue(int v, bool notify) {            // snapshot recall lands here
+        stopSpring();
+        val_ = (type_ == Pitch) ? qBound(0, v, 16383) : qBound(0, v, 127);
+        update();
+        if (notify && onChange) onChange(val_);
+    }
     void setRidges(bool on) { ridges_ = on; update(); }
     void set7bit(bool on) { bit7_ = on; quantizeIf(); update(); }   // Pitch: coarse 7-bit (LSB 0); no MIDI on mode change
     static constexpr int TW = 38;   // total widget width (narrow body + tick margins)
@@ -527,6 +534,10 @@ public:
         for (const QString& t : raw) { const QString v = t.trimmed(); if (!v.isEmpty()) out << v; }
         return out;
     }
+    // What a snapshot keeps of this control - the knob's value, the switch's
+    // detent, the button's on/off - and how it is put back, sent or not.
+    int  stateValue() const { return kind == SliderSwitch ? posIdx : val; }
+    void applyState(int v, bool send);
     int     posCount() const { return qBound(2, positions, 8); }
     QString nameAt(int i) const { const QStringList l = splitCsv(posNames); return i < l.size() ? l.at(i) : QString(); }
     int     valueAt(int i) const {                 // explicit value if given, else spread over 0..127
@@ -668,6 +679,7 @@ public:
     int  nextId() const { return nextId_; }
     void setNextId(int n) { nextId_ = qMax(nextId_, n); }
     bool gridOn() const { return gridOn_; }
+    const QList<CcControl*>& controls() const { return controls_; }
     std::function<void()> onEdited;               // a REAL change to the surface (config goes dirty)
     void addControl(CcControl::Kind k, QPoint at) {
         auto* c = new CcControl(this);
@@ -1244,6 +1256,16 @@ void CcControl::drawStem(QPainter& p, QPointF at) const
 }
 // Locked switch: nearest detent to the cursor, sent as soon as it changes. Press
 // and drag both land here, so the switch follows the mouse like a fader does.
+void CcControl::applyState(int v, bool send)
+{
+    if (isDeco()) return;
+    if (kind == SliderSwitch) { posIdx = qBound(0, v, posCount() - 1); val = valueAt(posIdx); }
+    else if (kind == PushSwitch) { val = (v == rmax) ? rmax : rmin; }
+    else { val = qBound(qMin(rmin, rmax), v, qMax(rmin, rmax)); }
+    update();
+    if (!send) return;
+    panel_->emitCc(cc, kind == Knob ? midiOf(val) : qBound(0, val, 127));
+}
 void CcControl::setPosFromY(int y)
 {
     const SwLayout l = swLayout();
@@ -2071,7 +2093,7 @@ void MainWindow::openController()
         auto* pgmSp = new QSpinBox; pgmSp->setObjectName(QStringLiteral("program"));
         pgmSp->setRange(1, 128);                       // shown 1..128, sent 0..127
         for (QSpinBox* sp : { msbSp, lsbSp, pgmSp }) sp->setFixedWidth(62);
-        auto* sendBtn = new QPushButton(tr("Send"));
+        auto* sendBtn = new QPushButton(tr("Send")); sendBtn->setObjectName(QStringLiteral("bankSend"));
         const Qt::Alignment mid = Qt::AlignLeft | Qt::AlignVCenter;
         bkGrid->addWidget(msbChk, 0, 0, mid); bkGrid->addWidget(msbSp, 0, 1, mid);   // tick, then its box
         bkGrid->addWidget(lsbChk, 1, 0, mid); bkGrid->addWidget(lsbSp, 1, 1, mid);
@@ -2118,7 +2140,21 @@ void MainWindow::openController()
             b->setFixedSize(26, 26);                   // 18x18 for a channel cell, 26 here
             snapGroup->addButton(b, i);
             snapGrid->addWidget(b, i / 4, i % 4);
+            b->setContextMenuPolicy(Qt::CustomContextMenu);
+            connect(b, &QWidget::customContextMenuRequested, this, [this, b, i](QPoint at) {
+                QMenu m(b);
+                QAction* st = m.addAction(tr("Store"));
+                QAction* cl = m.addAction(tr("Clear"));     cl->setEnabled(ctrlSnaps_.value(i).used);
+                m.addSeparator();
+                QAction* ca = m.addAction(tr("Clear All"));
+                QAction* chosen = m.exec(b->mapToGlobal(at));
+                if (chosen == st) ctrlStoreSnapshot(i);
+                else if (chosen == cl) ctrlClearSnapshot(i);
+                else if (chosen == ca) ctrlClearAllSnapshots();
+            });
         }
+        ctrlSnaps_ = QVector<CtrlSnap>(64);
+        connect(snapGroup, &QButtonGroup::idClicked, this, [this](int n) { ctrlRecallSnapshot(n); });
         auto* snapHost = new QWidget;                  // the grid rides inside the scroll area
         auto* snapHostLay = new QVBoxLayout(snapHost);
         snapHostLay->setContentsMargins(0, 0, 0, 0); snapHostLay->setSpacing(0);
@@ -2244,7 +2280,7 @@ void MainWindow::openController()
         auto* whRow = new QHBoxLayout; whRow->setContentsMargins(0, 0, 0, 0); whRow->setSpacing(WHEEL_GAP);
         const int wheelH = STRIP_H + STRIP_GAP + keyH;  // top of the strip to the foot of the keys
         auto* pitch = new Wheel(Wheel::Pitch, wheelH);
-        auto* mod   = new Wheel(Wheel::Mod, wheelH);
+        auto* mod   = new Wheel(Wheel::Mod, wheelH); modWheel_ = mod;   // reachable by the snapshot code
         whRow->addWidget(pitch); whRow->addWidget(mod);
         lgl->addLayout(whRow);
         lgl->addSpacing(10);
@@ -2290,6 +2326,11 @@ void MainWindow::openController()
         auto* cfgAs   = cfgMenu->addAction(tr("Save As...")); cfgAs->setShortcut(QKeySequence::SaveAs);
         cfgMenu->addSeparator();
         ctrlRecentMenu_ = cfgMenu->addMenu(tr("Recent"));
+        cfgMenu->addSeparator();
+        snapOnlyAct_ = cfgMenu->addAction(tr("Send only changes"));   snapOnlyAct_->setCheckable(true); snapOnlyAct_->setChecked(true);
+        snapModAct_  = cfgMenu->addAction(tr("Snapshot includes Mod")); snapModAct_->setCheckable(true); snapModAct_->setChecked(false);
+        connect(snapOnlyAct_, &QAction::toggled, this, [this](bool) { ctrlSetDirty(true); });
+        connect(snapModAct_,  &QAction::toggled, this, [this](bool) { ctrlSetDirty(true); });
         connect(cfgNew,  &QAction::triggered, this, [this] { ctrlNewConfig(); });
         connect(cfgOpen, &QAction::triggered, this, [this] { ctrlOpenConfig(); });
         connect(cfgSave, &QAction::triggered, this, [this] { ctrlSaveConfig(false); });
@@ -2560,8 +2601,22 @@ bool MainWindow::ctrlWriteConfig(const QString& path)
     }
     x.writeEndElement();
 
-    x.writeStartElement("snapshots");                     // filled in by the next step
-    x.writeAttribute("sendOnlyChanges", "1"); x.writeAttribute("includeMod", "0");
+    x.writeStartElement("snapshots");
+    x.writeAttribute("sendOnlyChanges", b01(snapOnlyAct_ && snapOnlyAct_->isChecked()));
+    x.writeAttribute("includeMod",      b01(snapModAct_  && snapModAct_->isChecked()));
+    for (int i = 0; i < ctrlSnaps_.size(); ++i) {
+        const CtrlSnap& sn = ctrlSnaps_[i];
+        if (!sn.used) continue;
+        x.writeStartElement("snapshot"); x.writeAttribute("n", num(i + 1));
+        x.writeStartElement("bank");
+        x.writeAttribute("msb", num(sn.msb)); x.writeAttribute("lsb", num(sn.lsb)); x.writeAttribute("program", num(sn.program));
+        x.writeEndElement();
+        for (auto it = sn.values.cbegin(); it != sn.values.cend(); ++it) {
+            x.writeStartElement("v"); x.writeAttribute("id", num(it.key())); x.writeAttribute("value", num(it.value())); x.writeEndElement();
+        }
+        x.writeStartElement("mod"); x.writeAttribute("value", num(sn.mod)); x.writeEndElement();
+        x.writeEndElement();
+    }
     x.writeEndElement();
 
     x.writeEndElement();
@@ -2600,12 +2655,29 @@ bool MainWindow::ctrlLoadXml(const QString& path)
     int nextId = 1;
     bool gridOn = true, seenSurface = false;
     QSize win;
+    QVector<CtrlSnap> snaps(64);
+    int inSnap = -1;                                      // index of the <snapshot> being read
+    bool onlyChanges = true, includeMod = false;
 
     while (!x.atEnd()) {
-        if (x.readNext() != QXmlStreamReader::StartElement) continue;
+        const auto tok = x.readNext();
+        if (tok == QXmlStreamReader::EndElement && x.name() == QLatin1String("snapshot")) { inSnap = -1; continue; }
+        if (tok != QXmlStreamReader::StartElement) continue;
         const QString tag = x.name().toString();
         const QXmlStreamAttributes a = x.attributes();
         if (tag == QLatin1String("adios-controller")) continue;
+        if (tag == QLatin1String("snapshots")) { onlyChanges = attrBool(a, "sendOnlyChanges", true); includeMod = attrBool(a, "includeMod", false); continue; }
+        if (tag == QLatin1String("snapshot")) {
+            inSnap = attrInt(a, "n", 0) - 1;
+            if (inSnap >= 0 && inSnap < 64) snaps[inSnap].used = true; else inSnap = -1;
+            continue;
+        }
+        if (inSnap >= 0) {                                // inside a snapshot: its bank, values, mod
+            if (tag == QLatin1String("bank")) { snaps[inSnap].msb = attrInt(a, "msb", 0); snaps[inSnap].lsb = attrInt(a, "lsb", 0); snaps[inSnap].program = attrInt(a, "program", 1); }
+            else if (tag == QLatin1String("v")) snaps[inSnap].values.insert(attrInt(a, "id", 0), attrInt(a, "value", 0));
+            else if (tag == QLatin1String("mod")) snaps[inSnap].mod = attrInt(a, "value", 0);
+            continue;
+        }
         if (tag == QLatin1String("window")) { win = QSize(attrInt(a, "w", 0), attrInt(a, "h", 0)); continue; }
         if (tag == QLatin1String("view")) {
             for (QAction* act : controllerWin_->findChildren<QAction*>())
@@ -2627,7 +2699,6 @@ bool MainWindow::ctrlLoadXml(const QString& path)
             continue;
         }
         if (tag == QLatin1String("surface")) { seenSurface = true; gridOn = attrBool(a, "grid", true); nextId = attrInt(a, "nextId", 1); continue; }
-        if (tag == QLatin1String("snapshots") || tag == QLatin1String("snapshot")) continue;   // next step
         CcPanel::Desc d;
         d.cc = 1; d.rmin = 0; d.rmax = 127; d.def = 0; d.val = 0; d.absolute = false;
         if      (tag == QLatin1String("knob"))   d.kind = CcControl::Knob;
@@ -2656,6 +2727,10 @@ bool MainWindow::ctrlLoadXml(const QString& path)
         if (auto* g = controllerWin_->findChild<QCheckBox*>(QStringLiteral("ccGrid"))) g->setChecked(gridOn);
     }
     if (win.isValid() && win.width() > 0 && win.height() > 0) controllerWin_->resize(win);
+    ctrlSnaps_ = snaps;
+    if (snapOnlyAct_) snapOnlyAct_->setChecked(onlyChanges);
+    if (snapModAct_)  snapModAct_->setChecked(includeMod);
+    ctrlRefreshSnapCells();
     return true;
 }
 
@@ -2686,9 +2761,99 @@ void MainWindow::ctrlNewConfig()
     setSpin("bankMsb", 0); setSpin("bankLsb", 0); setSpin("program", 1);   // program shows 1 = sends 0
     for (const char* n : { "bankMsbOn", "bankLsbOn", "programOn" })
         if (auto* c = controllerWin_->findChild<QCheckBox*>(QLatin1String(n))) c->setChecked(false);
+    ctrlSnaps_ = QVector<CtrlSnap>(64);
+    ctrlRefreshSnapCells();
+    if (snapOnlyAct_) snapOnlyAct_->setChecked(true);
+    if (snapModAct_)  snapModAct_->setChecked(false);
     ctrlConfigPath_.clear();
     ctrlDirty_ = false;
     ctrlUpdateTitle();
+}
+
+// ---- snapshots ---------------------------------------------------------------
+void MainWindow::ctrlRefreshSnapCells()
+{
+    auto* g = controllerWin_ ? controllerWin_->findChild<QButtonGroup*>(QStringLiteral("snapGroup")) : nullptr;
+    if (!g) return;
+    for (QAbstractButton* b : g->buttons()) {
+        const bool used = ctrlSnaps_.value(g->id(b)).used;
+        if (b->property("used").toBool() == used && b->property("used").isValid()) continue;
+        b->setProperty("used", used);                     // the stylesheet keys on it
+        b->style()->unpolish(b); b->style()->polish(b);
+    }
+}
+
+void MainWindow::ctrlStoreSnapshot(int n)
+{
+    if (!controllerWin_ || !ccSurface_ || n < 0 || n >= ctrlSnaps_.size()) return;
+    auto spin = [this](const char* k) { auto* s = controllerWin_->findChild<QSpinBox*>(QLatin1String(k)); return s ? s->value() : 0; };
+    CtrlSnap sn;
+    sn.used = true;
+    sn.msb = spin("bankMsb"); sn.lsb = spin("bankLsb"); sn.program = spin("program");
+    for (CcControl* c : static_cast<CcPanel*>(ccSurface_)->controls())
+        if (!c->isDeco()) sn.values.insert(c->id, c->stateValue());
+    if (modWheel_) sn.mod = static_cast<Wheel*>(modWheel_)->value();
+    ctrlSnaps_[n] = sn;
+    if (auto* g = controllerWin_->findChild<QButtonGroup*>(QStringLiteral("snapGroup")))
+        if (auto* b = g->button(n)) b->setChecked(true);
+    ctrlRefreshSnapCells();
+    ctrlSetDirty(true);
+}
+
+void MainWindow::ctrlClearSnapshot(int n)
+{
+    if (n < 0 || n >= ctrlSnaps_.size() || !ctrlSnaps_[n].used) return;
+    ctrlSnaps_[n] = CtrlSnap();
+    ctrlRefreshSnapCells();
+    ctrlSetDirty(true);
+}
+
+void MainWindow::ctrlClearAllSnapshots()
+{
+    bool any = false;
+    for (const CtrlSnap& s : ctrlSnaps_) any = any || s.used;
+    if (!any) return;
+    if (QMessageBox::question(controllerWin_, tr("Clear All"), tr("Clear all 64 snapshots?")) != QMessageBox::Yes) return;
+    ctrlSnaps_ = QVector<CtrlSnap>(64);
+    ctrlRefreshSnapCells();
+    ctrlSetDirty(true);
+}
+
+// Recall: the screen AND the wire, in the agreed order - Bank/Program, then the
+// surface, then Mod if the option says so. With "Send only changes" a value equal
+// to what is already there is not sent again.
+void MainWindow::ctrlRecallSnapshot(int n)
+{
+    if (!controllerWin_ || !ccSurface_ || n < 0 || n >= ctrlSnaps_.size()) return;
+    const CtrlSnap& sn = ctrlSnaps_[n];
+    if (!sn.used) return;                                 // an empty cell only selects
+    const bool onlyChanges = snapOnlyAct_ && snapOnlyAct_->isChecked();
+
+    // 1. Bank / Program: the fields take the values, Send does the sending - so the
+    //    ticks decide what goes out, as they do for a hand-pressed Send.
+    bool bankChanged = false;
+    auto setSpin = [this, &bankChanged](const char* k, int v) {
+        auto* s = controllerWin_->findChild<QSpinBox*>(QLatin1String(k));
+        if (!s) return;
+        if (s->value() != v) { const QSignalBlocker b(s); s->setValue(v); bankChanged = true; }
+    };
+    setSpin("bankMsb", sn.msb); setSpin("bankLsb", sn.lsb); setSpin("program", sn.program);
+    if (bankChanged || !onlyChanges)
+        if (auto* btn = controllerWin_->findChild<QPushButton*>(QStringLiteral("bankSend")); btn && btn->isEnabled()) btn->click();
+
+    // 2. The surface, object by object, by id.
+    for (CcControl* c : static_cast<CcPanel*>(ccSurface_)->controls()) {
+        if (c->isDeco() || !sn.values.contains(c->id)) continue;
+        const int v = sn.values.value(c->id);
+        const bool changed = (c->stateValue() != v);
+        c->applyState(v, changed || !onlyChanges);
+    }
+
+    // 3. Mod, optional.
+    if (snapModAct_ && snapModAct_->isChecked() && modWheel_) {
+        auto* w = static_cast<Wheel*>(modWheel_);
+        if (w->value() != sn.mod || !onlyChanges) w->setValue(sn.mod, true);
+    }
 }
 
 void MainWindow::ctrlOpenConfig(const QString& given)

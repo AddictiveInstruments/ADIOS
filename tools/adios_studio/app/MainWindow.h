@@ -97,6 +97,19 @@ private:
     void ctrlUpdateTitle();
     void ctrlAddRecent(const QString& path);
     void ctrlRebuildRecent();
+
+    // Snapshots: 64 slots, each a picture of Bank/Program, every surface object's
+    // state by id, and the Mod wheel. Stored in the config file with two options.
+    struct CtrlSnap { bool used = false; int msb = 0, lsb = 0, program = 1, mod = 0; QMap<int, int> values; };
+    QVector<CtrlSnap> ctrlSnaps_;
+    QAction* snapOnlyAct_ = nullptr;    // "Send only changes"
+    QAction* snapModAct_  = nullptr;    // "Snapshot includes Mod"
+    QWidget* modWheel_ = nullptr;       // the Mod wheel (a .cpp-local class, kept as a QWidget)
+    void ctrlStoreSnapshot(int n);
+    void ctrlRecallSnapshot(int n);
+    void ctrlClearSnapshot(int n);
+    void ctrlClearAllSnapshots();
+    void ctrlRefreshSnapCells();
     int      kbChannel_ = 0;            // keyboard MIDI TX channel (0..15)
     QString nowStamp();
 
