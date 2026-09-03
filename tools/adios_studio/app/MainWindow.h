@@ -113,8 +113,40 @@ private:
 
     // Snapshots: 64 slots, each a picture of Bank/Program, every surface object's
     // state by id, and the Mod wheel. Stored in the config file with two options.
-    struct CtrlSnap { bool used = false; int msb = 0, lsb = 0, program = 1, mod = 0; QMap<int, int> values; };
+    struct CtrlSnap {
+        bool used = false;
+        int msb = 0, lsb = 0, program = 1, mod = 0;
+        QMap<int, int> values;
+        // The trigger address is WIRING, not content: it survives Clear and Clear All,
+        // and only New config wipes it. -1 = none.
+        int trigCh = -1, trigNote = -1;
+        bool hasTrigger() const { return trigCh >= 0 && trigNote >= 0; }
+    };
     QVector<CtrlSnap> ctrlSnaps_;
+    // ---- Snapshot MIDI triggers ------------------------------------------------
+    // A cell listens to a CHANNEL and a NOTE. Those notes reach it either through a
+    // port of its own - strictly for this, never monitored, never forwarded, never
+    // seen by the uploader - or, when there is none, through the main input. They do
+    // NOT depend on "MIDI Input": these have their own switch.
+    QCheckBox* snapTrigChk_ = nullptr;   // "Use MIDI Triggers", the master switch
+    QCheckBox* snapAuxChk_  = nullptr;   // "Use Auxiliary Input Port"
+    QComboBox* snapPortBox_ = nullptr;   // that port; the main input is greyed out in the list
+    QCheckBox* snapOmniChk_ = nullptr;
+    QSpinBox*  snapChanSp_  = nullptr;
+    adios::In  snapIn_;                            // the auxiliary port itself
+    std::mutex snapMx_;
+    std::vector<adios::Bytes> snapQueue_;          // filled on ITS thread, drained by onTick
+    void ctrlFillSnapPorts();                      // rebuild the list, grey the main input
+    void ctrlGreyMainPorts();                      // and grey the trigger port in Studio's own
+    void ctrlOpenSnapPort();                       // open or close it to match the settings
+    void ctrlSnapTrigger(const adios::Bytes& msg); // GUI thread: match an address, recall
+    void ctrlEditSnapshot(int n);                  // right-click > Parameters...
+    // MIDI Learn. Armed by a dialog, disarmed by the FIRST message that is both valid
+    // and not already taken - the hook returns true only then, and an address already
+    // in use is simply ignored so the button stays lit and the wait goes on.
+    std::function<bool(const adios::Bytes&)> learnHook_;
+    bool learnFromAux_ = false;                    // which source that hook listens to
+    bool ctrlLearnEat(const adios::Bytes& msg, bool aux);
     // Found once, at build time. These sit on the path every incoming message walks,
     // and findChild() rescans the whole window each time it is called.
     QButtonGroup* snapGroup_  = nullptr;

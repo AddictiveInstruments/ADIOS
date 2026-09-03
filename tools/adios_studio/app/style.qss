@@ -198,6 +198,10 @@ QPushButton#snapCell[used="true"]:checked {
     background: qlineargradient(x1:0, y1:1, x2:1, y2:0, stop:0.849 #4a7ab8, stop:0.85 #f2f6fc);
 }
 
+/* Learn: lit while it waits for a message that is valid AND free. */
+QPushButton#learnBtn { padding: 2px 12px; }
+QPushButton#learnBtn:checked { background: #4a7ab8; border-color: #5a8ac8; color: #f2f6fc; }
+
 /* Set all / Clear all */
 QPushButton#miniBtn {
     background: transparent; border: 1px solid #3d4757; border-radius: 2px;

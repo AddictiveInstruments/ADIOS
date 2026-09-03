@@ -19,6 +19,7 @@
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QDir>
+#include <QStandardItemModel>
 #include <QStandardPaths>
 #include <QStyle>
 #include <QXmlStreamReader>
@@ -783,6 +784,21 @@ public:
     bool gridOn() const { return gridOn_; }
     const QList<CcControl*>& controls() const { return controls_; }
     std::function<void()> onEdited;               // a REAL change to the surface (config goes dirty)
+    // MIDI Learn: a control hands over a matcher, the window arms it on the MAIN input
+    // (the auxiliary port is strictly for snapshots). An empty one disarms.
+    std::function<void(std::function<bool(const adios::Bytes&)>)> onLearn;
+    void askLearn(std::function<bool(const adios::Bytes&)> f) { if (onLearn) onLearn(std::move(f)); }
+    // Is that address already spoken for by ANOTHER control? Learn refuses one that is.
+    bool ccTaken(int cc, const CcControl* except) const {
+        for (CcControl* c : controls_)
+            if (c != except && !c->isDeco() && !c->nrpn && c->cc == cc) return true;
+        return false;
+    }
+    bool nrpnTaken(int param, const CcControl* except) const {
+        for (CcControl* c : controls_)
+            if (c != except && !c->isDeco() && c->nrpn && c->nrpnNum == param) return true;
+        return false;
+    }
     void addControl(CcControl::Kind k, QPoint at) {
         auto* c = new CcControl(this);
         c->kind = k;
@@ -1585,6 +1601,8 @@ void CcControl::editProperties()
     auto* lsbNr = new QSpinBox; lsbNr->setRange(0, 127);   lsbNr->setValue(nn % 128);
     auto* numNr = new QSpinBox; numNr->setRange(0, 16383); numNr->setValue(nn);
     auto* wideChk = new FilterCheckBox(QStringLiteral("14-bit (CC#6 + CC#38)")); wideChk->setNeutral(true); wideChk->setChecked(wide);
+    auto* learnBtn = new QPushButton(QStringLiteral("Learn"));
+    learnBtn->setObjectName(QStringLiteral("learnBtn")); learnBtn->setCheckable(true);
     auto linking = std::make_shared<bool>(false);
     auto fromPair = [msbNr, lsbNr, numNr, linking] {
         if (*linking) return; *linking = true; numNr->setValue(msbNr->value() * 128 + lsbNr->value()); *linking = false; };
@@ -1608,6 +1626,7 @@ void CcControl::editProperties()
     form->addRow(QStringLiteral("Mode"),    modeBox);
     form->addRow(QStringLiteral("Name"),    nameEd);
     form->addRow(QStringLiteral("Address"), addrBox);
+    form->addRow(QString(), learnBtn);
     form->addRow(QStringLiteral("CC #"),    ccSp);
     form->addRow(QStringLiteral("NRPN MSB"), msbNr);
     form->addRow(QStringLiteral("NRPN LSB"), lsbNr);
@@ -1665,10 +1684,54 @@ void CcControl::editProperties()
     swRows(typeBox->currentData().toInt());
     connect(typeBox, &QComboBox::currentIndexChanged, &d, [swRows, typeBox](int) { swRows(typeBox->currentData().toInt()); });
     connect(addrBox, &QComboBox::currentIndexChanged, &d, [swRows, typeBox](int) { swRows(typeBox->currentData().toInt()); });
+    // Learn, one shot: the button stays lit until something arrives that is BOTH usable
+    // and free. A reserved number, or one another control already holds, is ignored
+    // without a word and the wait goes on.
+    struct LearnRun { int msb = -1, lsb = -1; };   // msb == -2: filled, watching for a CC#38
+    auto run = std::make_shared<LearnRun>();
+    connect(learnBtn, &QPushButton::toggled, &d, [this, run, learnBtn, addrBox, ccSp, msbNr, lsbNr, numNr, wideChk](bool on) {
+        if (!on) { panel_->askLearn(nullptr); return; }
+        *run = LearnRun();
+        panel_->askLearn([this, run, learnBtn, addrBox, ccSp, msbNr, lsbNr, numNr, wideChk](const adios::Bytes& m) {
+            if (m.size() < 3 || (m[0] & 0xf0) != 0xb0) return false;
+            const int cc = m[1], v = m[2];
+            if (cc == 99) { run->msb = v; run->lsb = -1; return false; }
+            if (cc == 98) { if (run->msb >= 0) run->lsb = v; return false; }
+            if (cc == 6) {
+                if (run->msb < 0 || run->lsb < 0) return false;
+                const int param = run->msb * 128 + run->lsb;
+                if (panel_->nrpnTaken(param, this)) { *run = LearnRun(); return false; }
+                addrBox->setCurrentIndex(1);
+                msbNr->setValue(run->msb); lsbNr->setValue(run->lsb); numNr->setValue(param);
+                wideChk->setChecked(false);
+                // A CC#38 right behind means the sender is 14-bit. Stay armed a moment
+                // to find out, rather than make it a box to remember to tick.
+                run->msb = -2;
+                QTimer::singleShot(60, learnBtn, [learnBtn] { learnBtn->setChecked(false); });
+                return false;
+            }
+            if (cc == 38) {
+                if (run->msb != -2) return false;
+                wideChk->setChecked(true); learnBtn->setChecked(false);
+                return true;
+            }
+            if (run->msb == -2) return false;                      // still in that window
+            if (cc == 0  && panel_->bankMsbArmed()) return false;   // reserved, would be mute
+            if (cc == 32 && panel_->bankLsbArmed()) return false;
+            if ((cc == 98 || cc == 99 || cc == 6 || cc == 38) && panel_->nrpnPresent()) return false;
+            if (panel_->ccTaken(cc, this)) return false;
+            addrBox->setCurrentIndex(0);
+            ccSp->setValue(cc);
+            learnBtn->setChecked(false);
+            return true;
+        });
+    });
     auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     form->addRow(bb);
     connect(bb, &QDialogButtonBox::accepted, &d, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    // Whatever closes it, nothing stays armed behind it.
+    connect(&d, &QDialog::finished, &d, [this](int) { panel_->askLearn(nullptr); });
     if (d.exec() == QDialog::Accepted) {
         panel_->beginGesture();
         const Kind nk = kindOf(typeBox->currentData().toInt());
@@ -2089,6 +2152,8 @@ void MainWindow::connectPorts()
         appendCapped(term_, new QListWidgetItem("! MIDI In: " + QString::fromStdString(err)));
         return;
     }
+    ctrlFillSnapPorts();          // the main input moved: re-grey it in the trigger list
+    ctrlOpenSnapPort();           // and the trigger port may have to follow
     uploader_->setDeviceId(uint8_t(idBox_->value()));
     clock_.restart();
     setConnected(true);
@@ -2126,7 +2191,20 @@ void MainWindow::onTick()
     { std::lock_guard<std::mutex> lk(rxMx_); batch.swap(rxQueue_); }
     // The SCREEN, and nothing else. This handler has to RETURN before anything can be
     // repainted, so everything that is merely written down waits for the other timer.
-    for (auto& r : batch) ctrlMidiIn(r.bytes);
+    // With a port of their own the triggers come from there; without one they come
+    // from here. Never both, so a note can never fire a snapshot twice.
+    const bool aux = snapAuxChk_ && snapAuxChk_->isChecked();
+    for (auto& r : batch) {
+        if (ctrlLearnEat(r.bytes, false)) continue;
+        if (!aux) ctrlSnapTrigger(r.bytes);
+        ctrlMidiIn(r.bytes);
+    }
+    std::vector<adios::Bytes> trig;
+    { std::lock_guard<std::mutex> lk(snapMx_); trig.swap(snapQueue_); }
+    for (const adios::Bytes& m : trig) {
+        if (ctrlLearnEat(m, true)) continue;
+        ctrlSnapTrigger(m);
+    }
     if (monQueue_.size() < 20000)                     // a stalled GUI must not grow it forever
         monQueue_.insert(monQueue_.end(), std::make_move_iterator(batch.begin()),
                                           std::make_move_iterator(batch.end()));
@@ -2542,12 +2620,15 @@ void MainWindow::openController()
             b->setContextMenuPolicy(Qt::CustomContextMenu);
             connect(b, &QWidget::customContextMenuRequested, this, [this, b, i](QPoint at) {
                 QMenu m(b);
+                QAction* pr = m.addAction(tr("Properties..."));
+                m.addSeparator();
                 QAction* st = m.addAction(tr("Store"));
                 QAction* cl = m.addAction(tr("Clear"));     cl->setEnabled(ctrlSnaps_.value(i).used);
                 m.addSeparator();
                 QAction* ca = m.addAction(tr("Clear All"));
                 QAction* chosen = m.exec(b->mapToGlobal(at));
-                if (chosen == st) ctrlStoreSnapshot(i);
+                if (chosen == pr) ctrlEditSnapshot(i);
+                else if (chosen == st) ctrlStoreSnapshot(i);
                 else if (chosen == cl) ctrlClearSnapshot(i);
                 else if (chosen == ca) ctrlClearAllSnapshots();
             });
@@ -2785,7 +2866,23 @@ void MainWindow::openController()
         pf->addRow(tr("Channel"), inChanBox_);
         if (QWidget* l = pf->labelForField(inChanBox_)) l->setObjectName(QStringLiteral("filterLabel"));   // the ticks' grey, not label white
         pf->addRow(fwdChk_, fwdModeBox_);
+        snapTrigChk_ = mkTick(tr("Use MIDI Triggers"),        "snapTrig", true);
+        snapAuxChk_  = mkTick(tr("Use Auxiliary Input Port"), "snapAux",  true);
+        snapOmniChk_ = mkTick(tr("Omni"),                     "snapOmni", true);
+        snapChanSp_  = new QSpinBox; snapChanSp_->setObjectName(QStringLiteral("snapChannel"));
+        snapChanSp_->setRange(1, 16); snapChanSp_->setFixedWidth(62);
+        // NO objectName on the port box, deliberately: the generic loops persist a combo
+        // by INDEX, and a port index shifts as devices come and go. This one is
+        // remembered by NAME, like the main ports.
+        snapPortBox_ = new QComboBox;
+        ctrlFillSnapPorts();
         pf->addRow(mkHead(tr("Snapshot")));
+        pf->addRow(snapTrigChk_);
+        pf->addRow(snapAuxChk_);
+        pf->addRow(snapPortBox_);
+        pf->addRow(snapOmniChk_);
+        pf->addRow(tr("Channel"), snapChanSp_);
+        if (QWidget* l = pf->labelForField(snapChanSp_)) l->setObjectName(QStringLiteral("filterLabel"));
         pf->addRow(snapOnlyAct_);
         pf->addRow(snapModAct_);
         // Each field hangs off the tick above it: Omni and Forward off Enabled, the
@@ -2799,6 +2896,14 @@ void MainWindow::openController()
             if (QWidget* l = pf->labelForField(inChanBox_)) l->setEnabled(chan);   // the label greys with its field
             setFieldOn(fwdModeBox_, in && fwdChk_->isChecked());
             setFieldOn(constVelSp_, constVelChk_->isChecked());
+            // The snapshot triggers hang off their OWN switch, never off MIDI Input.
+            const bool trig = snapTrigChk_->isChecked();
+            snapAuxChk_->setEnabled(trig);
+            snapOmniChk_->setEnabled(trig);
+            setFieldOn(snapPortBox_, trig && snapAuxChk_->isChecked());
+            const bool sch = trig && !snapOmniChk_->isChecked();
+            setFieldOn(snapChanSp_, sch);
+            if (QWidget* l = pf->labelForField(snapChanSp_)) l->setEnabled(sch);
         };
         // The keyboard takes its velocity from here, so the value sent and the colour of
         // the key always agree.
@@ -2808,6 +2913,12 @@ void MainWindow::openController()
         connect(fwdChk_,      &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
         connect(constVelChk_, &QCheckBox::toggled, this, [prefEnable, applyVel](bool) { prefEnable(); applyVel(); });
         connect(constVelSp_,  &QSpinBox::valueChanged, this, [applyVel](int) { applyVel(); });
+        // Any of the three changes where the triggers listen, so the port follows.
+        for (QCheckBox* c : { snapTrigChk_, snapAuxChk_ })
+            connect(c, &QCheckBox::toggled, this, [this, prefEnable](bool) { prefEnable(); ctrlOpenSnapPort(); });
+        connect(snapOmniChk_, &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
+        connect(snapPortBox_, &QComboBox::currentIndexChanged, this,
+                [this](int) { ctrlSetDirty(true); ctrlOpenSnapPort(); });
         prefEnable();
         applyVel();
         connect(prefAct, &QAction::triggered, this, [this] { prefsDlg_->show(); prefsDlg_->raise(); prefsDlg_->activateWindow(); });
@@ -2989,11 +3100,20 @@ void MainWindow::openController()
         // From here on, any change to what the config holds marks it dirty. Wired
         // last so the restores above do not count.
         ccPanel->onEdited = [this] { ctrlSetDirty(true); ctrlRefreshFwdRules(); };
-        // The named spin boxes ARE the three Bank/Program values a snapshot holds, so
-        // moving one both dirties the config and drops the snapshot selection.
-        for (QSpinBox* sp : controllerWin_->findChildren<QSpinBox*>())
-            if (!sp->objectName().isEmpty())
-                connect(sp, &QSpinBox::valueChanged, this, [this](int) { ctrlSetDirty(true); ctrlSnapTouched(); });
+        ccPanel->onLearn  = [this](std::function<bool(const adios::Bytes&)> f) {
+            learnHook_ = std::move(f); learnFromAux_ = false;   // objects listen to the MAIN input
+        };
+        // Every named spin box dirties the config. Only the three Bank/Program values
+        // are PART of a snapshot, so only those drop its selection - the constant
+        // velocity and the trigger channel are settings, not content.
+        for (QSpinBox* sp : controllerWin_->findChildren<QSpinBox*>()) {
+            if (sp->objectName().isEmpty()) continue;
+            const bool inSnap = sp == bankMsbSp_ || sp == bankLsbSp_ || sp == pgmSp_;
+            connect(sp, &QSpinBox::valueChanged, this, [this, inSnap](int) {
+                ctrlSetDirty(true);
+                if (inSnap) ctrlSnapTouched();
+            });
+        }
         for (QComboBox* cb : controllerWin_->findChildren<QComboBox*>())
             if (!cb->objectName().isEmpty())
                 connect(cb, &QComboBox::currentIndexChanged, this, [this](int) { ctrlSetDirty(true); ctrlRefreshFwdRules(); });
@@ -3006,6 +3126,7 @@ void MainWindow::openController()
         ctrlDirty_ = dirty;
         ctrlUpdateTitle();
         ctrlRefreshFwdRules();                 // first picture, once everything is restored
+        ctrlOpenSnapPort();                    // and the trigger port, if the config named one
 
         // Cap the width where EVERY key shows: once laid out, the window/keyboard
         // width difference IS the exact chrome (margins + group padding + border),
@@ -3052,7 +3173,10 @@ bool MainWindow::ctrlWriteConfig(const QString& path)
     // only knew 1..16, so a file that old cannot mean anything but "not chosen".
     // Version 3 adds the keyboard's constant velocity and the forward mode; both are
     // absent from an older file, which simply gets their defaults.
-    x.writeStartElement("adios-controller"); x.writeAttribute("version", "3");
+    // Version 4 adds the snapshot MIDI triggers, and with them a slot that carries an
+    // ADDRESS but no content - so a <snapshot> is no longer proof that it holds one,
+    // and says so with its own "used".
+    x.writeStartElement("adios-controller"); x.writeAttribute("version", "4");
 
     x.writeStartElement("window");
     x.writeAttribute("w", num(controllerWin_->width())); x.writeAttribute("h", num(controllerWin_->height()));
@@ -3113,10 +3237,20 @@ bool MainWindow::ctrlWriteConfig(const QString& path)
     x.writeStartElement("snapshots");
     x.writeAttribute("sendOnlyChanges", b01(snapOnlyAct_ && snapOnlyAct_->isChecked()));
     x.writeAttribute("includeMod",      b01(snapModAct_  && snapModAct_->isChecked()));
+    x.writeAttribute("useTriggers", b01(tick("snapTrig")));
+    x.writeAttribute("useAuxPort",  b01(tick("snapAux")));
+    x.writeAttribute("auxPort", snapPortBox_ && snapPortBox_->currentIndex() > 0 ? snapPortBox_->currentText() : QString());
+    x.writeAttribute("omni",    b01(tick("snapOmni")));
+    x.writeAttribute("channel", num(spin("snapChannel")));
     for (int i = 0; i < ctrlSnaps_.size(); ++i) {
         const CtrlSnap& sn = ctrlSnaps_[i];
-        if (!sn.used) continue;
+        if (!sn.used && !sn.hasTrigger()) continue;      // an address alone is worth writing
         x.writeStartElement("snapshot"); x.writeAttribute("n", num(i + 1));
+        x.writeAttribute("used", b01(sn.used));
+        if (sn.hasTrigger()) {
+            x.writeAttribute("trigCh", num(sn.trigCh + 1)); x.writeAttribute("trigNote", num(sn.trigNote));
+        }
+        if (!sn.used) { x.writeEndElement(); continue; }
         x.writeStartElement("bank");
         x.writeAttribute("msb", num(sn.msb)); x.writeAttribute("lsb", num(sn.lsb)); x.writeAttribute("program", num(sn.program));
         x.writeEndElement();
@@ -3176,10 +3310,28 @@ bool MainWindow::ctrlLoadXml(const QString& path)
         const QString tag = x.name().toString();
         const QXmlStreamAttributes a = x.attributes();
         if (tag == QLatin1String("adios-controller")) { fileVersion = attrInt(a, "version", 1); continue; }
-        if (tag == QLatin1String("snapshots")) { onlyChanges = attrBool(a, "sendOnlyChanges", true); includeMod = attrBool(a, "includeMod", false); continue; }
+        if (tag == QLatin1String("snapshots")) {
+            onlyChanges = attrBool(a, "sendOnlyChanges", true); includeMod = attrBool(a, "includeMod", false);
+            if (snapTrigChk_) snapTrigChk_->setChecked(attrBool(a, "useTriggers", true));
+            if (snapAuxChk_)  snapAuxChk_->setChecked(attrBool(a, "useAuxPort", true));
+            if (snapOmniChk_) snapOmniChk_->setChecked(attrBool(a, "omni", true));
+            if (snapChanSp_)  { const QSignalBlocker b(snapChanSp_); snapChanSp_->setValue(qBound(1, attrInt(a, "channel", 1), 16)); }
+            if (snapPortBox_) {                       // by NAME: the index means nothing across sessions
+                const QSignalBlocker b(snapPortBox_);
+                const int i = snapPortBox_->findText(a.value("auxPort").toString());
+                snapPortBox_->setCurrentIndex(i > 0 ? i : 0);
+            }
+            continue;
+        }
         if (tag == QLatin1String("snapshot")) {
             inSnap = attrInt(a, "n", 0) - 1;
-            if (inSnap >= 0 && inSnap < 64) snaps[inSnap].used = true; else inSnap = -1;
+            if (inSnap >= 0 && inSnap < 64) {
+                // Before version 4 a <snapshot> only ever existed for a slot that held
+                // something, so its absence means "used".
+                snaps[inSnap].used     = attrBool(a, "used", true);
+                snaps[inSnap].trigCh   = a.hasAttribute("trigCh")   ? qBound(0, attrInt(a, "trigCh", 1) - 1, 15) : -1;
+                snaps[inSnap].trigNote = a.hasAttribute("trigNote") ? qBound(0, attrInt(a, "trigNote", 60), 127) : -1;
+            } else inSnap = -1;
             continue;
         }
         if (inSnap >= 0) {                                // inside a snapshot: its bank, values, mod
@@ -3257,6 +3409,7 @@ bool MainWindow::ctrlLoadXml(const QString& path)
     if (snapModAct_)  snapModAct_->setChecked(includeMod);
     ctrlRefreshSnapCells();
     ctrlRefreshFwdRules();                 // a loaded surface changes what Config lets out
+    ctrlOpenSnapPort();                    // the file may name another trigger port
     return true;
 }
 
@@ -3300,6 +3453,10 @@ void MainWindow::ctrlNewConfig()
     setTick("noNoteOff", true);  setTick("kbConstVel", false); setSpin("kbConstVelValue", 100);
     setTick("midiIn", false);    setTick("midiOmni", true);    setTick("midiForward", false);
     setTick("snapOnly", true);   setTick("snapMod", false);
+    setTick("snapTrig", true);   setTick("snapAux", true);   setTick("snapOmni", true);
+    setSpin("snapChannel", 1);
+    if (snapPortBox_) { const QSignalBlocker b(snapPortBox_); snapPortBox_->setCurrentIndex(0); }
+    ctrlOpenSnapPort();
     if (inChanBox_)  { const QSignalBlocker b(inChanBox_);  inChanBox_->setCurrentIndex(0); }    // As Output
     if (fwdModeBox_) { const QSignalBlocker b(fwdModeBox_); fwdModeBox_->setCurrentIndex(0); }   // Config
     ctrlRefreshFwdRules();
@@ -3462,6 +3619,173 @@ void MainWindow::ctrlForward(const adios::Bytes& msg)
     if (known) put(stamped(msg));
 }
 
+// The list of ports the triggers can use. The MAIN input is greyed out in it: winmm
+// gives a MIDI input exclusively to one opener, so choosing it twice could only fail -
+// better to forbid it here than to report the failure afterwards.
+void MainWindow::ctrlFillSnapPorts()
+{
+    if (!snapPortBox_) return;
+    const QString keep = snapPortBox_->currentIndex() > 0 ? snapPortBox_->currentText() : QString();
+    const QSignalBlocker block(snapPortBox_);
+    snapPortBox_->clear();
+    snapPortBox_->addItem(tr("(none)"));
+    for (const std::string& p : adios::inPorts()) snapPortBox_->addItem(QString::fromStdString(p));
+    const QString main = inBox_ ? inBox_->currentText() : QString();
+    if (auto* m = qobject_cast<QStandardItemModel*>(snapPortBox_->model()))
+        for (int i = 1; i < snapPortBox_->count(); ++i)
+            if (snapPortBox_->itemText(i) == main && !main.isEmpty())
+                if (QStandardItem* it = m->item(i)) it->setEnabled(false);
+    // Greying an item does NOT stop it being the current one: if what was chosen has
+    // meanwhile become the main input, the choice itself has to go, or re-enabling the
+    // triggers later would open the port Studio is already holding.
+    if (!keep.isEmpty() && keep != main) {
+        const int i = snapPortBox_->findText(keep);
+        snapPortBox_->setCurrentIndex(i > 0 ? i : 0);
+    }
+}
+
+// The other direction: a port the triggers are really holding is greyed in Studio's own
+// input list, so it cannot be picked there either. The exclusion has to work both ways,
+// or the two halves of the program would fight over one device.
+void MainWindow::ctrlGreyMainPorts()
+{
+    if (!inBox_) return;
+    const bool held = snapIn_.isOpen();
+    const QString taken = held && snapPortBox_ ? snapPortBox_->currentText() : QString();
+    if (auto* m = qobject_cast<QStandardItemModel*>(inBox_->model()))
+        for (int i = 0; i < inBox_->count(); ++i)
+            if (QStandardItem* it = m->item(i))
+                it->setEnabled(i == inBox_->currentIndex()          // never grey what is in use
+                            || taken.isEmpty() || inBox_->itemText(i) != taken);
+}
+
+// Opened and closed to match the settings, and by NAME so that a device coming back
+// after a reboot is found again wherever it now sits in the list.
+void MainWindow::ctrlOpenSnapPort()
+{
+    struct Grey { MainWindow* w; ~Grey() { w->ctrlGreyMainPorts(); } } grey{this};   // whatever the outcome
+    snapIn_.close();
+    { std::lock_guard<std::mutex> lk(snapMx_); snapQueue_.clear(); }
+    if (!snapTrigChk_ || !snapTrigChk_->isChecked()) return;
+    if (!snapAuxChk_ || !snapAuxChk_->isChecked()) return;
+    if (!snapPortBox_ || snapPortBox_->currentIndex() <= 0) return;
+    const QString want = snapPortBox_->currentText();
+    // The UI can be a step behind - a list is refilled, a choice survives, a port
+    // changes hands. This is the one place that must never be wrong: whatever the box
+    // says, the main input is never opened a second time here.
+    if (inBox_ && want == inBox_->currentText()) return;
+    const auto ports = adios::inPorts();
+    for (unsigned i = 0; i < ports.size(); ++i) {
+        if (QString::fromStdString(ports[i]) != want) continue;
+        std::string err;
+        // The callback does the least possible: this thread exists to receive, the
+        // recall it triggers moves widgets and belongs to the other one.
+        if (!snapIn_.open(i, [this](const adios::Bytes& m, uint64_t) {
+                std::lock_guard<std::mutex> lk(snapMx_);
+                if (snapQueue_.size() < 4096) snapQueue_.push_back(m);
+            }, err))
+            appendCapped(term_, new QListWidgetItem("! snapshot port: " + QString::fromStdString(err)));
+        return;
+    }
+}
+
+// Learn eats the message and nothing else sees it. It only lets go when the hook says
+// the message was BOTH valid and free - otherwise the button stays lit and we wait.
+bool MainWindow::ctrlLearnEat(const adios::Bytes& msg, bool aux)
+{
+    if (!learnHook_ || learnFromAux_ != aux) return false;
+    if (!learnHook_(msg)) return true;         // eaten, but not satisfied: keep waiting
+    learnHook_ = nullptr;
+    return true;
+}
+
+// A Note On whose channel and note match a cell recalls it. Omni and Channel gate the
+// PORT - which channels get through at all - while the cell's own channel and note are
+// its ADDRESS, so under Omni several cells can live on different channels.
+void MainWindow::ctrlSnapTrigger(const adios::Bytes& msg)
+{
+    if (!controllerWin_ || !snapTrigChk_ || !snapTrigChk_->isChecked()) return;
+    if (msg.size() < 3 || (msg[0] & 0xf0) != 0x90 || msg[2] == 0) return;   // vel 0 is a Note Off
+    const int ch = msg[0] & 0x0f, note = msg[1];
+    if (snapOmniChk_ && !snapOmniChk_->isChecked() && snapChanSp_ && ch != snapChanSp_->value() - 1) return;
+    for (int i = 0; i < ctrlSnaps_.size(); ++i) {
+        if (ctrlSnaps_[i].trigCh != ch || ctrlSnaps_[i].trigNote != note) continue;
+        if (snapGroup_) if (auto* b = snapGroup_->button(i)) b->setChecked(true);   // light it, as a click would
+        ctrlRecallSnapshot(i);
+        return;
+    }
+}
+
+// Right-click > Properties, the cell's counterpart to an object's. A cell
+// listens to one channel and one note; the tick is what makes "no address" sayable,
+// since a dialog that always wrote one would give every cell it opened a trigger.
+void MainWindow::ctrlEditSnapshot(int n)
+{
+    if (!controllerWin_ || n < 0 || n >= ctrlSnaps_.size()) return;
+    QDialog d(controllerWin_);
+    d.setWindowTitle(tr("Snapshot %1 properties").arg(n + 1));
+    auto* g = new QGridLayout(&d);
+    g->setHorizontalSpacing(12); g->setVerticalSpacing(8);
+
+    auto* onChk = new FilterCheckBox(tr("MIDI trigger")); onChk->setNeutral(true);
+    auto* chSp  = new QSpinBox; chSp->setRange(1, 16);  chSp->setFixedWidth(62);
+    auto* ntSp  = new QSpinBox; ntSp->setRange(0, 127); ntSp->setFixedWidth(62);
+    auto* ntLbl = new QLabel;
+    auto* learn = new QPushButton(tr("Learn"));
+    learn->setObjectName(QStringLiteral("learnBtn")); learn->setCheckable(true);
+
+    const CtrlSnap& cur = ctrlSnaps_[n];
+    onChk->setChecked(cur.hasTrigger());
+    chSp->setValue(cur.trigCh >= 0 ? cur.trigCh + 1 : 1);
+    ntSp->setValue(cur.trigNote >= 0 ? cur.trigNote : 60);
+    auto showName = [ntSp, ntLbl] { ntLbl->setText(noteName(ntSp->value())); };
+    showName();
+    connect(ntSp, &QSpinBox::valueChanged, &d, [showName](int) { showName(); });
+
+    auto fields = [onChk, chSp, ntSp, learn] {
+        const bool on = onChk->isChecked();
+        setFieldOn(chSp, on); setFieldOn(ntSp, on); learn->setEnabled(on);
+        if (!on) learn->setChecked(false);
+    };
+    connect(onChk, &QCheckBox::toggled, &d, [fields](bool) { fields(); });
+    fields();
+
+    // Learn: one shot. The button stays lit until a message arrives that is BOTH a
+    // Note On and free - an address another cell already holds is ignored without a
+    // word, and the wait simply goes on.
+    connect(learn, &QPushButton::toggled, this, [this, learn, chSp, ntSp, n](bool on) {
+        if (!on) { learnHook_ = nullptr; return; }
+        learnFromAux_ = snapAuxChk_ && snapAuxChk_->isChecked();
+        learnHook_ = [this, learn, chSp, ntSp, n](const adios::Bytes& m) {
+            if (m.size() < 3 || (m[0] & 0xf0) != 0x90 || m[2] == 0) return false;
+            const int ch = m[0] & 0x0f, note = m[1];
+            for (int i = 0; i < ctrlSnaps_.size(); ++i)
+                if (i != n && ctrlSnaps_[i].trigCh == ch && ctrlSnaps_[i].trigNote == note) return false;
+            chSp->setValue(ch + 1); ntSp->setValue(note);
+            learn->setChecked(false);
+            return true;
+        };
+    });
+
+    auto* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(box, &QDialogButtonBox::accepted, &d, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    int r = 0;
+    g->addWidget(onChk, r++, 0, 1, 3);
+    g->addWidget(new QLabel(tr("Channel")), r, 0, Qt::AlignVCenter); g->addWidget(chSp, r++, 1);
+    g->addWidget(new QLabel(tr("Note")),    r, 0, Qt::AlignVCenter); g->addWidget(ntSp, r, 1); g->addWidget(ntLbl, r++, 2);
+    g->addWidget(learn, r++, 1);
+    g->addWidget(box,   r,   0, 1, 3);
+
+    const bool ok = d.exec() == QDialog::Accepted;
+    learnHook_ = nullptr;                       // the dialog is gone; nothing is armed
+    if (!ok) return;
+    CtrlSnap& sn = ctrlSnaps_[n];
+    sn.trigCh   = onChk->isChecked() ? chSp->value() - 1 : -1;
+    sn.trigNote = onChk->isChecked() ? ntSp->value()     : -1;
+    ctrlSetDirty(true);
+}
+
 // ---- snapshots ---------------------------------------------------------------
 void MainWindow::ctrlRefreshSnapCells()
 {
@@ -3497,6 +3821,9 @@ void MainWindow::ctrlStoreSnapshot(int n)
     for (CcControl* c : static_cast<CcPanel*>(ccSurface_)->controls())
         if (!c->isDeco()) sn.values.insert(c->id, c->stateValue());
     if (modWheel_) sn.mod = static_cast<Wheel*>(modWheel_)->value();
+    // The trigger address belongs to the CELL, not to what it holds: storing new
+    // content into it must not unplug it.
+    sn.trigCh = ctrlSnaps_[n].trigCh; sn.trigNote = ctrlSnaps_[n].trigNote;
     ctrlSnaps_[n] = sn;
     if (auto* g = controllerWin_->findChild<QButtonGroup*>(QStringLiteral("snapGroup")))
         if (auto* b = g->button(n)) b->setChecked(true);
@@ -3507,7 +3834,9 @@ void MainWindow::ctrlStoreSnapshot(int n)
 void MainWindow::ctrlClearSnapshot(int n)
 {
     if (n < 0 || n >= ctrlSnaps_.size() || !ctrlSnaps_[n].used) return;
+    const int kch = ctrlSnaps_[n].trigCh, knt = ctrlSnaps_[n].trigNote;   // the wiring stays
     ctrlSnaps_[n] = CtrlSnap();
+    ctrlSnaps_[n].trigCh = kch; ctrlSnaps_[n].trigNote = knt;
     ctrlRefreshSnapCells();
     ctrlSetDirty(true);
 }
@@ -3518,7 +3847,13 @@ void MainWindow::ctrlClearAllSnapshots()
     for (const CtrlSnap& s : ctrlSnaps_) any = any || s.used;
     if (!any) return;
     if (QMessageBox::question(controllerWin_, tr("Clear All"), tr("Clear all 64 snapshots?")) != QMessageBox::Yes) return;
-    ctrlSnaps_ = QVector<CtrlSnap>(64);
+    // Same rule, sixty-four times: the contents go, the addresses stay. Only New
+    // config unplugs everything.
+    for (CtrlSnap& s : ctrlSnaps_) {
+        const int kch = s.trigCh, knt = s.trigNote;
+        s = CtrlSnap();
+        s.trigCh = kch; s.trigNote = knt;
+    }
     ctrlRefreshSnapCells();
     ctrlSetDirty(true);
 }
