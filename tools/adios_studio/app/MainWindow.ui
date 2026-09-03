@@ -177,7 +177,7 @@
        <item>
         <widget class="QListWidget" name="monIn">
          <property name="wordWrap"><bool>false</bool></property>
-         <property name="uniformItemSizes"><bool>false</bool></property>
+         <property name="uniformItemSizes"><bool>true</bool></property>
          <property name="textElideMode"><enum>Qt::ElideNone</enum></property>
          <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
          <property name="selectionMode"><enum>QAbstractItemView::ExtendedSelection</enum></property>
@@ -195,7 +195,7 @@
        <item>
         <widget class="QListWidget" name="monOut">
          <property name="wordWrap"><bool>false</bool></property>
-         <property name="uniformItemSizes"><bool>false</bool></property>
+         <property name="uniformItemSizes"><bool>true</bool></property>
          <property name="textElideMode"><enum>Qt::ElideNone</enum></property>
          <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
          <property name="selectionMode"><enum>QAbstractItemView::ExtendedSelection</enum></property>

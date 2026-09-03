@@ -188,9 +188,31 @@ enum {
 // Renders a monitor line, drawing the two hex chars of a RECREATED running-status
 // byte in a dimmer colour. The item carries UserRole = true and UserRole+1 = the
 // character index of that byte; otherwise the line paints as one colour.
-class MonitorDelegate : public QStyledItemDelegate {
+// Uniform row heights are what make a list fast: the view measures ONE row and applies
+// it to every other, instead of asking all five thousand of them on every re-layout -
+// which cost 495 000 calls and nineteen seconds of CPU in a single eighty-second take.
+// The price used to be the horizontal scrollbar, which then followed whichever row
+// happened to be measured. So the WIDTH is no longer left to the view: every line's
+// length is known the moment it is built, and the longest one is handed back here.
+// Monospace throughout, so a character count IS a width.
+class UniformRowDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
+    QSize sizeHint(const QStyleOptionViewItem& opt, const QModelIndex& idx) const override
+    {
+        QSize s = QStyledItemDelegate::sizeHint(opt, idx);
+        if (auto* v = qobject_cast<QWidget*>(parent())) {
+            const int chars = v->property("maxChars").toInt();
+            if (chars > 0)
+                s.setWidth(QFontMetrics(v->font()).horizontalAdvance(QLatin1Char('0')) * chars + 12);
+        }
+        return s;
+    }
+};
+
+class MonitorDelegate : public UniformRowDelegate {
+public:
+    using UniformRowDelegate::UniformRowDelegate;
     void paint(QPainter* p, const QStyleOptionViewItem& opt, const QModelIndex& idx) const override
     {
         QStyleOptionViewItem o = opt;
@@ -1693,6 +1715,13 @@ void appendCapped(QListWidget* w, QListWidgetItem* it)
     const bool atBottom = sb->value() >= sb->maximum() - 2;
     w->addItem(it);
     while (w->count() > 5000) delete w->takeItem(0);
+    // The scrollbar's reach comes from the longest line ever shown. It only ever grows,
+    // and it settles within the first few lines, so this costs nothing after that.
+    const int len = it->text().length();
+    if (len > w->property("maxChars").toInt()) {
+        w->setProperty("maxChars", len);
+        w->doItemsLayout();
+    }
     if (!atBottom) return;
     // The scroll is DEFERRED, and coalesced to one per turn of the event loop.
     // scrollToBottom() on a list whose rows are NOT all the same height has to walk
@@ -1736,6 +1765,10 @@ MainWindow::MainWindow()
     monOut_       = ui_->monOut;
     monIn_->setItemDelegate(new MonitorDelegate(monIn_));
     monOut_->setItemDelegate(new MonitorDelegate(monOut_));
+    // Same deal for the three that have no colouring to do: uniform rows, and a width
+    // we hand over ourselves.
+    for (QListWidget* w : { term_, devInfo_, uploadStatus_ })
+        w->setItemDelegate(new UniformRowDelegate(w));
 
     // A .ui cannot carry a splitter's stretch factor, so both splitters get the
     // SAME recipe here: the first pane keeps its size (stretch 0), the second

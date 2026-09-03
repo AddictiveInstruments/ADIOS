@@ -130,7 +130,7 @@ private:
     QComboBox* inChanBox_    = nullptr; // that channel: index 0 = "As Output", which follows the
                                         // keyboard's own TX channel; 1..16 = that channel
     QCheckBox* fwdChk_       = nullptr; // "MIDI Forward": what comes in goes out again
-    void ctrlMidiIn(const adios::Bytes& msg);   // GUI thread, from routeIn
+    void ctrlMidiIn(const adios::Bytes& msg);   // GUI thread, from onTick
     QComboBox* fwdModeBox_   = nullptr; // "Forward": Config (only what this controller makes) / All
     QCheckBox* constVelChk_  = nullptr; // "Constant velocity": the keyboard ignores the press height
     QSpinBox*  constVelSp_   = nullptr; // that velocity, 1..127
