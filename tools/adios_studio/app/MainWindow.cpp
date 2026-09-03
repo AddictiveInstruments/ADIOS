@@ -25,6 +25,8 @@
 #include <QXmlStreamWriter>
 #include <QFontMetrics>
 #include <QGridLayout>
+#include <QHash>
+#include <iterator>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -269,6 +271,7 @@ public:
     static constexpr int KW = 24, BW = 15;
     explicit PianoKeyboard(QWidget* parent = nullptr) : QWidget(parent) {
         setMinimumHeight(72);
+        litClock_.start();
         for (int m = 0; m <= 127; ++m) if (!isBlack(m)) allWhite_.push_back(m);   // the WHOLE range
         center_ = qMax(0, allWhite_.indexOf(60));                                 // start on middle C
     }
@@ -283,6 +286,33 @@ public:
         scroll_ = s; center_ = scroll_ + visibleWhite() / 2;   // remember where we are
         update(); if (onView) onView();
     }
+    // Lit keys are a SET, not one note. The mouse can only hold one; an incoming
+    // stream carries chords. Both write here, but only the mouse fires the callbacks:
+    // what arrives from the wire is SHOWN, never echoed.
+    void showNote(int note, int vel) {
+        if (note < 0 || note > 127) return;
+        lit_.insert(note, qBound(1, vel, 127));
+        litAt_.insert(note, litClock_.elapsed());
+        update();
+    }
+    // A played note can be shorter than a screen frame - 20 ms is common, and the eye
+    // needs nearer a tenth of a second. So a key lit FROM THE WIRE is held its minimum
+    // before it goes out; the note itself is untouched, this is the display only.
+    void clearNote(int note) {
+        if (note == cur_) return;                  // the mouse is still holding that one
+        const auto at = litAt_.constFind(note);
+        if (at == litAt_.constEnd()) { if (lit_.remove(note)) update(); return; }
+        const qint64 stamp = *at, age = litClock_.elapsed() - stamp;
+        if (age >= MIN_LIT_MS) { litAt_.remove(note); if (lit_.remove(note)) update(); return; }
+        QTimer::singleShot(int(MIN_LIT_MS - age), this, [this, note, stamp] {
+            if (note == cur_) return;
+            const auto now = litAt_.constFind(note);
+            if (now == litAt_.constEnd() || *now != stamp) return;   // struck again since: leave it
+            litAt_.remove(note);
+            if (lit_.remove(note)) update();
+        });
+    }
+    void setFixedVelocity(int v) { fixedVel_ = qBound(0, v, 127); }   // 0 = the press height decides
 protected:
     void resizeEvent(QResizeEvent*) override {
         // Keep the CENTER fixed: widening/narrowing reveals/hides keys on BOTH sides.
@@ -296,7 +326,8 @@ protected:
             const int m = allWhite_[scroll_ + i];
             const QRect r(i * KW, 0, KW, h);
             p.setPen(QColor(0xaa, 0xb4, 0xc2));
-            p.setBrush(m == cur_ ? hitColor(false) : QColor(0xe9, 0xed, 0xf3));
+            const auto wl = lit_.constFind(m);
+            p.setBrush(wl != lit_.constEnd() ? hitColor(false, *wl) : QColor(0xe9, 0xed, 0xf3));
             p.drawRoundedRect(QRectF(r).adjusted(0.5, -3, -0.5, -0.5), 3, 3);      // top clipped -> bottom rounded
             if (m % 12 == 0) {                                                     // label each C
                 p.setPen(QColor(0x5a, 0x61, 0x72));
@@ -308,7 +339,8 @@ protected:
             if (!isBlack(bm)) continue;
             const QRect r((i + 1) * KW - BW / 2, 0, BW, bh);
             p.setPen(QColor(0x0c, 0x11, 0x18));
-            p.setBrush(bm == cur_ ? hitColor(true) : QColor(0x20, 0x25, 0x2f));
+            const auto bl = lit_.constFind(bm);
+            p.setBrush(bl != lit_.constEnd() ? hitColor(true, *bl) : QColor(0x20, 0x25, 0x2f));
             p.drawRoundedRect(QRectF(r).adjusted(0.5, -3, -0.5, -0.5), 3, 3);
         }
     }
@@ -330,8 +362,8 @@ private:
     }
     // The pressed key lights with its velocity: a soft touch is a pale tint, a hard
     // one the full accent. The low end stays clearly visible - a press must show.
-    QColor hitColor(bool black) const {
-        const double t = qBound(0, curVel_, 127) / 127.0;
+    QColor hitColor(bool black, int vel) const {
+        const double t = qBound(0, vel, 127) / 127.0;
         const QColor lo = black ? QColor(0x2c, 0x44, 0x66) : QColor(0xb9, 0xcf, 0xe8);
         const QColor hi = black ? QColor(0x5a, 0x8a, 0xc8) : QColor(0x4a, 0x7a, 0xb8);
         return QColor(qRound(lo.red()   + (hi.red()   - lo.red())   * t),
@@ -348,13 +380,24 @@ private:
     }
     void press(int note, int y) {
         if (note < 0 || note == cur_) return;
-        release(); cur_ = note; curVel_ = velFromY(note, y);   // kept: the highlight is drawn from it
-        if (onNoteOn) onNoteOn(note, curVel_);
+        release(); cur_ = note;
+        const int vel = fixedVel_ > 0 ? fixedVel_ : velFromY(note, y);   // the tick wins over the press height
+        lit_.insert(note, vel);
+        if (onNoteOn) onNoteOn(note, vel);
         update();
     }
-    void release() { if (cur_ < 0) return; const int n = cur_; cur_ = -1; if (onNoteOff) onNoteOff(n); update(); }
+    void release() {
+        if (cur_ < 0) return;
+        const int n = cur_; cur_ = -1; lit_.remove(n);
+        if (onNoteOff) onNoteOff(n);
+        update();
+    }
+    static constexpr qint64 MIN_LIT_MS = 90;    // how long a key lit from the wire is held
     QVector<int> allWhite_;
-    int scroll_ = 0, center_ = 0, cur_ = -1, curVel_ = 0;
+    QHash<int, int> lit_;                       // note -> velocity: every key currently lit
+    QHash<int, qint64> litAt_;                  // note -> when the wire lit it
+    QElapsedTimer litClock_;
+    int scroll_ = 0, center_ = 0, cur_ = -1, fixedVel_ = 0;
 };
 
 // A pitch-bend / modulation wheel: the black cylinder validated in the mock-up,
@@ -365,18 +408,18 @@ private:
 class Wheel : public QWidget {
 public:
     enum Type { Pitch, Mod };
-    std::function<void(int)> onChange;
+    std::function<void(int)> onChange;    // a GESTURE: this value belongs on the wire
+    std::function<void(int)> onDisplay;   // ANY change: the figure under the wheel follows
     explicit Wheel(Type t, int h, QWidget* parent = nullptr) : QWidget(parent), type_(t), h_(h) {
         setFixedSize(TW, h_);
         val_ = (type_ == Pitch) ? 8192 : 0;
         buildHighlight();
     }
     int  value() const { return val_; }
-    void setValue(int v, bool notify) {            // snapshot recall lands here
+    void setValue(int v, bool notify) {            // snapshot recall and MIDI in land here
         stopSpring();
         val_ = (type_ == Pitch) ? qBound(0, v, 16383) : qBound(0, v, 127);
-        update();
-        if (notify && onChange) onChange(val_);
+        apply(notify);
     }
     void setRidges(bool on) { ridges_ = on; update(); }
     void set7bit(bool on) { bit7_ = on; quantizeIf(); update(); }   // Pitch: coarse 7-bit (LSB 0); no MIDI on mode change
@@ -478,8 +521,14 @@ private:
         t = std::max(0.0, std::min(1.0, t));
         val_ = (type_ == Pitch) ? int(std::lround((1 - t) * 16383)) : int(std::lround((1 - t) * 127));
         quantizeIf();
+        apply(true);
+    }
+    // ONE place for "the value moved": the figure always follows, the wire only on a
+    // gesture. Without this, a wheel driven from the wire kept showing its old number.
+    void apply(bool notify) {
         update();
-        if (onChange) onChange(val_);
+        if (onDisplay) onDisplay(val_);
+        if (notify && onChange) onChange(val_);
     }
     void startSpring() {                                      // ease back to centre over 180 ms
         stopSpring();
@@ -487,7 +536,7 @@ private:
         a->setStartValue(val_); a->setEndValue(8192);
         a->setDuration(180); a->setEasingCurve(QEasingCurve::OutQuad);
         connect(a, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) {
-            val_ = v.toInt(); quantizeIf(); update(); if (onChange) onChange(val_);
+            val_ = v.toInt(); quantizeIf(); apply(true);
         });
         a->start(QAbstractAnimation::DeleteWhenStopped);
         spring_ = a;
@@ -643,6 +692,9 @@ protected:
     void mousePressEvent(QMouseEvent* e) override;
     void mouseMoveEvent(QMouseEvent* e) override;
     void mouseReleaseEvent(QMouseEvent*) override;
+    // Unlocked, a double click opens the properties: the same dialog the right-click
+    // menu offers, one gesture instead of two.
+    void mouseDoubleClickEvent(QMouseEvent* e) override;
     void contextMenuEvent(QContextMenuEvent* e) override;
 private:
     int cornerAt(QPoint pt) const;                // 0=TL 1=TR 2=BL 3=BR, -1 = body
@@ -908,13 +960,19 @@ protected:
         else if (!locked_ && e->matches(QKeySequence::Paste)) { beginGesture(); pasteClipboard(); endGesture(); e->accept(); }
         else QWidget::keyPressEvent(e);
     }
-    void paintEvent(QPaintEvent*) override {
+    // Only the EXPOSED rectangle. A control is transparent, so every one of them that
+    // repaints brings us back here - and the grid loop was walking the whole surface
+    // each time, thousands of points, to redraw behind a knob a few dozen pixels wide.
+    void paintEvent(QPaintEvent* e) override {
+        const QRect dirty = e->rect();
         QPainter p(this);
-        p.fillRect(rect(), QColor(0x12, 0x15, 0x1c));        // inset canvas ground
+        p.fillRect(dirty, QColor(0x12, 0x15, 0x1c));         // inset canvas ground
         if (!locked_ && gridOn_) {                            // snap grid, edit mode only
             p.setPen(QColor(0x2c, 0x32, 0x3e));
-            for (int y = gridStep_; y < height(); y += gridStep_)
-                for (int x = gridStep_; x < width(); x += gridStep_)
+            const int x0 = qMax(gridStep_, (dirty.left() / gridStep_) * gridStep_);
+            const int y0 = qMax(gridStep_, (dirty.top()  / gridStep_) * gridStep_);
+            for (int y = y0; y <= dirty.bottom() && y < height(); y += gridStep_)
+                for (int x = x0; x <= dirty.right() && x < width(); x += gridStep_)
                     p.drawPoint(x, y);
         }
         if (band_) {                                          // rubber-band marquee
@@ -1450,6 +1508,15 @@ void CcControl::mouseReleaseEvent(QMouseEvent*)
     dragging_ = resizing_ = valuing_ = false;
     panel_->endGesture();
 }
+void CcControl::mouseDoubleClickEvent(QMouseEvent* e)
+{
+    if (panel_->locked()) { QWidget::mouseDoubleClickEvent(e); return; }
+    panel_->setFocus(Qt::MouseFocusReason);
+    if (!panel_->isSelected(this)) panel_->selectOnly(this);
+    dragging_ = resizing_ = valuing_ = false;      // the press that opened it never gets its release
+    editProperties();
+    e->accept();
+}
 void CcControl::contextMenuEvent(QContextMenuEvent* e)
 {
     if (panel_->locked()) return;
@@ -1626,7 +1693,17 @@ void appendCapped(QListWidget* w, QListWidgetItem* it)
     const bool atBottom = sb->value() >= sb->maximum() - 2;
     w->addItem(it);
     while (w->count() > 5000) delete w->takeItem(0);
-    if (atBottom) w->scrollToBottom();
+    if (!atBottom) return;
+    // The scroll is DEFERRED, and coalesced to one per turn of the event loop.
+    // scrollToBottom() on a list whose rows are NOT all the same height has to walk
+    // the rows to find the content height - so calling it once per message made every
+    // message cost a little more than the last as the list filled. That is where the
+    // forward delay came from: it drifted from 1 ms to 34 ms over half a minute of
+    // playing, and no amount of waiting brought it back down.
+    static QSet<QListWidget*> pending;
+    if (pending.contains(w)) return;
+    pending.insert(w);
+    QTimer::singleShot(0, w, [w] { pending.remove(w); w->scrollToBottom(); });
 }
 } // namespace
 
@@ -1714,7 +1791,23 @@ MainWindow::MainWindow()
     auto wireMenu = [this](QListWidget* w, bool allowClear) {
         w->setContextMenuPolicy(Qt::CustomContextMenu);
         w->setSelectionMode(QAbstractItemView::ExtendedSelection);
-        connect(w, &QWidget::customContextMenuRequested, this, [w, allowClear](const QPoint& p) {
+        // Ctrl+C has to be OURS. The view's own handler copies the CURRENT row and
+        // ignores the rest of the selection, so Ctrl+A followed by Ctrl+C returned a
+        // single line - the one thing the shortcut was not for. Rows are sorted back
+        // into screen order too: a selection built by scattered Ctrl-clicks is not
+        // handed back in the order it appears.
+        auto* copyAct = new QAction(w);
+        copyAct->setShortcut(QKeySequence::Copy);
+        copyAct->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+        w->addAction(copyAct);
+        connect(copyAct, &QAction::triggered, w, [w] {
+            QList<QListWidgetItem*> sel = w->selectedItems();
+            std::sort(sel.begin(), sel.end(), [w](QListWidgetItem* a, QListWidgetItem* b) { return w->row(a) < w->row(b); });
+            QString t;
+            for (auto* it : sel) t += it->text() + '\n';
+            if (!t.isEmpty()) QApplication::clipboard()->setText(t);
+        });
+        connect(w, &QWidget::customContextMenuRequested, this, [w, allowClear, copyAct](const QPoint& p) {
             QMenu m;
             QAction* sa = m.addAction(tr("Select All"));
             QAction* co = m.addAction(tr("Copy"));
@@ -1722,11 +1815,8 @@ MainWindow::MainWindow()
             if (allowClear) { m.addSeparator(); cl = m.addAction(tr("Clear")); }
             QAction* a = m.exec(w->viewport()->mapToGlobal(p));
             if (a == sa) w->selectAll();
-            else if (a == co) {
-                QString t;
-                for (auto* it : w->selectedItems()) t += it->text() + '\n';
-                if (!t.isEmpty()) QApplication::clipboard()->setText(t);
-            } else if (cl && a == cl) w->clear();
+            else if (a == co) copyAct->trigger();       // one copy, two ways in
+            else if (cl && a == cl) w->clear();
         });
     };
     wireMenu(monIn_,        true);
@@ -1746,8 +1836,8 @@ MainWindow::MainWindow()
         appendCapped(uploadStatus_, it);
     });
     connect(uploader_, &Uploader::progress, this, [this](int p) { progress_->setValue(p); });
-    connect(uploader_, &Uploader::sent, this, [this](QByteArray b) {
-        monitorLine(true, adios::Bytes(b.begin(), b.end()));
+    connect(uploader_, &Uploader::sent, this, [this](QByteArray b, QString when) {
+        monitorLine(true, adios::Bytes(b.begin(), b.end()), when);
     });
     connect(uploader_, &Uploader::infoClear, this, [this] { devInfo_->clear(); });
     connect(uploader_, &Uploader::greetingRequested, this,
@@ -1799,9 +1889,20 @@ MainWindow::MainWindow()
     connect(hexPath_,    &QComboBox::currentTextChanged, this,
             [this](const QString& t) { uploadBtn_->setEnabled(connected_ && !t.isEmpty()); });
 
+    // What arrives is drained on this timer, so its period IS the delay between a
+    // message coming in and anything happening - the screen, and Forward with it.
+    // At 20 ms that was up to a fifth of a beat, and jittery with it. 2 ms costs a
+    // lock and an empty swap 500 times a second, which is nothing, and a precise
+    // timer keeps Windows from rounding it back up to the 15 ms tick.
     timer_ = new QTimer(this);
+    timer_->setTimerType(Qt::PreciseTimer);
     connect(timer_, &QTimer::timeout, this, &MainWindow::onTick);
-    timer_->start(20);
+    timer_->start(2);
+    // The monitor keeps its own, slower beat and a budget per pass, so a burst can
+    // never hold the screen: it catches up over the following passes instead.
+    monTimer_ = new QTimer(this);
+    connect(monTimer_, &QTimer::timeout, this, &MainWindow::onMonDrain);
+    monTimer_->start(15);
 
     // Fill and restore WITHOUT firing the combo signal (which would reconnect
     // on every added item); then open the remembered ports exactly once.
@@ -1831,8 +1932,11 @@ MainWindow::MainWindow()
 
 MainWindow::~MainWindow()
 {
+    // The input goes first, so no callback can still be inside Forward, and the
+ // output is closed UNDER its own lock: the MIDI thread and the uploader both send
+ // through it.
     in_.close();
-    out_.close();
+    { std::lock_guard<std::mutex> g(outGuard_); out_.close(); }
     delete ui_;
 }
 
@@ -1936,7 +2040,7 @@ void MainWindow::setConnected(bool on)
 void MainWindow::connectPorts()
 {
     in_.close();
-    out_.close();
+    { std::lock_guard<std::mutex> g(outGuard_); out_.close(); }   // a sender may be inside it
     setConnected(false);
 
     if (inBox_->count() == 0 || outBox_->count() == 0) return;
@@ -1948,7 +2052,7 @@ void MainWindow::connectPorts()
     }
     if (!in_.open(unsigned(inBox_->currentIndex()),
                   [this](const adios::Bytes& m, uint64_t t) { onMidiIn(m, t); }, err)) {
-        out_.close();
+        { std::lock_guard<std::mutex> g(outGuard_); out_.close(); }
         appendCapped(term_, new QListWidgetItem("! MIDI In: " + QString::fromStdString(err)));
         return;
     }
@@ -1960,6 +2064,11 @@ void MainWindow::connectPorts()
 // ---- MIDI thread ---------------------------------------------------------
 void MainWindow::onMidiIn(const adios::Bytes& msg, uint64_t t_us)
 {
+    // The arrival time, taken FIRST. Everything below it takes time - Forward puts
+    // bytes on the wire from here - and a stamp taken afterwards can land a
+    // millisecond past the one the outgoing copy carries, which reads as a message
+    // leaving before it arrived.
+    const QString when = nowStamp();
     // Wake a waiting Ping/upload RIGHT HERE, on the MIDI thread, the instant
     // the board answers - do NOT make the reply wait for the display timer.
     // That detour is what made a Ping miss the answer it had already received.
@@ -1969,22 +2078,47 @@ void MainWindow::onMidiIn(const adios::Bytes& msg, uint64_t t_us)
         tr5x6::Reply r = tr5x6::parse(msg.data(), msg.size());
         if (r.valid) uploader_->feedReply(r);
     }
-    // The display still goes through the queue + timer.
+    // Same reasoning for Forward, and it is the whole point of a thru: decide and send
+    // HERE, before anything is drawn. Waiting for the display timer cost 20 ms and its
+    // jitter; this costs the driver's own delay and nothing else.
+    ctrlForward(msg);
+    // The display still goes through the queue + timer, and carries that arrival time.
     std::lock_guard<std::mutex> lk(rxMx_);
-    rxQueue_.push_back({msg, t_us});
+    rxQueue_.push_back({msg, t_us, when});
 }
 
 void MainWindow::onTick()
 {
     std::vector<RxMsg> batch;
     { std::lock_guard<std::mutex> lk(rxMx_); batch.swap(rxQueue_); }
-    for (auto& r : batch) routeIn(r.bytes, r.t_us);
+    // The SCREEN, and nothing else. This handler has to RETURN before anything can be
+    // repainted, so everything that is merely written down waits for the other timer.
+    for (auto& r : batch) ctrlMidiIn(r.bytes);
+    if (monQueue_.size() < 20000)                     // a stalled GUI must not grow it forever
+        monQueue_.insert(monQueue_.end(), std::make_move_iterator(batch.begin()),
+                                          std::make_move_iterator(batch.end()));
 }
 
-void MainWindow::routeIn(const adios::Bytes& msg, uint64_t)
+// The monitor and the terminal: the LOWEST priority of the three. Its own beat, and a
+// ceiling per pass - 120 messages every 15 ms is 8000 a second, several times what a
+// MIDI cable can deliver, so it never falls behind. The ceiling is not there to keep
+// up: it is there to bound how long one pass can hold the screen tick behind it.
+void MainWindow::onMonDrain()
 {
-    monitorLine(false, msg);
-    ctrlMidiIn(msg);
+    constexpr size_t BUDGET = 120;
+    const size_t n = qMin(monQueue_.size(), BUDGET);
+    for (size_t i = 0; i < n; ++i) routeIn(monQueue_[i].bytes, monQueue_[i].t_us, monQueue_[i].when);
+    monQueue_.erase(monQueue_.begin(), monQueue_.begin() + int(n));
+    // What Forward put on the wire while we were not looking. Each line carries the
+    // time it actually left, so drawing it late does not make it LOOK late.
+    std::vector<std::pair<adios::Bytes, QString>> echo;
+    { std::lock_guard<std::mutex> lk(txMx_); echo.swap(txEcho_); }
+    for (const auto& e : echo) monitorLine(true, e.first, e.second);
+}
+
+void MainWindow::routeIn(const adios::Bytes& msg, uint64_t, const QString& when)
+{
+    monitorLine(false, msg, when);                    // ctrlMidiIn already ran, in onTick
 
     // Debug Terminal: the core sends console text as a "debug string" SysEx
     // (cmd 0x0D, sub 0x40) - F0 00 22 15 32 <id> 0D 40 <7-bit ascii...> F7.
@@ -2033,7 +2167,7 @@ void MainWindow::routeIn(const adios::Bytes& msg, uint64_t)
     }
 }
 
-void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
+void MainWindow::monitorLine(bool out, const adios::Bytes& msg, const QString& stamp)
 {
     // The Filter always gates the Input side; it gates the Output side only when
     // its "Apply Filter" toggle is on (same settings, reused).
@@ -2081,7 +2215,7 @@ void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
             if (cc == 6 && r.ch == ch && r.msb >= 0 && r.lsb >= 0 && !r.item) {
                 r.value = v; addSeg();
                 auto* one = new QListWidgetItem;
-                one->setData(Role_Stamp, nowStamp());
+                one->setData(Role_Stamp, stamp.isEmpty() ? nowStamp() : stamp);
                 one->setData(Role_Label, lineFor(ch, r.msb, r.lsb, r.value));
                 one->setData(Role_Hex,   r.raw);
                 one->setData(Role_Run,   false);
@@ -2110,7 +2244,7 @@ void MainWindow::monitorLine(bool out, const adios::Bytes& msg)
 
     adios::Decoded d = adios::decode(msg);
     auto* it = new QListWidgetItem;
-    it->setData(Role_Stamp, nowStamp());
+    it->setData(Role_Stamp, stamp.isEmpty() ? nowStamp() : stamp);
     it->setData(Role_Label, QString::fromStdString(d.label));
     it->setData(Role_Hex,   hexFull(msg));
     it->setData(Role_Run,   running);
@@ -2309,11 +2443,13 @@ void MainWindow::openController()
         auto* msbChk = new FilterCheckBox(tr("Bank MSB")); msbChk->setObjectName(QStringLiteral("bankMsbOn"));
         auto* lsbChk = new FilterCheckBox(tr("Bank LSB")); lsbChk->setObjectName(QStringLiteral("bankLsbOn"));
         auto* pgmChk = new FilterCheckBox(tr("Program"));  pgmChk->setObjectName(QStringLiteral("programOn"));
+        bankMsbChk_ = msbChk; bankLsbChk_ = lsbChk; pgmChk_ = pgmChk;
         for (FilterCheckBox* c : { msbChk, lsbChk, pgmChk }) { c->setNeutral(true); c->setChecked(false); }   // armed by hand
         auto* msbSp = new QSpinBox; msbSp->setObjectName(QStringLiteral("bankMsb")); msbSp->setRange(0, 127);
         auto* lsbSp = new QSpinBox; lsbSp->setObjectName(QStringLiteral("bankLsb")); lsbSp->setRange(0, 127);
         auto* pgmSp = new QSpinBox; pgmSp->setObjectName(QStringLiteral("program"));
         pgmSp->setRange(1, 128);                       // shown 1..128, sent 0..127
+        bankMsbSp_ = msbSp; bankLsbSp_ = lsbSp; pgmSp_ = pgmSp;
         for (QSpinBox* sp : { msbSp, lsbSp, pgmSp }) sp->setFixedWidth(62);
         auto* sendBtn = new QPushButton(tr("Send")); sendBtn->setObjectName(QStringLiteral("bankSend"));
         const Qt::Alignment mid = Qt::AlignLeft | Qt::AlignVCenter;
@@ -2362,6 +2498,7 @@ void MainWindow::openController()
         auto* snapGrid = new QGridLayout; snapGrid->setContentsMargins(0, 0, 0, 0); snapGrid->setSpacing(4);
         auto* snapGroup = new QButtonGroup(controllerWin_);
         snapGroup->setObjectName(QStringLiteral("snapGroup"));
+        snapGroup_ = snapGroup;
         for (int i = 0; i < 64; ++i) {
             auto* b = new QPushButton(QString::number(i + 1));
             b->setObjectName(QStringLiteral("snapCell"));
@@ -2437,7 +2574,7 @@ void MainWindow::openController()
         auto* noNoteOff = new FilterCheckBox(tr("No Note Off"));   // on: release sends Note On vel 0 (running status)
         noNoteOff->setObjectName("noNoteOff");                     // persisted with the View toggles
         noNoteOff->setNeutral(true);                               // same gray box + white tick as "Apply Filter"
-        noNoteOff->setText(tr("Keyboard No Note Off"));            // shown in Preferences, not on the keyboard row
+        noNoteOff->setChecked(true);                               // shown in Preferences; on by default
         connect(chGroup, &QButtonGroup::idToggled, this, [this](int id, bool on) { if (on) kbChannel_ = id; });
         gl->addLayout(chRow);
         gl->addSpacing(TOP_GAP);
@@ -2455,6 +2592,7 @@ void MainWindow::openController()
         // 100 % and at 125 % alike. Keys and wheels are built on this one figure.
         const int keyH = qRound(112.0 / QGuiApplication::primaryScreen()->devicePixelRatio());
         auto* kb = new PianoKeyboard;
+        kbWidget_ = kb;                        // the wire lights its keys through this
         kb->setFixedHeight(keyH);
         gl->addWidget(kb);
 
@@ -2508,24 +2646,28 @@ void MainWindow::openController()
         lgl->addSpacing(TOP_GAP);
         auto* whRow = new QHBoxLayout; whRow->setContentsMargins(0, 0, 0, 0); whRow->setSpacing(WHEEL_GAP);
         const int wheelH = STRIP_H + STRIP_GAP + keyH;  // top of the strip to the foot of the keys
-        auto* pitch = new Wheel(Wheel::Pitch, wheelH);
-        auto* mod   = new Wheel(Wheel::Mod, wheelH); modWheel_ = mod;   // reachable by the snapshot code
+        auto* pitch = new Wheel(Wheel::Pitch, wheelH); bendWheel_ = pitch;
+        auto* mod   = new Wheel(Wheel::Mod, wheelH);   modWheel_  = mod;   // snapshots and MIDI in reach them
         whRow->addWidget(pitch); whRow->addWidget(mod);
         lgl->addLayout(whRow);
         lgl->addSpacing(10);
         auto* valRow = new QHBoxLayout; valRow->setContentsMargins(0, 0, 0, 0); valRow->setSpacing(WHEEL_GAP);
         auto* vBend = mkCentered(QStringLiteral("0"), "wheelVal", 14);   // 14 = the scrollbar row height
-        auto* vMod  = mkCentered(QStringLiteral("0"), "wheelVal", 14); modValLabel_ = vMod;
+        auto* vMod  = mkCentered(QStringLiteral("0"), "wheelVal", 14);
         valRow->addWidget(vBend); valRow->addWidget(vMod);
         lgl->addLayout(valRow);
 
-        pitch->onChange = [this, vBend](int v) {
+        // The figure follows the wheel wherever the move came from - hand, snapshot or
+        // wire. Only a gesture reaches the wire.
+        pitch->onDisplay = [vBend](int v) {
             const int s = v - 8192;   // 0 at rest, signed offset otherwise
             vBend->setText(QString(s > 0 ? "+" : "") + QString::number(s));
+        };
+        pitch->onChange = [this](int v) {
             sendRaw({ uint8_t(0xE0 | kbChannel_), uint8_t(v & 0x7f), uint8_t((v >> 7) & 0x7f) });
         };
-        mod->onChange = [this, vMod](int v) {
-            vMod->setText(QString::number(v));
+        mod->onDisplay = [vMod](int v) { vMod->setText(QString::number(v)); };
+        mod->onChange = [this](int v) {
             ctrlSnapTouched();                     // Mod is one of the values a snapshot holds
             sendRaw({ uint8_t(0xB0 | kbChannel_), uint8_t(1), uint8_t(v & 0x7f) });   // CC 1
         };
@@ -2570,31 +2712,51 @@ void MainWindow::openController()
         auto mkTick = [](const QString& t, const char* obj, bool on) {
             auto* c = new FilterCheckBox(t); c->setObjectName(QLatin1String(obj)); c->setNeutral(true); c->setChecked(on); return c;
         };
-        midiInChk_   = mkTick(tr("MIDI Input"),                 "midiIn",      false);
-        fwdChk_      = mkTick(tr("MIDI Forward"),               "midiForward", false);
-        snapOnlyAct_ = mkTick(tr("Snapshot Send only changes"), "snapOnly",    true);
-        snapModAct_  = mkTick(tr("Snapshot includes Mod"),      "snapMod",     false);
-        omniChk_ = mkTick(tr("MIDI Input Omni"), "midiOmni", true);   // ticked: any channel
+        midiInChk_   = mkTick(tr("Enabled"),           "midiIn",      false);
+        fwdChk_      = mkTick(tr("Forward"),           "midiForward", false);
+        snapOnlyAct_ = mkTick(tr("Send only changes"), "snapOnly",    true);
+        snapModAct_  = mkTick(tr("Includes Mod"),      "snapMod",     false);
+        omniChk_     = mkTick(tr("Omni"),              "midiOmni",    true);   // ticked: any channel
+        constVelChk_ = mkTick(tr("Constant velocity"), "kbConstVel",  false);
+        constVelSp_  = new QSpinBox; constVelSp_->setObjectName(QStringLiteral("kbConstVelValue"));
+        constVelSp_->setRange(1, 127); constVelSp_->setValue(100); constVelSp_->setFixedWidth(62);
         // "As Output" first and by default: the input then listens on whatever channel
         // the keyboard transmits on, so the two follow each other instead of being set twice.
         inChanBox_ = new QComboBox; inChanBox_->setObjectName(QStringLiteral("midiInChannel"));
         inChanBox_->addItem(tr("As Output"));
         for (int i = 1; i <= 16; ++i) inChanBox_->addItem(QString::number(i));
         inChanBox_->setCurrentIndex(0);
-        // Three groups, two rules between them: a 1 px line in the panel's border tone.
-        auto mkSep = [] { auto* f = new QFrame; f->setObjectName(QStringLiteral("prefSep")); f->setFixedHeight(1); return f; };
+        // Forward has two reaches: only what this controller could itself have produced,
+        // or every voice message there is.
+        fwdModeBox_ = new QComboBox; fwdModeBox_->setObjectName(QStringLiteral("midiForwardMode"));
+        fwdModeBox_->addItem(tr("Config")); fwdModeBox_->addItem(tr("All"));
+        fwdModeBox_->setCurrentIndex(0);
+        // A NAMED rule opens each group, and the ticks under it drop the prefix that the
+        // heading now carries: under one that says Keyboard, "Keyboard No Note Off" is
+        // just "No Note Off".
+        auto mkHead = [](const QString& t) {
+            auto* w = new QWidget;
+            auto* h = new QHBoxLayout(w); h->setContentsMargins(0, 6, 0, 2); h->setSpacing(8);
+            auto* l = new QLabel(t); l->setObjectName(QStringLiteral("prefHead"));
+            auto* r = new QFrame; r->setObjectName(QStringLiteral("prefSep")); r->setFixedHeight(1);
+            r->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            h->addWidget(l); h->addWidget(r, 1);
+            return w;
+        };
+        pf->addRow(mkHead(tr("Keyboard")));
         pf->addRow(noNoteOff);                                   // moved here from the keyboard row
-        pf->addRow(mkSep());
+        pf->addRow(constVelChk_, constVelSp_);
+        pf->addRow(mkHead(tr("MIDI Input")));
         pf->addRow(midiInChk_);
         pf->addRow(omniChk_);
-        pf->addRow(tr("MIDI Input Channel"), inChanBox_);
+        pf->addRow(tr("Channel"), inChanBox_);
         if (QWidget* l = pf->labelForField(inChanBox_)) l->setObjectName(QStringLiteral("filterLabel"));   // the ticks' grey, not label white
-        pf->addRow(fwdChk_);
-        pf->addRow(mkSep());
+        pf->addRow(fwdChk_, fwdModeBox_);
+        pf->addRow(mkHead(tr("Snapshot")));
         pf->addRow(snapOnlyAct_);
         pf->addRow(snapModAct_);
-        // Everything under MIDI Input follows it: Omni and Forward only with Input on,
-        // the channel only with Input on AND Omni off.
+        // Each field hangs off the tick above it: Omni and Forward off Enabled, the
+        // channel off Omni, the forward mode off Forward, the velocity off its own tick.
         auto prefEnable = [this, pf] {
             const bool in = midiInChk_->isChecked();
             omniChk_->setEnabled(in);
@@ -2602,10 +2764,19 @@ void MainWindow::openController()
             const bool chan = in && !omniChk_->isChecked();
             setFieldOn(inChanBox_, chan);
             if (QWidget* l = pf->labelForField(inChanBox_)) l->setEnabled(chan);   // the label greys with its field
+            setFieldOn(fwdModeBox_, in && fwdChk_->isChecked());
+            setFieldOn(constVelSp_, constVelChk_->isChecked());
         };
-        connect(omniChk_,   &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
-        connect(midiInChk_, &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
+        // The keyboard takes its velocity from here, so the value sent and the colour of
+        // the key always agree.
+        auto applyVel = [this, kb] { kb->setFixedVelocity(constVelChk_->isChecked() ? constVelSp_->value() : 0); };
+        connect(omniChk_,     &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
+        connect(midiInChk_,   &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
+        connect(fwdChk_,      &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
+        connect(constVelChk_, &QCheckBox::toggled, this, [prefEnable, applyVel](bool) { prefEnable(); applyVel(); });
+        connect(constVelSp_,  &QSpinBox::valueChanged, this, [applyVel](int) { applyVel(); });
         prefEnable();
+        applyVel();
         connect(prefAct, &QAction::triggered, this, [this] { prefsDlg_->show(); prefsDlg_->raise(); prefsDlg_->activateWindow(); });
         connect(cfgNew,  &QAction::triggered, this, [this] { ctrlNewConfig(); });
         connect(cfgOpen, &QAction::triggered, this, [this] { ctrlOpenConfig(); });
@@ -2725,7 +2896,9 @@ void MainWindow::openController()
             selAllAct->setEnabled(ed && ccPanel->controlCount() > 0);
             remAllAct->setEnabled(ed && ccPanel->controlCount() > 0);
         };
-        ccPanel->onStateChanged = updateEdit;
+        // Undo, redo and every selection change land here; the forward rules ride along
+        // because undo can put a CC back on the surface or take one off it.
+        ccPanel->onStateChanged = [this, updateEdit] { updateEdit(); ctrlRefreshFwdRules(); };
         connect(editMenu, &QMenu::aboutToShow, editMenu, [updateEdit] { updateEdit(); });   // fresh states on open
         updateEdit();
         col->setMenuBar(mb);
@@ -2782,7 +2955,7 @@ void MainWindow::openController()
         ccLocked->setChecked(true);
         // From here on, any change to what the config holds marks it dirty. Wired
         // last so the restores above do not count.
-        ccPanel->onEdited = [this] { ctrlSetDirty(true); };
+        ccPanel->onEdited = [this] { ctrlSetDirty(true); ctrlRefreshFwdRules(); };
         // The named spin boxes ARE the three Bank/Program values a snapshot holds, so
         // moving one both dirties the config and drops the snapshot selection.
         for (QSpinBox* sp : controllerWin_->findChildren<QSpinBox*>())
@@ -2790,15 +2963,16 @@ void MainWindow::openController()
                 connect(sp, &QSpinBox::valueChanged, this, [this](int) { ctrlSetDirty(true); ctrlSnapTouched(); });
         for (QComboBox* cb : controllerWin_->findChildren<QComboBox*>())
             if (!cb->objectName().isEmpty())
-                connect(cb, &QComboBox::currentIndexChanged, this, [this](int) { ctrlSetDirty(true); });
+                connect(cb, &QComboBox::currentIndexChanged, this, [this](int) { ctrlSetDirty(true); ctrlRefreshFwdRules(); });
         for (QCheckBox* c : controllerWin_->findChildren<QCheckBox*>())
             if (!c->objectName().isEmpty() && c->objectName() != QLatin1String("ccLocked"))
-                connect(c, &QCheckBox::toggled, this, [this](bool) { ctrlSetDirty(true); });
+                connect(c, &QCheckBox::toggled, this, [this](bool) { ctrlSetDirty(true); ctrlRefreshFwdRules(); });
         for (QAction* a : controllerWin_->findChildren<QAction*>())
             if (!a->objectName().isEmpty() && a->isCheckable()) connect(a, &QAction::toggled, this, [this](bool) { ctrlSetDirty(true); });
-        connect(chGroup, &QButtonGroup::idToggled, this, [this](int, bool on) { if (on) ctrlSetDirty(true); });
+        connect(chGroup, &QButtonGroup::idToggled, this, [this](int, bool on) { if (on) { ctrlSetDirty(true); ctrlRefreshFwdRules(); } });
         ctrlDirty_ = dirty;
         ctrlUpdateTitle();
+        ctrlRefreshFwdRules();                 // first picture, once everything is restored
 
         // Cap the width where EVERY key shows: once laid out, the window/keyboard
         // width difference IS the exact chrome (margins + group padding + border),
@@ -2843,7 +3017,9 @@ bool MainWindow::ctrlWriteConfig(const QString& path)
     x.writeStartDocument();
     // Version 2: midiIn/@channel counts from 0, where 0 is "As Output". Version 1
     // only knew 1..16, so a file that old cannot mean anything but "not chosen".
-    x.writeStartElement("adios-controller"); x.writeAttribute("version", "2");
+    // Version 3 adds the keyboard's constant velocity and the forward mode; both are
+    // absent from an older file, which simply gets their defaults.
+    x.writeStartElement("adios-controller"); x.writeAttribute("version", "3");
 
     x.writeStartElement("window");
     x.writeAttribute("w", num(controllerWin_->width())); x.writeAttribute("h", num(controllerWin_->height()));
@@ -2856,12 +3032,14 @@ bool MainWindow::ctrlWriteConfig(const QString& path)
 
     x.writeStartElement("keyboard");
     x.writeAttribute("channel", num(kbChannel_ + 1)); x.writeAttribute("noNoteOff", b01(tick("noNoteOff")));
+    x.writeAttribute("constVel", b01(tick("kbConstVel"))); x.writeAttribute("constVelValue", num(spin("kbConstVelValue")));
     x.writeEndElement();
 
     x.writeStartElement("midiIn");
     x.writeAttribute("on", b01(tick("midiIn"))); x.writeAttribute("omni", b01(tick("midiOmni")));
     x.writeAttribute("channel", num(inChanBox_ ? inChanBox_->currentIndex() : 0));   // 0 = As Output, 1..16 = that channel
     x.writeAttribute("forward", b01(tick("midiForward")));
+    x.writeAttribute("forwardMode", fwdModeBox_ && fwdModeBox_->currentIndex() == 1 ? "all" : "config");
     x.writeEndElement();
 
     x.writeStartElement("bank");
@@ -2988,6 +3166,8 @@ bool MainWindow::ctrlLoadXml(const QString& path)
             if (auto* g = controllerWin_->findChild<QButtonGroup*>(QStringLiteral("chGroup")))
                 if (auto* b = g->button(qBound(0, attrInt(a, "channel", 1) - 1, 15))) b->setChecked(true);
             if (auto* c = controllerWin_->findChild<QCheckBox*>(QStringLiteral("noNoteOff"))) c->setChecked(attrBool(a, "noNoteOff", c->isChecked()));
+            if (constVelChk_) constVelChk_->setChecked(attrBool(a, "constVel", false));
+            if (constVelSp_)  { const QSignalBlocker b(constVelSp_); constVelSp_->setValue(qBound(1, attrInt(a, "constVelValue", 100), 127)); }
             continue;
         }
         if (tag == QLatin1String("midiIn")) {
@@ -2998,6 +3178,8 @@ bool MainWindow::ctrlLoadXml(const QString& path)
             if (inChanBox_) { const QSignalBlocker b(inChanBox_);
                 inChanBox_->setCurrentIndex(fileVersion >= 2 ? qBound(0, attrInt(a, "channel", 0), 16) : 0); }
             if (fwdChk_)    fwdChk_->setChecked(attrBool(a, "forward", false));
+            if (fwdModeBox_) { const QSignalBlocker b(fwdModeBox_);
+                fwdModeBox_->setCurrentIndex(a.value("forwardMode").toString() == QLatin1String("all") ? 1 : 0); }
             continue;
         }
         if (tag == QLatin1String("bank")) {
@@ -3041,6 +3223,7 @@ bool MainWindow::ctrlLoadXml(const QString& path)
     if (snapOnlyAct_) snapOnlyAct_->setChecked(onlyChanges);
     if (snapModAct_)  snapModAct_->setChecked(includeMod);
     ctrlRefreshSnapCells();
+    ctrlRefreshFwdRules();                 // a loaded surface changes what Config lets out
     return true;
 }
 
@@ -3073,40 +3256,70 @@ void MainWindow::ctrlNewConfig()
         if (auto* c = controllerWin_->findChild<QCheckBox*>(QLatin1String(n))) c->setChecked(false);
     if (auto* g = controllerWin_->findChild<QButtonGroup*>(QStringLiteral("chGroup")))
         if (auto* b = g->button(0)) b->setChecked(true);          // the keyboard back to channel 1
-    if (modWheel_) {                                              // Mod back to rest, on screen only
-        static_cast<Wheel*>(modWheel_)->setValue(0, false);
-        if (modValLabel_) modValLabel_->setText(QStringLiteral("0"));
-    }
+    if (modWheel_) static_cast<Wheel*>(modWheel_)->setValue(0, false);   // Mod at rest, screen only
     ctrlSnaps_ = QVector<CtrlSnap>(64);
     ctrlRefreshSnapCells();
     ctrlSnapDeselect();                                           // every slot is empty: none is selected
-    if (snapOnlyAct_) snapOnlyAct_->setChecked(true);
-    if (snapModAct_)  snapModAct_->setChecked(false);
+    // And every preference back to its stated default, in the order of the window.
+    auto setTick = [this](const char* n, bool on) {
+        if (auto* c = controllerWin_->findChild<QCheckBox*>(QLatin1String(n))) c->setChecked(on);
+    };
+    setTick("noNoteOff", true);  setTick("kbConstVel", false); setSpin("kbConstVelValue", 100);
+    setTick("midiIn", false);    setTick("midiOmni", true);    setTick("midiForward", false);
+    setTick("snapOnly", true);   setTick("snapMod", false);
+    if (inChanBox_)  { const QSignalBlocker b(inChanBox_);  inChanBox_->setCurrentIndex(0); }    // As Output
+    if (fwdModeBox_) { const QSignalBlocker b(fwdModeBox_); fwdModeBox_->setCurrentIndex(0); }   // Config
+    ctrlRefreshFwdRules();
     ctrlConfigPath_.clear();
     ctrlDirty_ = false;
     ctrlUpdateTitle();
 }
 
-// ---- MIDI Input: the wire drives the surface ------------------------------------
-// With MIDI Input on, an incoming Control Change - or an NRPN run - lands on the
-// controls that carry that address, on screen only: nothing is sent back. Omni On
-// listens on every channel, Omni Off on one. Forward re-sends what comes in, except
-// SysEx, which is Studio's own dialogue with the core.
+// ---- MIDI Input: the wire drives the screen -------------------------------------
+// With MIDI Input on, what arrives moves what is on screen and NOTHING goes back out
+// because of it: the surface objects carrying that address, the two wheels, the
+// Bank/Program fields, the keyboard. Omni On listens on every channel, Omni Off on
+// one - the one named, or the keyboard's own when the box says "As Output".
+//
+// Forward is NOT here: it answers on the MIDI thread, in ctrlForward, because a thru
+// must not wait for this timer. What follows is the SCREEN, and only the screen.
 void MainWindow::ctrlMidiIn(const adios::Bytes& msg)
 {
     if (!controllerWin_ || !ccSurface_ || !midiInChk_ || !midiInChk_->isChecked() || msg.empty()) return;
     const uint8_t st = msg[0];
-    if (fwdChk_ && fwdChk_->isChecked() && st != 0xf0) sendRaw(msg);
-    if (msg.size() != 3 || (st & 0xf0) != 0xb0) return;                  // only CC drive the surface
-    const int ch = st & 0x0f;
-    // Omni off means one channel only: the one named in the box, or the keyboard's own
-    // when the box says "As Output".
-    if (omniChk_ && !omniChk_->isChecked() && inChanBox_) {
-        const int idx = inChanBox_->currentIndex();
-        if (ch != (idx == 0 ? kbChannel_ : idx - 1)) return;
-    }
-    const int cc = msg[1], v = msg[2];
+    if (st < 0x80 || st >= 0xf0) return;                  // voice messages only, in and out
+    const int type = st & 0xf0, ch = st & 0x0f;
+    // Omni On lets every channel drive the screen, Omni Off only the one chosen - which
+    // is the keyboard's own when the box says "As Output".
+    const int inCh = (inChanBox_ && inChanBox_->currentIndex() > 0) ? inChanBox_->currentIndex() - 1 : kbChannel_;
+    if (omniChk_ && !omniChk_->isChecked() && ch != inCh) return;
+    auto setSpin = [](QSpinBox* s, int v) {               // screen only, and says whether it moved
+        if (!s || s->value() == v) return false;
+        const QSignalBlocker b(s); s->setValue(v);
+        return true;
+    };
     auto* panel = static_cast<CcPanel*>(ccSurface_);
+    const int d1 = msg.size() > 1 ? int(msg[1]) : 0;
+    const int d2 = msg.size() > 2 ? int(msg[2]) : 0;
+
+    if (type == 0x90 || type == 0x80) {                   // notes light the keys
+        if (auto* k = static_cast<PianoKeyboard*>(kbWidget_)) {
+            if (type == 0x90 && d2 > 0) k->showNote(d1, d2);
+            else                        k->clearNote(d1);
+        }
+        return;
+    }
+    if (type == 0xE0) {                                   // pitch bend -> the Bend wheel
+        if (bendWheel_) static_cast<Wheel*>(bendWheel_)->setValue((d2 << 7) | d1, false);
+        return;
+    }
+    if (type == 0xC0) {                                   // program change -> the Program field
+        if (setSpin(pgmSp_, qBound(1, d1 + 1, 128))) ctrlSnapTouched();
+        return;
+    }
+    if (type != 0xB0) return;                             // aftertouch: nothing here holds it
+
+    const int cc = d1, v = d2;
     NrpnRun& r = nrpnCtl_;
     if (cc == 99) { r = NrpnRun(); r.ch = ch; r.msb = v; return; }
     if (cc == 98) { if (r.ch == ch && r.msb >= 0) r.lsb = v; return; }
@@ -3116,20 +3329,110 @@ void MainWindow::ctrlMidiIn(const adios::Bytes& msg)
         if (cc == 6) r.value = v; else r.value = (r.value << 7) | v;
         bool moved = false;
         for (CcControl* c : panel->controls())
-            if (c->nrpn && c->nrpnNum == param && (cc == 6 ? !c->wide : c->wide)) moved = c->applyMidi(r.value) || moved;
-        if (moved) ctrlSnapTouched();                      // the screen has left the lit cell behind
+            if (c->nrpn && c->nrpnNum == param && (cc == 6 ? !c->wide : c->wide))
+                moved = c->applyMidi(r.value) || moved;
+        if (moved) ctrlSnapTouched();                     // the screen has left the lit cell behind
         return;
+    }
+
+    // The reserved numbers drive their own field FIRST, then fall through: a surface
+    // object may sit on the same number and be live, when the bank tick is not armed.
+    if (cc == 0)  { if (setSpin(bankMsbSp_, v)) ctrlSnapTouched(); }
+    if (cc == 32) { if (setSpin(bankLsbSp_, v)) ctrlSnapTouched(); }
+    if (cc == 1 && modWheel_) {
+        auto* w = static_cast<Wheel*>(modWheel_);
+        if (w->value() != v) { w->setValue(v, false); ctrlSnapTouched(); }
     }
     bool moved = false;
     for (CcControl* c : panel->controls())
-        if (!c->nrpn && !c->isDeco() && c->cc == cc && !c->blocked()) moved = c->applyMidi(v) || moved;
+        if (!c->nrpn && !c->isDeco() && c->cc == cc && !c->blocked())
+            moved = c->applyMidi(v) || moved;
     if (moved) ctrlSnapTouched();
+}
+
+// The GUI keeps this picture up to date for the MIDI thread to read. Cheap: it walks
+// the surface once, and only when something it holds has actually changed.
+void MainWindow::ctrlRefreshFwdRules()
+{
+    FwdRules r;
+    if (controllerWin_ && ccSurface_) {
+        auto tick = [this](const char* n) {
+            auto* c = controllerWin_->findChild<QCheckBox*>(QLatin1String(n));
+            return c && c->isChecked();
+        };
+        r.on    = midiInChk_ && midiInChk_->isChecked() && fwdChk_ && fwdChk_->isChecked();
+        r.all   = fwdModeBox_ && fwdModeBox_->currentIndex() == 1;
+        r.omni  = !omniChk_ || omniChk_->isChecked();
+        r.inCh  = (inChanBox_ && inChanBox_->currentIndex() > 0) ? inChanBox_->currentIndex() - 1 : kbChannel_;
+        r.outCh = kbChannel_;
+        r.bankMsb = tick("bankMsbOn"); r.bankLsb = tick("bankLsbOn"); r.program = tick("programOn");
+        for (CcControl* c : static_cast<CcPanel*>(ccSurface_)->controls()) {
+            if (c->isDeco()) continue;
+            if (c->nrpn) r.nrpn.push_back(c->nrpnNum);
+            else if (c->cc >= 0 && c->cc < 128 && !c->blocked()) r.cc[c->cc >> 5] |= 1u << (c->cc & 31);
+        }
+        std::sort(r.nrpn.begin(), r.nrpn.end());
+        r.nrpn.erase(std::unique(r.nrpn.begin(), r.nrpn.end()), r.nrpn.end());
+    }
+    std::lock_guard<std::mutex> lk(fwdMx_);
+    fwd_ = r;
+}
+
+// ---- Forward: on the MIDI THREAD, the instant the message lands -----------------
+// Voice messages only - this is a controller, and that is the whole of what it speaks.
+// Both modes sit behind the input filter. "All" passes what got through byte for byte,
+// on the channel it came in on. "Config" passes only what this controller could itself
+// have produced and RE-STAMPS it onto the keyboard's channel.
+void MainWindow::ctrlForward(const adios::Bytes& msg)
+{
+    if (msg.empty()) return;
+    const uint8_t st = msg[0];
+    if (st < 0x80 || st >= 0xf0) return;
+    FwdRules r;
+    { std::lock_guard<std::mutex> lk(fwdMx_); r = fwd_; }
+    if (!r.on) return;
+    const int type = st & 0xf0, ch = st & 0x0f;
+    if (!r.omni && ch != r.inCh) return;               // the one gate, for both modes
+
+    auto put = [this](const adios::Bytes& m) { if (sendWire(m)) echoToMonitor(m); };
+    if (r.all) { put(msg); return; }                   // as it came, channel untouched
+
+    auto stamped = [&r](const adios::Bytes& m) {
+        adios::Bytes o = m;
+        if (!o.empty()) o[0] = uint8_t((o[0] & 0xf0) | r.outCh);
+        return o;
+    };
+    if (type == 0x90 || type == 0x80 || type == 0xE0) { put(stamped(msg)); return; }   // notes, bend
+    if (type == 0xC0) { if (r.program) put(stamped(msg)); return; }
+    if (type != 0xB0) return;                          // aftertouch: this controller has none
+
+    const int cc = msg.size() > 1 ? int(msg[1]) : 0;
+    const int v  = msg.size() > 2 ? int(msg[2]) : 0;
+    // The run is held until its parameter can be recognised: it leaves WHOLE or not at
+    // all, never half a sequence.
+    if (cc == 99) { fwdHold_.clear(); fwdHold_.push_back(msg); fwdCh_ = ch; fwdMsb_ = v; fwdLsb_ = -1; return; }
+    if (cc == 98) { if (fwdCh_ == ch && fwdMsb_ >= 0) { fwdLsb_ = v; fwdHold_.push_back(msg); } return; }
+    if (cc == 6 || cc == 38) {
+        if (fwdCh_ != ch || fwdMsb_ < 0 || fwdLsb_ < 0) return;
+        const int param = fwdMsb_ * 128 + fwdLsb_;
+        if (std::binary_search(r.nrpn.begin(), r.nrpn.end(), param)) {
+            for (const adios::Bytes& h : fwdHold_) put(stamped(h));
+            put(stamped(msg));
+        }
+        fwdHold_.clear();
+        return;
+    }
+    const bool known = (cc == 1)                                   // the Mod wheel
+                    || (cc == 0  && r.bankMsb)
+                    || (cc == 32 && r.bankLsb)
+                    || (cc >= 0 && cc < 128 && (r.cc[cc >> 5] & (1u << (cc & 31))));
+    if (known) put(stamped(msg));
 }
 
 // ---- snapshots ---------------------------------------------------------------
 void MainWindow::ctrlRefreshSnapCells()
 {
-    auto* g = controllerWin_ ? controllerWin_->findChild<QButtonGroup*>(QStringLiteral("snapGroup")) : nullptr;
+    QButtonGroup* g = snapGroup_;
     if (!g) return;
     for (QAbstractButton* b : g->buttons()) {
         const bool used = ctrlSnaps_.value(g->id(b)).used;
@@ -3142,7 +3445,7 @@ void MainWindow::ctrlRefreshSnapCells()
 // The group is exclusive, so "none of them checked" has to be asked for explicitly.
 void MainWindow::ctrlSnapDeselect()
 {
-    auto* g = controllerWin_ ? controllerWin_->findChild<QButtonGroup*>(QStringLiteral("snapGroup")) : nullptr;
+    QButtonGroup* g = snapGroup_;
     if (!g) return;
     QAbstractButton* b = g->checkedButton();
     if (!b) return;
@@ -3552,15 +3855,38 @@ QString MainWindow::nowStamp()
     return QTime::currentTime().toString("HH:mm:ss.zzz");   // absolute time of day
 }
 
-bool MainWindow::sendRaw(const adios::Bytes& msg)
+// The wire and nothing else, so it is safe from any thread: Forward calls it from the
+// MIDI callback. Whoever wants the message SHOWN queues it for the GUI afterwards.
+bool MainWindow::sendWire(const adios::Bytes& msg, std::string* err)
 {
     if (!connected_) return false;
+    std::string local;
+    std::lock_guard<std::mutex> g(outGuard_);
+    return out_.send(msg, err ? *err : local);
+}
+
+// The time it LEFT travels with it, so drawing the line late never makes the message
+// look late. Queued from either thread; the display timer picks it up.
+void MainWindow::echoToMonitor(const adios::Bytes& msg)
+{
+    const QString when = nowStamp();
+    std::lock_guard<std::mutex> lk(txMx_);
+    txEcho_.push_back({msg, when});
+}
+
+// Everything the controller plays comes through here - a note, a wheel, a knob, a
+// snapshot recall, Bank/Program. The wire FIRST and alone: building the monitor line
+// here would have made every key press wait on it, the same fault that held the
+// incoming side.
+bool MainWindow::sendRaw(const adios::Bytes& msg)
+{
     std::string err;
-    bool ok;
-    { std::lock_guard<std::mutex> g(outGuard_); ok = out_.send(msg, err); }
-    if (ok) monitorLine(true, msg);
-    else    appendCapped(term_, new QListWidgetItem("! send: " + QString::fromStdString(err)));
-    return ok;
+    if (!sendWire(msg, &err)) {
+        if (connected_) appendCapped(term_, new QListWidgetItem("! send: " + QString::fromStdString(err)));
+        return false;
+    }
+    echoToMonitor(msg);
+    return true;
 }
 
 void MainWindow::sendSysex()

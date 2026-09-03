@@ -143,6 +143,10 @@ QCheckBox { color: #8a94a6; spacing: 4px; }
 QToolButton { background: transparent; border: none; }   /* the disclosure triangles */
 QLabel#filterLabel { color: #8a94a6; }   /* parent-level label */
 QLabel#filterLabel:disabled { color: #5a6172; }   /* the id rule would otherwise beat the disabled grey */
+QLabel#prefHead {                  /* the name that opens a group of preferences */
+    color: #8a94a6; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1px;
+}
 QFrame#prefSep { background: #2a2f3a; border: none; }   /* Preferences: the rule between two groups */
 QLabel#filterSub   { color: #5a6172; }   /* sub-filter label (child), e.g. Channels */
 

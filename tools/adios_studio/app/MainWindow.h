@@ -27,6 +27,7 @@ class QToolButton;
 class QLineEdit;
 class QLabel;
 class QProgressBar;
+class QButtonGroup;
 class QCheckBox;
 class QAction;
 class QListWidget;
@@ -56,12 +57,23 @@ private slots:
 private:
     void saveSettings();
     void restoreSettings();
-    struct RxMsg { adios::Bytes bytes; uint64_t t_us; };
+    // `when` is stamped in the MIDI callback, not when the queue is drained: the two
+    // monitors have to be comparable, or the delay they show is the display's and not
+    // the wire's.
+    struct RxMsg { adios::Bytes bytes; uint64_t t_us; QString when; };
 
     void onMidiIn(const adios::Bytes& msg, uint64_t t_us);   // MIDI thread
-    void routeIn(const adios::Bytes& msg, uint64_t t_us);    // GUI thread
-    void monitorLine(bool out, const adios::Bytes& msg);
-    bool sendRaw(const adios::Bytes& msg);                   // GUI thread, echoes to monitor
+    void routeIn(const adios::Bytes& msg, uint64_t t_us, const QString& when = QString());   // GUI thread
+    // `stamp` empty = stamp it now. Forward sends from the MIDI thread and the GUI
+    // shows the line later, so it hands the time the bytes ACTUALLY left: otherwise
+    // the monitor would report its own delay as the delay of the thru.
+    void monitorLine(bool out, const adios::Bytes& msg, const QString& stamp = QString());
+    // ONE rule for everything that leaves: the bytes go on the wire, and the monitor is
+    // merely TOLD - it draws on its own timer, at its own (lower) priority. Nothing
+    // that plays waits on something that only shows.
+    bool sendRaw(const adios::Bytes& msg);                   // wire, then note it for the monitor
+    bool sendWire(const adios::Bytes& msg, std::string* err = nullptr);   // ANY thread, no widget
+    void echoToMonitor(const adios::Bytes& msg);             // ANY thread: queue, never draw
     void setConnected(bool on);
 
     // View menu (menu bar built in the ctor). Each monitor line keeps its three
@@ -103,6 +115,11 @@ private:
     // state by id, and the Mod wheel. Stored in the config file with two options.
     struct CtrlSnap { bool used = false; int msb = 0, lsb = 0, program = 1, mod = 0; QMap<int, int> values; };
     QVector<CtrlSnap> ctrlSnaps_;
+    // Found once, at build time. These sit on the path every incoming message walks,
+    // and findChild() rescans the whole window each time it is called.
+    QButtonGroup* snapGroup_  = nullptr;
+    QSpinBox*  bankMsbSp_  = nullptr; QSpinBox*  bankLsbSp_  = nullptr; QSpinBox*  pgmSp_  = nullptr;
+    QCheckBox* bankMsbChk_ = nullptr; QCheckBox* bankLsbChk_ = nullptr; QCheckBox* pgmChk_ = nullptr;
     // Preferences window (Config > Preferences...): the ticks live there, as
     // children of the controller window so they persist with the others.
     QDialog*   prefsDlg_     = nullptr;
@@ -114,8 +131,41 @@ private:
                                         // keyboard's own TX channel; 1..16 = that channel
     QCheckBox* fwdChk_       = nullptr; // "MIDI Forward": what comes in goes out again
     void ctrlMidiIn(const adios::Bytes& msg);   // GUI thread, from routeIn
-    QWidget* modWheel_ = nullptr;       // the Mod wheel (a .cpp-local class, kept as a QWidget)
-    QLabel*  modValLabel_ = nullptr;    // the figure under it: a reset has to move both
+    QComboBox* fwdModeBox_   = nullptr; // "Forward": Config (only what this controller makes) / All
+    QCheckBox* constVelChk_  = nullptr; // "Constant velocity": the keyboard ignores the press height
+    QSpinBox*  constVelSp_   = nullptr; // that velocity, 1..127
+    // The .cpp-local widgets the wire has to reach. Kept as QWidget* and cast at the
+    // point of use, exactly as the Mod wheel already was.
+    QWidget* modWheel_  = nullptr;      // the Mod wheel
+    QWidget* bendWheel_ = nullptr;      // the Bend wheel
+    QWidget* kbWidget_  = nullptr;      // the on-screen keyboard
+    // ---- Forward, and why it does NOT live on the GUI thread ------------------
+    // A thru that waits for the display timer is not a thru: it inherits the timer's
+    // period and its jitter. So Forward runs in the MIDI input callback, the instant
+    // the bytes land, and reads this picture of the rules instead of the widgets -
+    // which belong to the other thread. The GUI rebuilds it whenever anything it
+    // holds changes, which is rare next to the note traffic.
+    struct FwdRules {
+        bool on = false;                  // Forward on, and MIDI Input with it
+        bool all = false;                 // false = Config
+        bool omni = true;
+        int  inCh = 0;                    // the channel listened to when Omni is off
+        int  outCh = 0;                   // the keyboard's channel: what Config re-stamps onto
+        bool bankMsb = false, bankLsb = false, program = false;
+        uint32_t cc[4] = {0, 0, 0, 0};    // 128 bits: the CC numbers live on the surface
+        std::vector<int> nrpn;            // sorted: the NRPN parameters on the surface
+    };
+    std::mutex fwdMx_;
+    FwdRules   fwd_;
+    void ctrlRefreshFwdRules();                  // GUI thread: rebuild the picture
+    void ctrlForward(const adios::Bytes& msg);   // MIDI thread: decide, and send at once
+    // The run held on the MIDI thread; that thread alone ever touches these.
+    std::vector<adios::Bytes> fwdHold_;
+    int fwdMsb_ = -1, fwdLsb_ = -1, fwdCh_ = -1;
+    // What Forward already sent, waiting to be SHOWN in the Out monitor, each with the
+    // time it left.
+    std::mutex txMx_;
+    std::vector<std::pair<adios::Bytes, QString>> txEcho_;
     void ctrlStoreSnapshot(int n);
     void ctrlRecallSnapshot(int n);
     void ctrlClearSnapshot(int n);
@@ -206,6 +256,14 @@ private:
 
     Uploader*   uploader_ = nullptr;
 
+    // The screen is drained on one timer and the MONITOR on another. Moving a knob and
+    // building a monitor line are not the same job: done in the same pass, the widgets
+    // could not repaint until every line of the batch had been built, because a repaint
+    // only happens once the handler RETURNS. That is why the keyboard lagged exactly as
+    // the surface did - two unrelated drawings, one queue in front of both.
+    QTimer*              monTimer_ = nullptr;
+    std::vector<RxMsg>   monQueue_;      // GUI thread only: waiting to be SHOWN
+    void onMonDrain();
     std::mutex           rxMx_;
     std::vector<RxMsg>   rxQueue_;
     QTimer*              timer_ = nullptr;

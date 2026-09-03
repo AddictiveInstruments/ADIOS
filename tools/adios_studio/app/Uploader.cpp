@@ -1,6 +1,7 @@
 #include "Uploader.h"
 
 #include <QThread>
+#include <QTime>
 #include <chrono>
 
 #include "hexfile.h"
@@ -26,7 +27,9 @@ void Uploader::feedReply(const Reply& r)
 void Uploader::sendMsg(const Bytes& msg)
 {
     { std::lock_guard<std::mutex> g(*sendGuard_); std::string err; out_->send(msg, err); }
-    emit sent(QByteArray(reinterpret_cast<const char*>(msg.data()), int(msg.size())));
+    // Same format as MainWindow::nowStamp - the two fill the same column.
+    emit sent(QByteArray(reinterpret_cast<const char*>(msg.data()), int(msg.size())),
+              QTime::currentTime().toString(QStringLiteral("HH:mm:ss.zzz")));
 }
 
 Reply Uploader::exchange(const Bytes& msg, int timeoutMs)
