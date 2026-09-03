@@ -110,15 +110,23 @@ private:
     QCheckBox* snapModAct_   = nullptr; // "Snapshot includes Mod"
     QCheckBox* midiInChk_    = nullptr; // "MIDI Input": incoming CC/NRPN drive the surface
     QCheckBox* omniChk_      = nullptr; // "MIDI Input Omni": ticked = any channel, else one
-    QSpinBox*  inChanSp_     = nullptr; // that channel, 1..16
+    QComboBox* inChanBox_    = nullptr; // that channel: index 0 = "As Output", which follows the
+                                        // keyboard's own TX channel; 1..16 = that channel
     QCheckBox* fwdChk_       = nullptr; // "MIDI Forward": what comes in goes out again
     void ctrlMidiIn(const adios::Bytes& msg);   // GUI thread, from routeIn
     QWidget* modWheel_ = nullptr;       // the Mod wheel (a .cpp-local class, kept as a QWidget)
+    QLabel*  modValLabel_ = nullptr;    // the figure under it: a reset has to move both
     void ctrlStoreSnapshot(int n);
     void ctrlRecallSnapshot(int n);
     void ctrlClearSnapshot(int n);
     void ctrlClearAllSnapshots();
     void ctrlRefreshSnapCells();
+    // A lit cell means "the screen shows what this slot holds". Change any value the
+    // slot holds and that stops being true, so the selection drops. A recall writes
+    // those same values, hence the flag it raises while it works.
+    void ctrlSnapDeselect();
+    void ctrlSnapTouched() { if (!ctrlSnapApplying_) ctrlSnapDeselect(); }
+    bool ctrlSnapApplying_ = false;
     int      kbChannel_ = 0;            // keyboard MIDI TX channel (0..15)
     QString nowStamp();
 

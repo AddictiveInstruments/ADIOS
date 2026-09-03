@@ -554,7 +554,8 @@ public:
     // detent, the button's on/off - and how it is put back, sent or not.
     int  stateValue() const { return kind == SliderSwitch ? posIdx : val; }
     void applyState(int v, bool send);
-    void applyMidi(int midi);                      // from the wire: on screen only, nothing sent
+    bool applyMidi(int midi);                      // from the wire: on screen only, nothing sent;
+                                                   // true when the value actually moved
     int     posCount() const { return qBound(2, positions, 8); }
     QString nameAt(int i) const { const QStringList l = splitCsv(posNames); return i < l.size() ? l.at(i) : QString(); }
     int     valueAt(int i) const {                 // explicit value if given, else spread over 0..127
@@ -1338,28 +1339,29 @@ void CcControl::sendValue()
     if (nrpn) panel_->emitNrpn(nrpnNum, v, wide);
     else      panel_->emitCc(cc, v);
 }
-void CcControl::applyMidi(int midi)
+bool CcControl::applyMidi(int midi)
 {
-    if (isDeco()) return;
+    if (isDeco()) return false;
     const int span = valueSpan();
     midi = qBound(0, midi, span);
     if (kind == Knob) {
         const int lo = qMin(rmin, rmax), hi = qMax(rmin, rmax);
         const int nv = absolute ? qBound(lo, rmin + midi, hi)                       // the inverse of midiOf
                                 : qBound(lo, rmin + qRound(double(midi) / span * (rmax - rmin)), hi);
-        if (nv == val) return;
+        if (nv == val) return false;
         val = nv;
     } else if (kind == SliderSwitch) {
         int best = 0, bd = 1 << 20;                                                 // the detent nearest that value
         for (int i = 0; i < posCount(); ++i) { const int d = qAbs(valueAt(i) - midi); if (d < bd) { bd = d; best = i; } }
-        if (best == posIdx) return;
+        if (best == posIdx) return false;
         posIdx = best; val = valueAt(posIdx);
     } else {
         const int nv = (midi == rmax) ? rmax : (midi == rmin) ? rmin : (midi >= 64 ? rmax : rmin);
-        if (nv == val) return;
+        if (nv == val) return false;
         val = nv;
     }
     update();
+    return true;
 }
 void CcControl::setPosFromY(int y)
 {
@@ -1886,6 +1888,8 @@ void MainWindow::saveSettings()
             if (!c->objectName().isEmpty()) s.setValue("ctrl/" + c->objectName(), c->isChecked());
         for (QSpinBox* sp : controllerWin_->findChildren<QSpinBox*>())   // Bank MSB/LSB, Program
             if (!sp->objectName().isEmpty()) s.setValue("ctrl/" + sp->objectName(), sp->value());
+        for (QComboBox* cb : controllerWin_->findChildren<QComboBox*>())  // MIDI Input Channel
+            if (!cb->objectName().isEmpty()) s.setValue("ctrl/" + cb->objectName(), cb->currentIndex());
         for (QSplitter* sp : controllerWin_->findChildren<QSplitter*>()) // the Bank | surface divider
             if (!sp->objectName().isEmpty()) s.setValue("ctrl/" + sp->objectName(), sp->saveState());
         s.setValue("ctrl/channel", kbChannel_);
@@ -2268,11 +2272,18 @@ void MainWindow::openController()
         connect(ccLocked, &QCheckBox::toggled, ccPanel, &CcPanel::setLocked);
         connect(ccGrid,   &QCheckBox::toggled, ccPanel, &CcPanel::setGrid);
         ccPanel->onLockChange = [ccLocked](bool on) { ccLocked->setChecked(on); };   // panel menu <-> header case
-        ccPanel->onCc = [this](int cc, int v) { sendRaw({ uint8_t(0xB0 | kbChannel_), uint8_t(cc & 0x7f), uint8_t(v & 0x7f) }); };
+        // Every locked gesture on the surface ends up here, so this is also where the
+        // snapshot selection is dropped: what is on screen is no longer what the lit
+        // cell holds.
+        ccPanel->onCc = [this](int cc, int v) {
+            ctrlSnapTouched();
+            sendRaw({ uint8_t(0xB0 | kbChannel_), uint8_t(cc & 0x7f), uint8_t(v & 0x7f) });
+        };
         // The NRPN run goes out WHOLE every time - parameter MSB, LSB, then the value -
         // rather than trusting the receiver to remember the last parameter: that
         // memory breaks as soon as anything else talks on the channel in between.
         ccPanel->onNrpn = [this](int param, int v, bool wide) {
+            ctrlSnapTouched();
             const uint8_t st = uint8_t(0xB0 | kbChannel_);
             sendRaw({ st, uint8_t(99), uint8_t((param >> 7) & 0x7f) });
             sendRaw({ st, uint8_t(98), uint8_t(param & 0x7f) });
@@ -2504,7 +2515,7 @@ void MainWindow::openController()
         lgl->addSpacing(10);
         auto* valRow = new QHBoxLayout; valRow->setContentsMargins(0, 0, 0, 0); valRow->setSpacing(WHEEL_GAP);
         auto* vBend = mkCentered(QStringLiteral("0"), "wheelVal", 14);   // 14 = the scrollbar row height
-        auto* vMod  = mkCentered(QStringLiteral("0"), "wheelVal", 14);
+        auto* vMod  = mkCentered(QStringLiteral("0"), "wheelVal", 14); modValLabel_ = vMod;
         valRow->addWidget(vBend); valRow->addWidget(vMod);
         lgl->addLayout(valRow);
 
@@ -2515,6 +2526,7 @@ void MainWindow::openController()
         };
         mod->onChange = [this, vMod](int v) {
             vMod->setText(QString::number(v));
+            ctrlSnapTouched();                     // Mod is one of the values a snapshot holds
             sendRaw({ uint8_t(0xB0 | kbChannel_), uint8_t(1), uint8_t(v & 0x7f) });   // CC 1
         };
 
@@ -2563,15 +2575,20 @@ void MainWindow::openController()
         snapOnlyAct_ = mkTick(tr("Snapshot Send only changes"), "snapOnly",    true);
         snapModAct_  = mkTick(tr("Snapshot includes Mod"),      "snapMod",     false);
         omniChk_ = mkTick(tr("MIDI Input Omni"), "midiOmni", true);   // ticked: any channel
-        inChanSp_ = new QSpinBox; inChanSp_->setObjectName(QStringLiteral("midiInChan")); inChanSp_->setRange(1, 16); inChanSp_->setFixedWidth(62);
+        // "As Output" first and by default: the input then listens on whatever channel
+        // the keyboard transmits on, so the two follow each other instead of being set twice.
+        inChanBox_ = new QComboBox; inChanBox_->setObjectName(QStringLiteral("midiInChannel"));
+        inChanBox_->addItem(tr("As Output"));
+        for (int i = 1; i <= 16; ++i) inChanBox_->addItem(QString::number(i));
+        inChanBox_->setCurrentIndex(0);
         // Three groups, two rules between them: a 1 px line in the panel's border tone.
         auto mkSep = [] { auto* f = new QFrame; f->setObjectName(QStringLiteral("prefSep")); f->setFixedHeight(1); return f; };
         pf->addRow(noNoteOff);                                   // moved here from the keyboard row
         pf->addRow(mkSep());
         pf->addRow(midiInChk_);
         pf->addRow(omniChk_);
-        pf->addRow(tr("MIDI Input Channel"), inChanSp_);
-        if (QWidget* l = pf->labelForField(inChanSp_)) l->setObjectName(QStringLiteral("filterLabel"));   // the ticks' grey, not label white
+        pf->addRow(tr("MIDI Input Channel"), inChanBox_);
+        if (QWidget* l = pf->labelForField(inChanBox_)) l->setObjectName(QStringLiteral("filterLabel"));   // the ticks' grey, not label white
         pf->addRow(fwdChk_);
         pf->addRow(mkSep());
         pf->addRow(snapOnlyAct_);
@@ -2583,8 +2600,8 @@ void MainWindow::openController()
             omniChk_->setEnabled(in);
             fwdChk_->setEnabled(in);
             const bool chan = in && !omniChk_->isChecked();
-            setFieldOn(inChanSp_, chan);
-            if (QWidget* l = pf->labelForField(inChanSp_)) l->setEnabled(chan);   // the label greys with its field
+            setFieldOn(inChanBox_, chan);
+            if (QWidget* l = pf->labelForField(inChanBox_)) l->setEnabled(chan);   // the label greys with its field
         };
         connect(omniChk_,   &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
         connect(midiInChk_, &QCheckBox::toggled, this, [prefEnable](bool) { prefEnable(); });
@@ -2734,6 +2751,13 @@ void MainWindow::openController()
             const QSignalBlocker block(sp);              // no signal storm while restoring
             sp->setValue(v.toInt());
         }
+        for (QComboBox* cb : controllerWin_->findChildren<QComboBox*>()) {
+            if (cb->objectName().isEmpty()) continue;
+            const QVariant v = cs.value("ctrl/" + cb->objectName());
+            if (!v.isValid()) continue;
+            const QSignalBlocker block(cb);
+            cb->setCurrentIndex(qBound(0, v.toInt(), cb->count() - 1));
+        }
         for (QSplitter* sp : controllerWin_->findChildren<QSplitter*>()) {
             if (sp->objectName().isEmpty()) continue;
             const QByteArray st = cs.value("ctrl/" + sp->objectName()).toByteArray();
@@ -2759,8 +2783,14 @@ void MainWindow::openController()
         // From here on, any change to what the config holds marks it dirty. Wired
         // last so the restores above do not count.
         ccPanel->onEdited = [this] { ctrlSetDirty(true); };
+        // The named spin boxes ARE the three Bank/Program values a snapshot holds, so
+        // moving one both dirties the config and drops the snapshot selection.
         for (QSpinBox* sp : controllerWin_->findChildren<QSpinBox*>())
-            if (!sp->objectName().isEmpty()) connect(sp, &QSpinBox::valueChanged, this, [this](int) { ctrlSetDirty(true); });
+            if (!sp->objectName().isEmpty())
+                connect(sp, &QSpinBox::valueChanged, this, [this](int) { ctrlSetDirty(true); ctrlSnapTouched(); });
+        for (QComboBox* cb : controllerWin_->findChildren<QComboBox*>())
+            if (!cb->objectName().isEmpty())
+                connect(cb, &QComboBox::currentIndexChanged, this, [this](int) { ctrlSetDirty(true); });
         for (QCheckBox* c : controllerWin_->findChildren<QCheckBox*>())
             if (!c->objectName().isEmpty() && c->objectName() != QLatin1String("ccLocked"))
                 connect(c, &QCheckBox::toggled, this, [this](bool) { ctrlSetDirty(true); });
@@ -2811,7 +2841,9 @@ bool MainWindow::ctrlWriteConfig(const QString& path)
     QXmlStreamWriter x(&f);
     x.setAutoFormatting(true); x.setAutoFormattingIndent(2);
     x.writeStartDocument();
-    x.writeStartElement("adios-controller"); x.writeAttribute("version", "1");
+    // Version 2: midiIn/@channel counts from 0, where 0 is "As Output". Version 1
+    // only knew 1..16, so a file that old cannot mean anything but "not chosen".
+    x.writeStartElement("adios-controller"); x.writeAttribute("version", "2");
 
     x.writeStartElement("window");
     x.writeAttribute("w", num(controllerWin_->width())); x.writeAttribute("h", num(controllerWin_->height()));
@@ -2828,7 +2860,8 @@ bool MainWindow::ctrlWriteConfig(const QString& path)
 
     x.writeStartElement("midiIn");
     x.writeAttribute("on", b01(tick("midiIn"))); x.writeAttribute("omni", b01(tick("midiOmni")));
-    x.writeAttribute("channel", num(inChanSp_ ? inChanSp_->value() : 1)); x.writeAttribute("forward", b01(tick("midiForward")));
+    x.writeAttribute("channel", num(inChanBox_ ? inChanBox_->currentIndex() : 0));   // 0 = As Output, 1..16 = that channel
+    x.writeAttribute("forward", b01(tick("midiForward")));
     x.writeEndElement();
 
     x.writeStartElement("bank");
@@ -2919,6 +2952,7 @@ bool MainWindow::ctrlLoadXml(const QString& path)
     QVector<CcPanel::Desc> st;
     int nextId = 1;
     bool gridOn = true, seenSurface = false;
+    int fileVersion = 1;                                  // decides how midiIn/@channel reads
     QSize win;
     QVector<CtrlSnap> snaps(64);
     int inSnap = -1;                                      // index of the <snapshot> being read
@@ -2930,7 +2964,7 @@ bool MainWindow::ctrlLoadXml(const QString& path)
         if (tok != QXmlStreamReader::StartElement) continue;
         const QString tag = x.name().toString();
         const QXmlStreamAttributes a = x.attributes();
-        if (tag == QLatin1String("adios-controller")) continue;
+        if (tag == QLatin1String("adios-controller")) { fileVersion = attrInt(a, "version", 1); continue; }
         if (tag == QLatin1String("snapshots")) { onlyChanges = attrBool(a, "sendOnlyChanges", true); includeMod = attrBool(a, "includeMod", false); continue; }
         if (tag == QLatin1String("snapshot")) {
             inSnap = attrInt(a, "n", 0) - 1;
@@ -2959,7 +2993,10 @@ bool MainWindow::ctrlLoadXml(const QString& path)
         if (tag == QLatin1String("midiIn")) {
             if (midiInChk_) midiInChk_->setChecked(attrBool(a, "on", false));
             if (omniChk_)   omniChk_->setChecked(attrBool(a, "omni", true));
-            if (inChanSp_)  { const QSignalBlocker b(inChanSp_); inChanSp_->setValue(qBound(1, attrInt(a, "channel", 1), 16)); }
+            // A version 1 file carries the old spin box's 1..16 and had no way to say
+            // "As Output" - which is now the default, so that is what it gets.
+            if (inChanBox_) { const QSignalBlocker b(inChanBox_);
+                inChanBox_->setCurrentIndex(fileVersion >= 2 ? qBound(0, attrInt(a, "channel", 0), 16) : 0); }
             if (fwdChk_)    fwdChk_->setChecked(attrBool(a, "forward", false));
             continue;
         }
@@ -3034,8 +3071,15 @@ void MainWindow::ctrlNewConfig()
     setSpin("bankMsb", 0); setSpin("bankLsb", 0); setSpin("program", 1);   // program shows 1 = sends 0
     for (const char* n : { "bankMsbOn", "bankLsbOn", "programOn" })
         if (auto* c = controllerWin_->findChild<QCheckBox*>(QLatin1String(n))) c->setChecked(false);
+    if (auto* g = controllerWin_->findChild<QButtonGroup*>(QStringLiteral("chGroup")))
+        if (auto* b = g->button(0)) b->setChecked(true);          // the keyboard back to channel 1
+    if (modWheel_) {                                              // Mod back to rest, on screen only
+        static_cast<Wheel*>(modWheel_)->setValue(0, false);
+        if (modValLabel_) modValLabel_->setText(QStringLiteral("0"));
+    }
     ctrlSnaps_ = QVector<CtrlSnap>(64);
     ctrlRefreshSnapCells();
+    ctrlSnapDeselect();                                           // every slot is empty: none is selected
     if (snapOnlyAct_) snapOnlyAct_->setChecked(true);
     if (snapModAct_)  snapModAct_->setChecked(false);
     ctrlConfigPath_.clear();
@@ -3055,7 +3099,12 @@ void MainWindow::ctrlMidiIn(const adios::Bytes& msg)
     if (fwdChk_ && fwdChk_->isChecked() && st != 0xf0) sendRaw(msg);
     if (msg.size() != 3 || (st & 0xf0) != 0xb0) return;                  // only CC drive the surface
     const int ch = st & 0x0f;
-    if (omniChk_ && !omniChk_->isChecked() && inChanSp_ && ch != inChanSp_->value() - 1) return;
+    // Omni off means one channel only: the one named in the box, or the keyboard's own
+    // when the box says "As Output".
+    if (omniChk_ && !omniChk_->isChecked() && inChanBox_) {
+        const int idx = inChanBox_->currentIndex();
+        if (ch != (idx == 0 ? kbChannel_ : idx - 1)) return;
+    }
     const int cc = msg[1], v = msg[2];
     auto* panel = static_cast<CcPanel*>(ccSurface_);
     NrpnRun& r = nrpnCtl_;
@@ -3065,12 +3114,16 @@ void MainWindow::ctrlMidiIn(const adios::Bytes& msg)
         if (r.ch != ch || r.msb < 0 || r.lsb < 0) return;
         const int param = r.msb * 128 + r.lsb;
         if (cc == 6) r.value = v; else r.value = (r.value << 7) | v;
+        bool moved = false;
         for (CcControl* c : panel->controls())
-            if (c->nrpn && c->nrpnNum == param && (cc == 6 ? !c->wide : c->wide)) c->applyMidi(r.value);
+            if (c->nrpn && c->nrpnNum == param && (cc == 6 ? !c->wide : c->wide)) moved = c->applyMidi(r.value) || moved;
+        if (moved) ctrlSnapTouched();                      // the screen has left the lit cell behind
         return;
     }
+    bool moved = false;
     for (CcControl* c : panel->controls())
-        if (!c->nrpn && !c->isDeco() && c->cc == cc && !c->blocked()) c->applyMidi(v);
+        if (!c->nrpn && !c->isDeco() && c->cc == cc && !c->blocked()) moved = c->applyMidi(v) || moved;
+    if (moved) ctrlSnapTouched();
 }
 
 // ---- snapshots ---------------------------------------------------------------
@@ -3084,6 +3137,18 @@ void MainWindow::ctrlRefreshSnapCells()
         b->setProperty("used", used);                     // the stylesheet keys on it
         b->style()->unpolish(b); b->style()->polish(b);
     }
+}
+
+// The group is exclusive, so "none of them checked" has to be asked for explicitly.
+void MainWindow::ctrlSnapDeselect()
+{
+    auto* g = controllerWin_ ? controllerWin_->findChild<QButtonGroup*>(QStringLiteral("snapGroup")) : nullptr;
+    if (!g) return;
+    QAbstractButton* b = g->checkedButton();
+    if (!b) return;
+    g->setExclusive(false);
+    b->setChecked(false);
+    g->setExclusive(true);
 }
 
 void MainWindow::ctrlStoreSnapshot(int n)
@@ -3131,6 +3196,9 @@ void MainWindow::ctrlRecallSnapshot(int n)
     const CtrlSnap& sn = ctrlSnaps_[n];
     if (!sn.used) return;                                 // an empty cell only selects
     const bool onlyChanges = snapOnlyAct_ && snapOnlyAct_->isChecked();
+    // A recall writes every value the slot holds. Without this the first one written
+    // would report a change and put the cell out the instant it came on.
+    ctrlSnapApplying_ = true;
 
     // 1. Bank / Program: the fields take the values, Send does the sending - so the
     //    ticks decide what goes out, as they do for a hand-pressed Send.
@@ -3157,6 +3225,7 @@ void MainWindow::ctrlRecallSnapshot(int n)
         auto* w = static_cast<Wheel*>(modWheel_);
         if (w->value() != sn.mod || !onlyChanges) w->setValue(sn.mod, true);
     }
+    ctrlSnapApplying_ = false;
 }
 
 void MainWindow::ctrlOpenConfig(const QString& given)

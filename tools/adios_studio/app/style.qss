@@ -178,9 +178,21 @@ QPushButton#snapCell {
     border: 1px solid #3d4757; border-radius: 2px;
     background: transparent; color: #8a94a6;
 }
-QPushButton#snapCell[used="true"] { color: #dfe4ec; border-color: #5a8ac8; }   /* holds a snapshot: blue frame */
+/* Holds a snapshot: the frame takes the TEXT tone, and a triangle marks the top
+   right corner. QSS has no shapes - but a linear gradient whose two stops sit a
+   thousandth apart IS a straight edge, and one drawn corner to corner cuts the
+   square in two. 0.85 leaves a leg of about 8 px on a 26 px cell. */
+QPushButton#snapCell[used="true"] {
+    color: #dfe4ec; border-color: #dfe4ec;
+    background: qlineargradient(x1:0, y1:1, x2:1, y2:0, stop:0.849 transparent, stop:0.85 #dfe4ec);
+}
 QPushButton#snapCell:hover   { border-color: #5a8ac8; }
 QPushButton#snapCell:checked { border-color: #5a8ac8; background: #4a7ab8; color: #f2f6fc; }
+/* Selected AND full: the blue fill keeps the corner flag, in the selected text tone. */
+QPushButton#snapCell[used="true"]:checked {
+    border-color: #5a8ac8; color: #f2f6fc;
+    background: qlineargradient(x1:0, y1:1, x2:1, y2:0, stop:0.849 #4a7ab8, stop:0.85 #f2f6fc);
+}
 
 /* Set all / Clear all */
 QPushButton#miniBtn {
